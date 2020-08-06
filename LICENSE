@@ -1,10 +1,3 @@
-Gridap.jl Copyright and License
-==
-
-Copyright (c) 2019 by [Santiago Badia](mailto:santiago.badia@monash.edu) and [Francesc Verdugo](mailto:fverdugo@cimne.upc.edu).
-
-Gridap.jl is licensed under the MIT Expat License
-
 MIT License
 
 Copyright (c) 2020 Santiago Badia, Francesc Verdugo
@@ -26,6 +19,13 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+Gridap.jl Copyright and License
+==
+
+Copyright (c) 2019 by [Santiago Badia](mailto:santiago.badia@monash.edu) and [Francesc Verdugo](mailto:fverdugo@cimne.upc.edu).
+
+Gridap.jl is licensed under the MIT Expat License
 
 Citing `Gridap`
 ==
