@@ -21,9 +21,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-Citing `Gridap`
-==
-
 In order to give credit to the `Gridap` contributors, we simply ask you to cite the refence below in any publication in which you have made use of `Gridap` packages.
 
 F. Verdugo and S. Badia. *A user-guide to Gridap -- grid-based approximation of partial differential equations in Julia*, 2019. [arXiv:1910.01412](https://arxiv.org/abs/1910.01412)
@@ -39,9 +36,6 @@ F. Verdugo and S. Badia. *A user-guide to Gridap -- grid-based approximation of 
     primaryClass={cs.MS},
 }
 ```
-
-Contributing to `Gridap`
-==
 
 By contributing to `Gridap`, you accept and agree to the following *Developer Certificate of Origin Version 1.1* (see below) for all your contributions.
 
@@ -84,8 +78,5 @@ By making a contribution to this project, I certify that:
     maintained indefinitely and may be redistributed consistent with
     this project or the open source license(s) involved.
 ```
-
-Contact
-==
 
 Please, contact the project administrators, [Santiago Badia](mailto:santiago.badia@monash.edu) and [Francesc Verdugo](mailto:fverdugo@cimne.upc.edu), for further questions about licenses and terms of use.
