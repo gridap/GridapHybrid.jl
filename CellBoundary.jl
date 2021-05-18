@@ -141,20 +141,47 @@ end
 
 function _restrict_to_cell_boundary_facet_fe_basis(cb::CellBoundary,
                                                    facet_fe_basis::Gridap.FESpaces.FEBasis)
-  num_cell_facets = _get_num_facets(cb)
+
+  # TO-THINK:
+  #     1) How to deal with Test/Trial FEBasis objects?
+  #     2) How to deal with CellField objects which are NOT FEBasis objects?
+  #     3) How to deal with differential operators applied to FEBasis objects?
+  @assert Gridap.FESpaces.BasisStyle(facet_fe_basis) == Gridap.FESpaces.TrialBasis()
+  @assert isa(get_triangulation(facet_fe_basis),Triangulation{D-1,D})
+
+  num_cell_facets  = _get_num_facets(cb)
   cell_wise_facets = _get_cell_wise_facets(cb)
 
-  # i = findall(f.touched)
-  # if length(i) != 0
-  #   f.array[i[1]]
-  # else
-  #   testvalue(A)
-  # end
+  ff_array=Gridap.CellData.get_data(facet_fe_basis)
+  fe_basis_restricted_to_lfacet_cell_wise =
+    [ _restrict_fe_basis_to_facet_lid_cell_wise(ff_array,
+                                                cell_wise_facets,
+                                                facet_lid) for facet_lid=1:num_cell_facets ]
 
 
-   #
-   # lazy_map(Broadcasting(Reindex(field_array)),cell_wise_facets_ids)
+  fe_basis_restricted_to_lfacet_cell_wise_expanded = 
+    [ _expand_facet_lid_fields_to_num_facets_blocks(fe_basis_restricted_to_lfacet_cell_wise[facet_lid],
+                                                    num_cell_facets,
+                                                    facet_lid) for facet_lid=1:num_cell_facets ]
+
+  fe_basis_restricted_to_lfacet_cell_wise_expanded_block_mapped =
+    [ _map_cell_wise_fields_to_block(fe_basis_restricted_to_lfacet_cell_wise_expanded[facet_lid],
+                                     (1,num_cell_facets),
+                                     [CartesianIndex((1,facet_lid))]) for facet_lid=1:num_cell_facets ]
+                                     
+  # Cell-wise array of VectorBlock entries with as many entries as facets.
+  # For each cell, and local facet, we get the cell FE Basis restricted to that facet.
+  lazy_map(Gridap.Fields.BlockMap(num_cell_facets,collect(1:num_cell_facets)),
+                                  fe_basis_restricted_to_lfacet_cell_wise_expanded_block_mapped...) 
 end
+
+function _get_block_layout(fields_array::AbstractArray{<:AbstractArray{<:Gridap.Fields.Field}})
+  Fill((1,1),length(fields_array))
+end 
+
+function _get_block_layout(fields_array::AbstractArray{<:Gridap.Fields.ArrayBlock})
+  lazy_map(x->((size(x),findall(x.touched))),fields_array)
+end 
 
 function _restrict_to_cell_boundary_cell_fe_basis(cb::CellBoundary,
                                                   cell_fe_basis::Gridap.FESpaces.FEBasis)
@@ -186,15 +213,24 @@ function _restrict_to_cell_boundary_cell_fe_basis(cb::CellBoundary,
                                                   facet_lid) for facet_lid=1:num_cell_facets ]
 
   fe_basis_restricted_to_lfacet_cell_wise_block_mapped =
-     [ _map_cell_wise_fields_to_block(fe_basis_restricted_to_lfacet_cell_wise[facet_lid],
-                                      num_cell_facets,
-                                      facet_lid) for facet_lid=1:num_cell_facets ]
+      [ _map_cell_wise_fields_to_block(fe_basis_restricted_to_lfacet_cell_wise[facet_lid],
+                                       num_cell_facets,
+                                       facet_lid) for facet_lid=1:num_cell_facets ]
 
   # Cell-wise array of VectorBlock entries with as many entries as facets.
   # For each cell, and local facet, we get the cell FE Basis restricted to that facet.
   lazy_map(Gridap.Fields.BlockMap(num_cell_facets,collect(1:num_cell_facets)),
-           fe_basis_restricted_to_lfacet_cell_wise_block_mapped...)
+            fe_basis_restricted_to_lfacet_cell_wise_block_mapped...)
 end
+
+function _expand_facet_lid_fields_to_num_facets_blocks(fe_basis_restricted_to_lfacet_cell_wise,
+                                                       num_cell_facets,
+                                                       facet_lid)
+    bl=_get_block_layout(fe_basis_restricted_to_lfacet_cell_wise)[1]
+    lazy_map(Gridap.Fields.BlockMap(bl[1],bl[2]),
+             lazy_map(Gridap.Fields.BlockMap((1,num_cell_facets),[CartesianIndex((1,facet_lid))]),
+                      lazy_map(x->x[findfirst(x.touched)], fe_basis_restricted_to_lfacet_cell_wise)))
+end 
 
 function _map_cell_wise_fields_to_block(cell_wise_fields,nblocks,iblock)
   lazy_map(Gridap.Fields.BlockMap(nblocks,iblock),cell_wise_fields)
@@ -228,4 +264,11 @@ function _restrict_fe_basis_to_facet_lid_cell_wise(cfp_array,
     indices=lazy_map((x)->x[facet_lid],signed_cell_wise_facets_ids)
     lazy_map(Gridap.Arrays.PosNegReindex(cfp_array,cfm_array),
              indices)
+end
+
+function _restrict_fe_basis_to_facet_lid_cell_wise(ff_array,
+                                                   cell_wise_facets_ids,
+                                                   facet_lid)
+    indices=lazy_map((x)->x[facet_lid],cell_wise_facets_ids)
+    lazy_map(Gridap.Arrays.Reindex(ff_array),indices)
 end
