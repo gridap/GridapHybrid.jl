@@ -2,6 +2,7 @@ using Gridap
 using FillArrays
 using Gridap.Geometry
 
+include("GridapOverloads.jl")
 include("CellBoundary.jl")
 
 
@@ -43,7 +44,12 @@ _,_,lh = xh
 ∂T     = CellBoundary(model)
 nowner = get_cell_owner_normal_vector(∂T)
 n      = get_cell_normal_vector(∂T)
-∂Tq    = CellQuadrature(∂T,2)
+∂Tq    = quadrature_evaluation_points_and_weights(∂T,2)
 
 qh_cb = restrict_to_cell_boundary(∂T,qh)
 lh_cb = restrict_to_cell_boundary(∂T,lh)
+
+qh_cb_x = lazy_map(evaluate,qh_cb,∂Tq[1])
+lh_cb_x = lazy_map(evaluate,lh_cb,∂Tq[1])
+
+qh_mult_lh_cb_x = lazy_map(Gridap.Fields.BroadcastingFieldOpMap(*),qh_cb_x,lh_cb_x)

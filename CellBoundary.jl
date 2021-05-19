@@ -55,20 +55,7 @@ struct CellBoundary{M<:DiscreteModel,BTP<:Triangulation,BTM<:Triangulation}
 end
 
 
-# TO-DO: discuss with @fverdugo
-# I needed to overload this function in order to be able to build the LazyArray below
-#    lazy_map(Broadcasting(Reindex(np_array)),cell_wise_facets_ids)
 
-function Gridap.Arrays.return_cache(f::Broadcasting,x::Union{Number,AbstractArray{<:Number}}...)
-  s = map(Gridap.Arrays._size,x)
-  bs = Base.Broadcast.broadcast_shape(s...)
-  T = Gridap.Arrays.return_type(f.f,map(Gridap.Arrays.testitem,x)...)
-  N = length(bs)
-  r = fill(Gridap.Arrays.return_value(f.f,map(Gridap.Arrays.testitem,x)...),bs)
-  cache = Gridap.Arrays.CachedArray(r)
-  Gridap.Arrays._prepare_cache!(cache,x...)
-  cache
-end
 
 
 """
@@ -107,7 +94,7 @@ function get_cell_owner_normal_vector(cell_boundary::CellBoundary)
   lazy_map(Broadcasting(Reindex(np_array)),cell_wise_facets_ids)
 end
 
-function CellQuadrature(cell_boundary::CellBoundary, degree::Integer)
+function quadrature_evaluation_points_and_weights(cell_boundary::CellBoundary, degree::Integer)
   model = cell_boundary.model
   D = num_cell_dims(model)
   p = lazy_map(Gridap.ReferenceFEs.get_polytope,get_reffes(model))
@@ -115,14 +102,22 @@ function CellQuadrature(cell_boundary::CellBoundary, degree::Integer)
   p  = p[1]
   pf = Gridap.ReferenceFEs.Polytope{D-1}(p,1)
   qf = Gridap.ReferenceFEs.Quadrature(pf,degree)
+
   xf = Gridap.ReferenceFEs.get_coordinates(qf)
   wf = Gridap.ReferenceFEs.get_weights(qf)
-  xfcb = [ xf[i] for j=1:num_facets(p) for i=1:length(xf)]
-  wfcb = [ wf[i] for j=1:num_facets(p) for i=1:length(wf)]
-  qcb=Gridap.ReferenceFEs.GenericQuadrature(xfcb,wfcb)
+
+  num_cell_facets = _get_num_facets(cell_boundary)
+
+  xf_array_block=lazy_map( Gridap.Fields.BlockMap(num_cell_facets,collect(1:num_cell_facets)),
+                           Fill(Fill(xf,num_cells(model)),num_cell_facets)...)
+
+  wf_array_block=lazy_map( Gridap.Fields.BlockMap(num_cell_facets,collect(1:num_cell_facets)),
+                           Fill(Fill(wf,num_cells(model)),num_cell_facets)...)
+
+  (xf_array_block,wf_array_block)
   # TO-THINK: should actually be this triangulation the one that goes into
   # the CellQuadrature of CellBoundary?
-  Gridap.CellData.CellQuadrature(get_triangulation(model),qcb)
+  #Gridap.CellData.CellQuadrature(get_triangulation(model),qcb)
 end
 
 # This function plays a similar role of the change_domain function in Gridap.
@@ -159,29 +154,25 @@ function _restrict_to_cell_boundary_facet_fe_basis(cb::CellBoundary,
                                                 facet_lid) for facet_lid=1:num_cell_facets ]
 
 
-  fe_basis_restricted_to_lfacet_cell_wise_expanded = 
-    [ _expand_facet_lid_fields_to_num_facets_blocks(fe_basis_restricted_to_lfacet_cell_wise[facet_lid],
-                                                    num_cell_facets,
-                                                    facet_lid) for facet_lid=1:num_cell_facets ]
+  fe_basis_restricted_to_lfacet_cell_wise_expanded =
+    [ _expand_facet_lid_fields_to_num_facets_blocks(
+                            fe_basis_restricted_to_lfacet_cell_wise[facet_lid],
+                            num_cell_facets,
+                            facet_lid) for facet_lid=1:num_cell_facets ]
 
-  fe_basis_restricted_to_lfacet_cell_wise_expanded_block_mapped =
-    [ _map_cell_wise_fields_to_block(fe_basis_restricted_to_lfacet_cell_wise_expanded[facet_lid],
-                                     (1,num_cell_facets),
-                                     [CartesianIndex((1,facet_lid))]) for facet_lid=1:num_cell_facets ]
-                                     
   # Cell-wise array of VectorBlock entries with as many entries as facets.
   # For each cell, and local facet, we get the cell FE Basis restricted to that facet.
   lazy_map(Gridap.Fields.BlockMap(num_cell_facets,collect(1:num_cell_facets)),
-                                  fe_basis_restricted_to_lfacet_cell_wise_expanded_block_mapped...) 
+                                  fe_basis_restricted_to_lfacet_cell_wise_expanded...)
 end
 
 function _get_block_layout(fields_array::AbstractArray{<:AbstractArray{<:Gridap.Fields.Field}})
   Fill((1,1),length(fields_array))
-end 
+end
 
 function _get_block_layout(fields_array::AbstractArray{<:Gridap.Fields.ArrayBlock})
   lazy_map(x->((size(x),findall(x.touched))),fields_array)
-end 
+end
 
 function _restrict_to_cell_boundary_cell_fe_basis(cb::CellBoundary,
                                                   cell_fe_basis::Gridap.FESpaces.FEBasis)
@@ -212,15 +203,10 @@ function _restrict_to_cell_boundary_cell_fe_basis(cb::CellBoundary,
                                                   signed_cell_wise_facets_ids,
                                                   facet_lid) for facet_lid=1:num_cell_facets ]
 
-  fe_basis_restricted_to_lfacet_cell_wise_block_mapped =
-      [ _map_cell_wise_fields_to_block(fe_basis_restricted_to_lfacet_cell_wise[facet_lid],
-                                       num_cell_facets,
-                                       facet_lid) for facet_lid=1:num_cell_facets ]
-
   # Cell-wise array of VectorBlock entries with as many entries as facets.
   # For each cell, and local facet, we get the cell FE Basis restricted to that facet.
   lazy_map(Gridap.Fields.BlockMap(num_cell_facets,collect(1:num_cell_facets)),
-            fe_basis_restricted_to_lfacet_cell_wise_block_mapped...)
+            fe_basis_restricted_to_lfacet_cell_wise...)
 end
 
 function _expand_facet_lid_fields_to_num_facets_blocks(fe_basis_restricted_to_lfacet_cell_wise,
@@ -230,10 +216,6 @@ function _expand_facet_lid_fields_to_num_facets_blocks(fe_basis_restricted_to_lf
     lazy_map(Gridap.Fields.BlockMap(bl[1],bl[2]),
              lazy_map(Gridap.Fields.BlockMap((1,num_cell_facets),[CartesianIndex((1,facet_lid))]),
                       lazy_map(x->x[findfirst(x.touched)], fe_basis_restricted_to_lfacet_cell_wise)))
-end 
-
-function _map_cell_wise_fields_to_block(cell_wise_fields,nblocks,iblock)
-  lazy_map(Gridap.Fields.BlockMap(nblocks,iblock),cell_wise_fields)
 end
 
 function _get_num_facets(cb::CellBoundary)
