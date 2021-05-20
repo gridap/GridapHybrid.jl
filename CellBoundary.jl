@@ -277,3 +277,28 @@ function _block_arrays(a::AbstractArray...)
   num_blocks = length(a)
   lazy_map(Gridap.Fields.BlockMap(num_blocks,collect(1:num_blocks)),a...)
 end
+
+# This function will eventually play the role of its counterpart in Gridap
+# function integrate(f::CellField,quad::CellQuadrature)
+# TO-THINK: vh,uh currently as LazyArray{...}
+#    Not sure if we are loosing generality by constraining a to be of type
+#    LazyArray{...}. I need to restrict the cell-wise block array to each
+#    individual block, and with a LazyArray{...} this is very efficient as
+#    the array is already restricted to each block in the a.args member variable.
+function integrate_low_level(cb::CellBoundary,
+                             vh::Gridap.Arrays.LazyArray{<:Fill{<:Gridap.Fields.BlockMap}},
+                             uh::Gridap.Arrays.LazyArray{<:Fill{<:Gridap.Fields.BlockMap}},
+                             x::AbstractArray{<:Gridap.Fields.ArrayBlock{<:AbstractArray{<:Point}}},
+                             w::AbstractArray{<:Gridap.Fields.ArrayBlock{<:AbstractVector}})
+  vhx=lazy_map(evaluate,vh,x)
+  uhx=lazy_map(evaluate,uh,x)
+  vhx_mult_uhx=lazy_map(Gridap.Fields.BroadcastingFieldOpMap(*), vhx, uhx)
+  j=lazy_map(∇,get_cell_map(cb))
+  jx=lazy_map(evaluate,j,x)
+
+  args = [ lazy_map(Gridap.Fields.IntegrationMap(),
+                    _restrict_cell_array_block_to_block(vhx_mult_uhx,pos),
+                    _restrict_cell_array_block_to_block(w,pos),
+                    jx.args[pos]) for pos=1:length(vhx.args) ]
+  lazy_map(+,args...)
+end
