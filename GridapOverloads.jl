@@ -1,20 +1,6 @@
 
 ## Arrays
 
-# TO-DO: discuss with @fverdugo
-# I needed to overload this function in order to be able to build the LazyArray below
-#    lazy_map(Broadcasting(Reindex(np_array)),cell_wise_facets_ids)
-function Gridap.Arrays.return_cache(f::Broadcasting,x::Union{Number,AbstractArray{<:Number}}...)
-  s = map(Gridap.Arrays._size,x)
-  bs = Base.Broadcast.broadcast_shape(s...)
-  T = Gridap.Arrays.return_type(f.f,map(Gridap.Arrays.testitem,x)...)
-  N = length(bs)
-  r = fill(Gridap.Arrays.return_value(f.f,map(Gridap.Arrays.testitem,x)...),bs)
-  cache = Gridap.Arrays.CachedArray(r)
-  Gridap.Arrays._prepare_cache!(cache,x...)
-  cache
-end
-
 # TO-THINK: is this reasonable from an efficiency point of view?
 function _restrict_cell_array_block_to_block(x,block)
   lazy_map(i->i[block],x)
