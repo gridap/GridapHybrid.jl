@@ -53,3 +53,7 @@ qh_cb_x = lazy_map(evaluate,qh_cb,∂Tq[1])
 lh_cb_x = lazy_map(evaluate,lh_cb,∂Tq[1])
 
 qh_mult_lh_cb_x = lazy_map(Gridap.Fields.BroadcastingFieldOpMap(*),qh_cb_x,lh_cb_x)
+
+cell_map = get_cell_map(∂T)
+
+cell_map_x = lazy_map(evaluate,cell_map,∂Tq[1])

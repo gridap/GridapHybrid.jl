@@ -54,44 +54,39 @@ struct CellBoundary{M<:DiscreteModel,BTP<:Triangulation,BTM<:Triangulation}
   end
 end
 
-
-
-
-
 """
 Returns a cell-wise array which, for each cell, and each facet within the cell,
 returns the unit outward normal to the boundary of the cell.
 """
-function get_cell_normal_vector(cell_boundary::CellBoundary)
-    model = cell_boundary.model
-    D = num_cell_dims(model)
-    gtopo = get_grid_topology(model)
-    # Extract composition among cells and facets
-    cell_wise_facets_ids = Gridap.Geometry.get_faces(gtopo, D, D-1)
-    np=get_normal_vector(cell_boundary.boundary_trian_plus)
-    nm=get_normal_vector(cell_boundary.boundary_trian_minus)
-    signed_cell_wise_facets_ids = lazy_map(Broadcasting((y,x)-> y ? -x : x),
-                                           cell_boundary.sign_flip,
-                                           cell_wise_facets_ids)
+function get_cell_normal_vector(cb::CellBoundary)
+    np=get_normal_vector(cb.boundary_trian_plus)
+    nm=get_normal_vector(cb.boundary_trian_minus)
+    signed_cell_wise_facets_ids = _get_signed_cell_wise_facets(cb)
     np_array=Gridap.CellData.get_data(np)
     nm_array=Gridap.CellData.get_data(nm)
-    lazy_map(Broadcasting(Gridap.Arrays.PosNegReindex(np_array,nm_array)),
-             signed_cell_wise_facets_ids)
+    num_cell_facets = _get_num_facets(cb)
+    per_local_facet_normal_cell_wise_arrays =
+       _get_per_local_facet_cell_wise_arrays(np_array,
+                                             nm_array,
+                                             signed_cell_wise_facets_ids,
+                                             num_cell_facets)
+    _block_arrays(per_local_facet_normal_cell_wise_arrays...)
 end
 
 """
 Returns a cell-wise array which, for each cell, and each facet within the cell,
 returns the unit outward normal to the boundary of the cell owner of the facet.
 """
-function get_cell_owner_normal_vector(cell_boundary::CellBoundary)
-  model = cell_boundary.model
-  D = num_cell_dims(model)
-  gtopo = get_grid_topology(model)
-  # Extract composition among cells and facets
-  cell_wise_facets_ids = Gridap.Geometry.get_faces(gtopo, D, D-1)
-  np=get_normal_vector(cell_boundary.boundary_trian_plus)
+function get_cell_owner_normal_vector(cb::CellBoundary)
+  np=get_normal_vector(cb.boundary_trian_plus)
   np_array=Gridap.CellData.get_data(np)
-  lazy_map(Broadcasting(Reindex(np_array)),cell_wise_facets_ids)
+  num_cell_facets = _get_num_facets(cb)
+  cell_wise_facets = _get_cell_wise_facets(cb)
+  per_local_facet_normal_cell_wise_arrays =
+      _get_per_local_facet_cell_wise_arrays(np_array,
+                                            cell_wise_facets,
+                                            num_cell_facets)
+  _block_arrays(per_local_facet_normal_cell_wise_arrays...)
 end
 
 function quadrature_evaluation_points_and_weights(cell_boundary::CellBoundary, degree::Integer)
@@ -107,12 +102,8 @@ function quadrature_evaluation_points_and_weights(cell_boundary::CellBoundary, d
   wf = Gridap.ReferenceFEs.get_weights(qf)
 
   num_cell_facets = _get_num_facets(cell_boundary)
-
-  xf_array_block=lazy_map( Gridap.Fields.BlockMap(num_cell_facets,collect(1:num_cell_facets)),
-                           Fill(Fill(xf,num_cells(model)),num_cell_facets)...)
-
-  wf_array_block=lazy_map( Gridap.Fields.BlockMap(num_cell_facets,collect(1:num_cell_facets)),
-                           Fill(Fill(wf,num_cells(model)),num_cell_facets)...)
+  xf_array_block=_block_arrays(Fill(Fill(xf,num_cells(model)),num_cell_facets)...)
+  wf_array_block=_block_arrays(Fill(Fill(wf,num_cells(model)),num_cell_facets)...)
 
   (xf_array_block,wf_array_block)
   # TO-THINK: should actually be this triangulation the one that goes into
@@ -123,14 +114,14 @@ end
 # This function plays a similar role of the change_domain function in Gridap.
 # Except it does not, by now, deal with Triangulation and DomainStyle instances.
 # (TO-THINK)
-function restrict_to_cell_boundary(cb::CellBoundary, cell_field::CellField)
+function restrict_to_cell_boundary(cb::CellBoundary, fe_basis::Gridap.FESpaces.FEBasis)
   model = cb.model
   D = num_cell_dims(model)
-  trian = get_triangulation(cell_field)
+  trian = get_triangulation(fe_basis)
   if isa(trian,Triangulation{D-1,D})
-    _restrict_to_cell_boundary_facet_fe_basis(cb,cell_field)
+    _restrict_to_cell_boundary_facet_fe_basis(cb,fe_basis)
   elseif isa(trian,Triangulation{D,D})
-    _restrict_to_cell_boundary_cell_fe_basis(cb,cell_field)
+    _restrict_to_cell_boundary_cell_fe_basis(cb,fe_basis)
   end
 end
 
@@ -140,20 +131,18 @@ function _restrict_to_cell_boundary_facet_fe_basis(cb::CellBoundary,
   # TO-THINK:
   #     1) How to deal with Test/Trial FEBasis objects?
   #     2) How to deal with CellField objects which are NOT FEBasis objects?
-  #     3) How to deal with differential operators applied to FEBasis objects?
+  #     3) How to deal with differential operators applied to FEBasis/CellField objects?
   @assert Gridap.FESpaces.BasisStyle(facet_fe_basis) == Gridap.FESpaces.TrialBasis()
   @assert isa(get_triangulation(facet_fe_basis),Triangulation{D-1,D})
 
   num_cell_facets  = _get_num_facets(cb)
   cell_wise_facets = _get_cell_wise_facets(cb)
 
-  ff_array=Gridap.CellData.get_data(facet_fe_basis)
+  fta=Gridap.CellData.get_data(facet_fe_basis)
   fe_basis_restricted_to_lfacet_cell_wise =
-    [ _restrict_fe_basis_to_facet_lid_cell_wise(ff_array,
-                                                cell_wise_facets,
-                                                facet_lid) for facet_lid=1:num_cell_facets ]
-
-
+    _get_per_local_facet_cell_wise_arrays(fta,
+                                          cell_wise_facets,
+                                          num_cell_facets)
   fe_basis_restricted_to_lfacet_cell_wise_expanded =
     [ _expand_facet_lid_fields_to_num_facets_blocks(
                             fe_basis_restricted_to_lfacet_cell_wise[facet_lid],
@@ -162,8 +151,7 @@ function _restrict_to_cell_boundary_facet_fe_basis(cb::CellBoundary,
 
   # Cell-wise array of VectorBlock entries with as many entries as facets.
   # For each cell, and local facet, we get the cell FE Basis restricted to that facet.
-  lazy_map(Gridap.Fields.BlockMap(num_cell_facets,collect(1:num_cell_facets)),
-                                  fe_basis_restricted_to_lfacet_cell_wise_expanded...)
+  _block_arrays(fe_basis_restricted_to_lfacet_cell_wise_expanded...)
 end
 
 function _get_block_layout(fields_array::AbstractArray{<:AbstractArray{<:Gridap.Fields.Field}})
@@ -197,16 +185,15 @@ function _restrict_to_cell_boundary_cell_fe_basis(cb::CellBoundary,
 
   # Array with as many cell-wise arrays as facets. For each facet, we get a
   # cell-wise array with the cell FE Basis restricted to that facet.
-  fe_basis_restricted_to_lfacet_cell_wise =
-      [ _restrict_fe_basis_to_facet_lid_cell_wise(cfp_array,
-                                                  cfm_array,
-                                                  signed_cell_wise_facets_ids,
-                                                  facet_lid) for facet_lid=1:num_cell_facets ]
+  per_local_facet_fe_basis_cell_wise_arrays =
+     _get_per_local_facet_cell_wise_arrays(cfp_array,
+                                           cfm_array,
+                                           signed_cell_wise_facets_ids,
+                                           num_cell_facets)
 
   # Cell-wise array of VectorBlock entries with as many entries as facets.
   # For each cell, and local facet, we get the cell FE Basis restricted to that facet.
-  lazy_map(Gridap.Fields.BlockMap(num_cell_facets,collect(1:num_cell_facets)),
-            fe_basis_restricted_to_lfacet_cell_wise...)
+  _block_arrays(per_local_facet_fe_basis_cell_wise_arrays...)
 end
 
 function _expand_facet_lid_fields_to_num_facets_blocks(fe_basis_restricted_to_lfacet_cell_wise,
@@ -238,19 +225,55 @@ function _get_signed_cell_wise_facets(cb::CellBoundary)
                         _get_cell_wise_facets(cb))
 end
 
-
-function _restrict_fe_basis_to_facet_lid_cell_wise(cfp_array,
-                                                   cfm_array,
-                                                   signed_cell_wise_facets_ids,
-                                                   facet_lid)
-    indices=lazy_map((x)->x[facet_lid],signed_cell_wise_facets_ids)
-    lazy_map(Gridap.Arrays.PosNegReindex(cfp_array,cfm_array),
-             indices)
+function Gridap.Geometry.get_cell_map(cb::CellBoundary)
+  num_cell_facets = _get_num_facets(cb)
+  cell_map_tp=get_cell_map(cb.boundary_trian_plus)
+  cell_map_tm=get_cell_map(cb.boundary_trian_minus)
+  signed_cell_wise_facets_ids = _get_signed_cell_wise_facets(cb)
+  # Array with as many cell-wise arrays as facets. For each facet, we get a
+  # cell-wise array with the cell FE Basis restricted to that facet.
+  per_local_facet_maps_cell_wise_arrays =
+      _get_per_local_facet_cell_wise_arrays(cell_map_tp,
+                                            cell_map_tm,
+                                            signed_cell_wise_facets_ids,
+                                            num_cell_facets)
+  _block_arrays(per_local_facet_maps_cell_wise_arrays...)
 end
 
-function _restrict_fe_basis_to_facet_lid_cell_wise(ff_array,
-                                                   cell_wise_facets_ids,
-                                                   facet_lid)
-    indices=lazy_map((x)->x[facet_lid],cell_wise_facets_ids)
-    lazy_map(Gridap.Arrays.Reindex(ff_array),indices)
+function _get_per_local_facet_cell_wise_arrays(tpa, # Facet triangulation + array
+                                               tma, # Facet triangulation - array
+                                               signed_cell_wise_facets_ids,
+                                               num_cell_facets)
+  [ _get_local_facet_cell_wise_array(tpa,
+                                     tma,
+                                     signed_cell_wise_facets_ids,
+                                     facet_lid) for facet_lid=1:num_cell_facets ]
+end
+
+function _get_local_facet_cell_wise_array(tpa,
+                                          tma,
+                                          signed_cell_wise_facets_ids,
+                                          facet_lid)
+  indices=lazy_map((x)->x[facet_lid],signed_cell_wise_facets_ids)
+  lazy_map(Gridap.Arrays.PosNegReindex(tpa,tma),indices)
+end
+
+function _get_per_local_facet_cell_wise_arrays(fta, # Facet triangulation array
+                                               cell_wise_facets_ids,
+                                               num_cell_facets)
+  [ _get_local_facet_cell_wise_array(fta,
+                                     cell_wise_facets_ids,
+                                     facet_lid) for facet_lid=1:num_cell_facets ]
+end
+
+function _get_local_facet_cell_wise_array(fta,
+                                          cell_wise_facets_ids,
+                                          facet_lid)
+  indices=lazy_map((x)->x[facet_lid],cell_wise_facets_ids)
+  lazy_map(Gridap.Arrays.Reindex(fta),indices)
+end
+
+function _block_arrays(a::AbstractArray...)
+  num_blocks = length(a)
+  lazy_map(Gridap.Fields.BlockMap(num_blocks,collect(1:num_blocks)),a...)
 end
