@@ -1,3 +1,8 @@
+name = "ExploringGridapHybridization"
+uuid = "94e6dd8f-308f-4a47-89a7-811b3127ae57"
+authors = ["amartin <alberto.martin@monash.edu>"]
+version = "0.1.0"
+
 [deps]
 FillArrays = "1a297f60-69ca-5386-bcde-b61e274b549b"
 Gridap = "56d4f2e9-7ea1-5844-9cf6-b9c51ca7ce8e"
