@@ -133,6 +133,7 @@ function _restrict_to_cell_boundary_facet_fe_basis(cb::CellBoundary,
   #     2) How to deal with CellField objects which are NOT FEBasis objects?
   #     3) How to deal with differential operators applied to FEBasis/CellField objects?
   @assert Gridap.FESpaces.BasisStyle(facet_fe_basis) == Gridap.FESpaces.TrialBasis()
+  D = num_cell_dims(cb.model)
   @assert isa(get_triangulation(facet_fe_basis),Triangulation{D-1,D})
 
   num_cell_facets  = _get_num_facets(cb)
@@ -169,6 +170,7 @@ function _restrict_to_cell_boundary_cell_fe_basis(cb::CellBoundary,
   #     2) How to deal with CellField objects which are NOT FEBasis objects?
   #     3) How to deal with differential operators applied to FEBasis objects?
   @assert Gridap.FESpaces.BasisStyle(cell_fe_basis) == Gridap.FESpaces.TestBasis()
+  D = num_cell_dims(cb.model)
   @assert isa(get_triangulation(cell_fe_basis),Triangulation{D,D})
 
   num_cell_facets = _get_num_facets(cb)

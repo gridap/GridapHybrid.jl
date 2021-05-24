@@ -1,3 +1,5 @@
+module IntegrationTests
+
 using Gridap
 using FillArrays
 using Gridap.Geometry
@@ -48,3 +50,5 @@ qh_∂T = restrict_to_cell_boundary(∂T,qh)
 lh_∂T = restrict_to_cell_boundary(∂T,lh)
 
 i=integrate_low_level(∂T, qh_∂T, lh_∂T, x, w)
+
+end
