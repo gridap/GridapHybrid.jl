@@ -58,6 +58,7 @@ end
 function Gridap.Arrays.evaluate!(cache,
                                  k::DensifyInnerMostBlockLevel,
                                  a::Gridap.Fields.ArrayBlock{<:Array{T,M},N}) where {T,M,N}
+      @assert 1==0 "This function still BUGGY"
       @assert all(a.touched)
       max_M_N=max(M,N)
       block_size=size(a)
@@ -95,7 +96,16 @@ function Gridap.Arrays.evaluate!(cache,
                                  a::Gridap.Fields.MatrixBlock{<:Vector{T}}) where {T}
   @assert all(a.touched)
   output = cache.array
-  
+  current_j=1
+  for j=1:size(a)[2]
+    current_i=1
+    for i=1:size(a)[1]
+      range = current_i:current_i+length(a.array[i,j])-1
+      output[range,current_j] = a.array[i,j]
+      current_i = current_i + length(range)
+    end
+    current_j = current_j + 1
+  end
   output
 end
 
@@ -104,7 +114,13 @@ function Gridap.Arrays.evaluate!(cache,
                                  a::Gridap.Fields.VectorBlock{<:Matrix{T}}) where {T}
   @assert all(a.touched)
   output = cache.array
-
+  current_i=1
+  n=size(a.array[1])[2]
+  for i=1:size(a)[1]
+    range=current_i:current_i+size(a.array[i])[1]-1
+    output[range,1:n] = a.array[i]
+    current_i=current_i+length(range)
+  end
   output
 end
 
