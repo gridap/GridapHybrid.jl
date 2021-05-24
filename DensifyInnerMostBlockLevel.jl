@@ -30,9 +30,34 @@ function Gridap.Arrays.return_cache(k::DensifyInnerMostBlockLevel,
       Gridap.Arrays.CachedArray(Array{T,max_M_N}(undef,Tuple(densified_size)))
 end
 
-function Gridap.Arrays.return_value(cache,
-                                    k::DensifyInnerMostBlockLevel,
-                                    a::Gridap.Fields.ArrayBlock{<:Array{T,M},N}) where {T,M,N}
+function Gridap.Arrays.return_cache(k::DensifyInnerMostBlockLevel,
+                                    a::Gridap.Fields.MatrixBlock{<:Vector{T}}) where {T}
+  @assert all(a.touched)
+  s=Vector{Int}(undef,2)
+  s[1]=0
+  s[2]=size(a)[2]
+  for i=1:size(a)[1]
+    s[1]=s[1]+length(a.array[i,1])
+  end
+  Gridap.Arrays.CachedArray(Array{T,2}(undef,Tuple(s)))
+end
+
+function Gridap.Arrays.return_cache(k::DensifyInnerMostBlockLevel,
+                                    a::Gridap.Fields.VectorBlock{<:Matrix{T}}) where {T}
+  @assert all(a.touched)
+  s=Vector{Int}(undef,2)
+  s[1]=0
+  s[2]=size(a.array[1])[2]
+  for i=1:size(a)[1]
+    s[1]=s[1]+size(a.array[i])[1]
+  end
+  Gridap.Arrays.CachedArray(Array{T,2}(undef,Tuple(s)))
+end
+
+
+function Gridap.Arrays.evaluate!(cache,
+                                 k::DensifyInnerMostBlockLevel,
+                                 a::Gridap.Fields.ArrayBlock{<:Array{T,M},N}) where {T,M,N}
       @assert all(a.touched)
       max_M_N=max(M,N)
       block_size=size(a)
@@ -42,13 +67,6 @@ function Gridap.Arrays.return_value(cache,
       upper_left_entry_index  = Vector{Int}(undef,max_M_N)
       upper_left_entry_index .= 1
       cinds=CartesianIndices(size(a))
-      # if (M>N)
-      #   cind=cinds[1]
-      #   current_block_size=size(a.array[cind...])
-      #   for I=N+1:M
-      #     current_block_ranges[I]=1:current_block_size[I]
-      #   end
-      # end
       for cind in cinds
         current_block_size=size(a.array[cind])
         for (p,s) in enumerate(current_block_size)
@@ -70,4 +88,66 @@ function Gridap.Arrays.return_value(cache,
         output[current_block_ranges...]=a.array[cind]
       end
       output
+end
+
+function Gridap.Arrays.evaluate!(cache,
+                                 k::DensifyInnerMostBlockLevel,
+                                 a::Gridap.Fields.MatrixBlock{<:Vector{T}}) where {T}
+  @assert all(a.touched)
+  output = cache.array
+  
+  output
+end
+
+function Gridap.Arrays.evaluate!(cache,
+                                 k::DensifyInnerMostBlockLevel,
+                                 a::Gridap.Fields.VectorBlock{<:Matrix{T}}) where {T}
+  @assert all(a.touched)
+  output = cache.array
+
+  output
+end
+
+
+function Gridap.Arrays.return_cache(k::DensifyInnerMostBlockLevel,
+      a::Gridap.Fields.ArrayBlock{<:Gridap.Fields.ArrayBlock{T,M} where {T,M},N}) where {N}
+    cache_touched=a.touched
+    i=findfirst(isone, cache_touched)
+    cache_block=Gridap.Arrays.return_cache(k,a.array[i])
+    cache_array=Array{typeof(cache_block),N}(undef,size(a))
+    output_array=Array{Gridap.Arrays.return_type(k,a.array[i]),N}(undef,size(a))
+    linds=LinearIndices(size(a))
+    cinds=CartesianIndices(size(a))
+    while i != nothing
+      cache_array[i]=cache_block
+      if (linds[i]+1 <= length(linds))
+        i=findnext(isone, cache_touched, cinds[linds[i]+1])
+        if (i!=nothing)
+          cache_block=Gridap.Arrays.return_cache(k,a.array[i])
+        end
+      else
+        i=nothing
+      end
+    end
+    Gridap.Fields.ArrayBlock(cache_array,cache_touched),
+    Gridap.Fields.ArrayBlock(output_array,cache_touched),
+    linds,
+    cinds
+end
+
+function Gridap.Arrays.evaluate!(cache,
+    k::DensifyInnerMostBlockLevel,
+    a::Gridap.Fields.ArrayBlock{<:Gridap.Fields.ArrayBlock{T,M} where {T,M},N}) where {N}
+    cache_array, output_array, linds, cinds = cache
+    @assert cache_array.touched == a.touched
+    i=findfirst(isone, cache_array.touched)
+    while i != nothing
+      output_array.array[i]=Gridap.Arrays.evaluate!(cache_array.array[i],k,a.array[i])
+      if (linds[i]+1 <= length(linds))
+        i=findnext(isone, cache_array.touched, cinds[linds[i]+1])
+      else
+        i=nothing
+      end
+    end
+    output_array
 end
