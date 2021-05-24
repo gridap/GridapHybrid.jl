@@ -1,46 +1,7 @@
 using Gridap
 using FillArrays
 using Gridap.Geometry
-
-include("GridapOverloads.jl")
-include("CellBoundary.jl")
-include("DensifyInnerMostBlockLevel.jl")
-
-x=rand(3)
-y=Array{Vector{Float64},2}(undef,(1,4))
-y[1,1]=x
-y[1,2]=x
-y[1,3]=x
-y[1,4]=x
-touched  = Array{Bool,2}(undef,(1,4))
-touched .= true
-cache=Gridap.Arrays.return_cache(DensifyInnerMostBlockLevel(),Gridap.Fields.ArrayBlock(y,touched))
-@test size(cache) == (3,4)
-Gridap.Arrays.return_value(cache,DensifyInnerMostBlockLevel(),Gridap.Fields.ArrayBlock(y,touched))
-
-x=rand(1,3)
-y=Array{Matrix{Float64}}(undef,(4,))
-y[1]=x
-y[2]=x
-y[3]=x
-y[4]=x
-touched  = Array{Bool,1}(undef,(4,))
-touched .= true
-cache=Gridap.Arrays.return_cache(DensifyInnerMostBlockLevel(),Gridap.Fields.ArrayBlock(y,touched))
-Gridap.Arrays.return_value(cache,DensifyInnerMostBlockLevel(),Gridap.Fields.ArrayBlock(y,touched))
-
-x=rand(2,3)
-y=Array{Matrix{Float64}}(undef,(3,2))
-y[1,1]=x
-y[2,1]=x
-y[3,1]=x
-y[1,2]=x
-y[2,2]=x
-y[3,2]=x
-touched  = Array{Bool,2}(undef,(3,2))
-touched .= true
-cache=Gridap.Arrays.return_cache(DensifyInnerMostBlockLevel(),Gridap.Fields.ArrayBlock(y,touched))
-Gridap.Arrays.return_value(cache,DensifyInnerMostBlockLevel(),Gridap.Fields.ArrayBlock(y,touched))
+using ExploringGridapHybridization
 
 
 # Geometry part
