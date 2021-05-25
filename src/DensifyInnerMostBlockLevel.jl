@@ -1,7 +1,154 @@
-struct DensifyInnerMostBlockLevel <: Gridap.Fields.Map
+struct DensifyInnerMostBlockLevelMap <: Gridap.Fields.Map
 end
 
-function Gridap.Arrays.return_cache(k::DensifyInnerMostBlockLevel,
+function Gridap.Arrays.return_cache(k::DensifyInnerMostBlockLevelMap,
+                                    a::Gridap.Fields.MatrixBlock{<:Vector{T}}) where {T}
+  @assert _check_preconditions(k,a)
+  s=Vector{Int}(undef,2)
+  s[1]=0
+  s[2]=size(a)[2]
+  # Precompute the size of each row block.
+  # We are assuming that the size of each row
+  # block is going to be equivalent for all cells
+  brs=Vector{Int}(undef,size(a)[1])
+  for i=1:size(a)[1]
+    for j=1:size(a)[2]
+      if (a.touched[i,j])
+        s[1]=s[1]+length(a.array[i,j])
+        brs[i]=length(a.array[i,j])
+        break
+      end
+    end
+  end
+  Gridap.Arrays.CachedArray(Array{T,2}(undef,Tuple(s))),brs
+end
+
+function Gridap.Arrays.return_cache(k   :: DensifyInnerMostBlockLevelMap,
+                                    brs :: Vector{<:Integer},
+                                    a   :: Gridap.Fields.MatrixBlock{<:Vector{T}}) where {T}
+  @assert length(brs)==size(a)[1]
+  Gridap.Arrays.CachedArray(Array{T,2}(undef,(sum(brs),size(a)[2])))
+end
+
+function _check_preconditions(k::DensifyInnerMostBlockLevelMap,
+                              a::Gridap.Fields.MatrixBlock{<:Vector{T}}) where {T}
+  # Double check that, for each row, there is at least one non-zero block
+  found=false
+  for i=1:size(a)[1]
+    found=false
+    for j=1:size(a)[2]
+      if (a.touched[i,j])
+        found = true
+        break
+      end
+    end
+    if !found
+      break
+    end
+  end
+  found
+end
+
+function Gridap.Arrays.return_cache(k::DensifyInnerMostBlockLevelMap,
+                                    a::Gridap.Fields.VectorBlock{<:Matrix{T}}) where {T}
+  @assert all(a.touched)
+  s=Vector{Int}(undef,2)
+  s[1]=0
+  s[2]=size(a.array[1])[2]
+  for i=1:size(a)[1]
+    s[1]=s[1]+size(a.array[i])[1]
+  end
+  Gridap.Arrays.CachedArray(Array{T,2}(undef,Tuple(s)))
+end
+
+function Gridap.Arrays.return_cache(k  ::DensifyInnerMostBlockLevelMap,
+                                    brs::Vector{<:Integer},
+                                    cs ::Integer,
+                                    a  ::Gridap.Fields.VectorBlock{<:Matrix{T}}) where {T}
+  Gridap.Arrays.CachedArray(Array{T,2}(undef,(sum(brs),cs)))
+end
+
+
+function Gridap.Arrays.return_cache(k::DensifyInnerMostBlockLevelMap,
+                                    a::Gridap.Fields.MatrixBlock{<:Matrix{T}}) where {T}
+  @assert _check_preconditions(k,a)
+  s=Vector{Int}(undef,2)
+  s[1]=0
+  s[2]=0
+  # Precompute the size of each row/col block.
+  # We are assuming that the size of each row/col
+  # block is going to be equivalent for all cells
+  brs=Vector{Int}(undef,size(a)[1])
+  bcs=Vector{Int}(undef,size(a)[2])
+  # Row traversal
+  for i=1:size(a)[1]
+    for j=1:size(a)[2]
+      if (a.touched[i,j])
+        s[1]=s[1]+size(a.array[i,j])[1]
+        brs[i]=size(a.array[i,j])[1]
+        break
+      end
+    end
+  end
+  #Column traversal
+  for j=1:size(a)[2]
+     for i=1:size(a)[1]
+       if (a.touched[i,j])
+        s[2]=s[2]+size(a.array[i,j])[2]
+        bcs[j]=size(a.array[i,j])[2]
+        break
+       end
+     end
+  end
+  Gridap.Arrays.CachedArray(Array{T,2}(undef,Tuple(s))),brs,bcs
+end
+
+function _check_preconditions(k::DensifyInnerMostBlockLevelMap,
+                              a::Gridap.Fields.MatrixBlock{<:Matrix{T}}) where {T}
+  # Double check that, for each row,
+  # there is at least one non-zero block
+  found=false
+  for i=1:size(a)[1]
+    found=false
+    for j=1:size(a)[2]
+      if (a.touched[i,j])
+        found = true
+        break
+      end
+    end
+    if !found
+      break
+    end
+  end
+  # Double check that, for each col,
+  # there is at least one non-zero block
+  if (found)
+    for j=1:size(a)[2]
+      found=false
+      for i=1:size(a)[1]
+        if (a.touched[i,j])
+          found = true
+          break
+        end
+      end
+      if !found
+        break
+      end
+    end
+  end
+  found
+end
+
+function Gridap.Arrays.return_cache(k::DensifyInnerMostBlockLevelMap,
+                                    brs::Vector{<:Integer},
+                                    bcs::Vector{<:Integer},
+                                    a::Gridap.Fields.MatrixBlock{<:Matrix{T}}) where {T}
+  Gridap.Arrays.CachedArray(Array{T,2}(undef,(sum(brs),sum(bcs))))
+end
+
+
+# Most general version
+function Gridap.Arrays.return_cache(k::DensifyInnerMostBlockLevelMap,
                                     a::Gridap.Fields.ArrayBlock{<:Array{T,M},N}) where {T,M,N}
       @assert all(a.touched)
       block_size=size(a)
@@ -30,33 +177,90 @@ function Gridap.Arrays.return_cache(k::DensifyInnerMostBlockLevel,
       Gridap.Arrays.CachedArray(Array{T,max_M_N}(undef,Tuple(densified_size)))
 end
 
-function Gridap.Arrays.return_cache(k::DensifyInnerMostBlockLevel,
-                                    a::Gridap.Fields.MatrixBlock{<:Vector{T}}) where {T}
-  @assert all(a.touched)
-  s=Vector{Int}(undef,2)
-  s[1]=0
-  s[2]=size(a)[2]
-  for i=1:size(a)[1]
-    s[1]=s[1]+length(a.array[i,1])
-  end
-  Gridap.Arrays.CachedArray(Array{T,2}(undef,Tuple(s)))
+function Gridap.Arrays.evaluate!(cache,
+                                 k::DensifyInnerMostBlockLevelMap,
+                                 a::Gridap.Fields.MatrixBlock{<:Vector{T}}) where {T}
+  cache_array, brs = cache
+  _evaluate!(cache_array,brs,a)
 end
-
-function Gridap.Arrays.return_cache(k::DensifyInnerMostBlockLevel,
-                                    a::Gridap.Fields.VectorBlock{<:Matrix{T}}) where {T}
-  @assert all(a.touched)
-  s=Vector{Int}(undef,2)
-  s[1]=0
-  s[2]=size(a.array[1])[2]
-  for i=1:size(a)[1]
-    s[1]=s[1]+size(a.array[i])[1]
-  end
-  Gridap.Arrays.CachedArray(Array{T,2}(undef,Tuple(s)))
-end
-
 
 function Gridap.Arrays.evaluate!(cache,
-                                 k::DensifyInnerMostBlockLevel,
+                                 k   :: DensifyInnerMostBlockLevelMap,
+                                 brs :: Vector{<:Integer},
+                                 a   :: Gridap.Fields.MatrixBlock{<:Vector{T}}) where {T}
+  _evaluate!(cache,brs,a)
+end
+
+function _evaluate!(cache_array,brs,a)
+  output  = cache_array.array
+  output .= zero(eltype(output))
+  current_j=1
+  for j=1:size(a)[2]
+    current_i=1
+    for i=1:size(a)[1]
+      range = current_i:current_i+brs[i]-1
+      if (a.touched[i,j])
+         output[range,current_j] = a.array[i,j]
+      end
+      current_i = current_i + length(range)
+    end
+    current_j = current_j + 1
+  end
+  output
+end
+
+function Gridap.Arrays.evaluate!(cache,
+                                 k::DensifyInnerMostBlockLevelMap,
+                                 a::Gridap.Fields.MatrixBlock{<:Matrix{T}}) where {T}
+  cache_array, brs, bcs = cache
+  _evaluate!(cache_array, brs, bcs,a)
+end
+
+function Gridap.Arrays.evaluate!(cache,
+  k::DensifyInnerMostBlockLevelMap,
+  brs::Vector{<:Integer},
+  bcs::Vector{<:Integer},
+  a::Gridap.Fields.MatrixBlock{<:Matrix{T}}) where {T}
+  _evaluate!(cache, brs, bcs, a)
+end
+
+function _evaluate!(cache_array, brs, bcs, a)
+  output  = cache_array.array
+  output .= zero(eltype(output))
+  current_j=1
+  for j=1:size(a)[2]
+    current_i=1
+    range_j = current_j:current_j+bcs[j]-1
+    for i=1:size(a)[1]
+      range_i = current_i:current_i+brs[i]-1
+      if (a.touched[i,j])
+         output[range_i,range_j] = a.array[i,j]
+      end
+      current_i = current_i + brs[i]
+    end
+    current_j = current_j + bcs[j]
+  end
+  output
+end
+
+function Gridap.Arrays.evaluate!(cache,
+                                 k::DensifyInnerMostBlockLevelMap,
+                                 a::Gridap.Fields.VectorBlock{<:Matrix{T}}) where {T}
+  @assert all(a.touched)
+  output = cache.array
+  current_i=1
+  n=size(a.array[1])[2]
+  for i=1:size(a)[1]
+    range=current_i:current_i+size(a.array[i])[1]-1
+    output[range,1:n] = a.array[i]
+    current_i=current_i+length(range)
+  end
+  output
+end
+
+# Most general version
+function Gridap.Arrays.evaluate!(cache,
+                                 k::DensifyInnerMostBlockLevelMap,
                                  a::Gridap.Fields.ArrayBlock{<:Array{T,M},N}) where {T,M,N}
       @assert 1==0 "This function still BUGGY"
       @assert all(a.touched)
@@ -91,41 +295,7 @@ function Gridap.Arrays.evaluate!(cache,
       output
 end
 
-function Gridap.Arrays.evaluate!(cache,
-                                 k::DensifyInnerMostBlockLevel,
-                                 a::Gridap.Fields.MatrixBlock{<:Vector{T}}) where {T}
-  @assert all(a.touched)
-  output = cache.array
-  current_j=1
-  for j=1:size(a)[2]
-    current_i=1
-    for i=1:size(a)[1]
-      range = current_i:current_i+length(a.array[i,j])-1
-      output[range,current_j] = a.array[i,j]
-      current_i = current_i + length(range)
-    end
-    current_j = current_j + 1
-  end
-  output
-end
-
-function Gridap.Arrays.evaluate!(cache,
-                                 k::DensifyInnerMostBlockLevel,
-                                 a::Gridap.Fields.VectorBlock{<:Matrix{T}}) where {T}
-  @assert all(a.touched)
-  output = cache.array
-  current_i=1
-  n=size(a.array[1])[2]
-  for i=1:size(a)[1]
-    range=current_i:current_i+size(a.array[i])[1]-1
-    output[range,1:n] = a.array[i]
-    current_i=current_i+length(range)
-  end
-  output
-end
-
-
-function Gridap.Arrays.return_cache(k::DensifyInnerMostBlockLevel,
+function Gridap.Arrays.return_cache(k::DensifyInnerMostBlockLevelMap,
       a::Gridap.Fields.ArrayBlock{<:Gridap.Fields.ArrayBlock{T,M} where {T,M},N}) where {N}
     cache_touched=a.touched
     i=findfirst(isone, cache_touched)
@@ -152,7 +322,7 @@ function Gridap.Arrays.return_cache(k::DensifyInnerMostBlockLevel,
 end
 
 function Gridap.Arrays.evaluate!(cache,
-    k::DensifyInnerMostBlockLevel,
+    k::DensifyInnerMostBlockLevelMap,
     a::Gridap.Fields.ArrayBlock{<:Gridap.Fields.ArrayBlock{T,M} where {T,M},N}) where {N}
     cache_array, output_array, linds, cinds = cache
     @assert cache_array.touched == a.touched
