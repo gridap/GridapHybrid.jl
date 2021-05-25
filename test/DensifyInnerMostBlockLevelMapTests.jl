@@ -62,17 +62,12 @@ module DensifyInnerMostBlockLevelMapTests
    @test cache[2] == [2,2,2]
    @test cache[3] == [3,3,3]
 
-   cache=Gridap.Arrays.return_cache(StaticCondensationMap([1,2],[3]),
-                                   Gridap.Fields.ArrayBlock(y,touched),
-                                   Gridap.Fields.ArrayBlock(y_v,touched_v))
 
    touched_parent      = Array{Bool,2}(undef,(3,3))
    touched_parent     .= false
    touched_parent[2,3] = true
    y_parent            = Array{Gridap.Fields.ArrayBlock{Matrix{Float64}},2}(undef,(3,3))
-   y_parent[2,3]       = Gridap.Fields.Arcache=Gridap.Arrays.return_cache(StaticCondensationMap([1,2],[3]),
-                                   Gridap.Fields.ArrayBlock(y,touched),
-                                   Gridap.Fields.ArrayBlock(y_v,touched_v))rayBlock(y,touched)
+   y_parent[2,3]       = Gridap.Fields.ArrayBlock(y,touched)
    parent              = Gridap.Fields.ArrayBlock(y_parent,touched_parent)
    cache=Gridap.Arrays.return_cache(DensifyInnerMostBlockLevelMap(),
                                     parent)
