@@ -16,6 +16,7 @@ module StaticCondensationMapTests
 
    y_v=Vector{Vector{Float64}}(undef,3)
    touched_v=Vector{Bool}(undef,3)
+   touched_v.=true
    x=rand(3)
    y_v[1]=x
    y_v[2]=x.+1

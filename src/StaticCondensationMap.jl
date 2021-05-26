@@ -1,3 +1,5 @@
+# TO-DO: add optional keyword args to control the kind of linear system/factorization
+# (i.e., symmetric and positive definite, symmetric indefinite, general unsymmetric, etc.)
 struct StaticCondensationMap{IFT <: AbstractVector{<:Int},
                              BFT <: Union{AbstractVector{<:Integer},
                                           AbstractVector{<:AbstractVector{<:Integer}}}} <: Gridap.Fields.Map
@@ -45,6 +47,8 @@ function Gridap.Arrays.return_cache(k::StaticCondensationMap{IFT,BFT},
   A21_matblk = _build_matblk(A,k.boundary_fields,k.interior_fields)
   A12_matblk = _build_matblk(A,k.interior_fields,k.boundary_fields)
   A22_matblk = _build_matblk(A,k.boundary_fields,k.boundary_fields)
+  b1_vecblk  = _build_vecblk(b,k.interior_fields)
+  b2_vecblk  = _build_vecblk(b,k.boundary_fields)
   brs, bcs   = _compute_brs_bcs(A)
   @assert brs == bcs
   interior_brs = brs[k.interior_fields]
@@ -54,11 +58,16 @@ function Gridap.Arrays.return_cache(k::StaticCondensationMap{IFT,BFT},
   A21_cache=Gridap.Arrays.return_cache(k,boundary_brs,interior_brs,A21_matblk)
   A12_cache=Gridap.Arrays.return_cache(k,interior_brs,boundary_brs,A12_matblk)
   A22_cache=Gridap.Arrays.return_cache(k,boundary_brs,boundary_brs,A22_matblk)
+  b1_cache =Gridap.Arrays.return_cache(k,interior_brs,b1_vecblk)
+  b2_cache =Gridap.Arrays.return_cache(k,boundary_brs,b2_vecblk)
+
   (k, interior_brs, boundary_brs,
    (A11_matblk,A11_cache),
    (A21_matblk,A21_cache),
    (A12_matblk,A12_cache),
-   (A22_matblk,A22_cache))
+   (A22_matblk,A22_cache),
+   (b1_vecblk,b1_cache),
+   (b2_vecblk,b2_cache))
 end
 
 function _compute_brs_bcs(a::Gridap.Fields.MatrixBlock{<:Matrix})
@@ -103,10 +112,10 @@ function _build_vecblk(a::Gridap.Fields.VectorBlock{<:Vector{T}},
   for (I,BI) in enumerate(F)
     touched[I]=a.touched[BI]
     if (touched[I])
-      array[I]=a.touched[BI]
+      array[I]=a.array[BI]
     end
   end
-  Gridap.VectorBlock(array,touched)
+  Gridap.Fields.ArrayBlock(array,touched)
 end
 
 
@@ -115,14 +124,37 @@ function Gridap.Arrays.evaluate!(cache,
   A::Gridap.Fields.MatrixBlock{<:Matrix{T}},
   b::Gridap.Fields.VectorBlock{<:Vector{T}}) where {IFT<:AbstractVector{<:Integer}, BFT <: AbstractVector{<:Integer}, T}
 
-   k,interior_bs,boundary_bs,A11t,A21t,A12t,A22t=cache
+   k,interior_bs,boundary_bs,A11t,A21t,A12t,A22t,b1t,b2t=cache
    A11_matblk,A11_cache=A11t
    A21_matblk,A21_cache=A21t
    A12_matblk,A12_cache=A12t
    A22_matblk,A22_cache=A22t
+   b1_vecblk,b1_cache=b1t
+   b2_vecblk,b2_cache=b2t
    A11=Gridap.Arrays.evaluate!(A11_cache,k,interior_bs,interior_bs,A11_matblk)
    A21=Gridap.Arrays.evaluate!(A21_cache,k,boundary_bs,interior_bs,A21_matblk)
    A12=Gridap.Arrays.evaluate!(A12_cache,k,interior_bs,boundary_bs,A12_matblk)
    A22=Gridap.Arrays.evaluate!(A22_cache,k,boundary_bs,interior_bs,A22_matblk)
-   (A11,A21,A12,A22)
+   b1=Gridap.Arrays.evaluate!(b1_cache,k,interior_bs,b1_vecblk)
+   b2=Gridap.Arrays.evaluate!(b2_cache,k,boundary_bs,b2_vecblk)
+
+   # TO-DO: ipiv is allocated on each call to getrf! :-(
+   # A11 = L11 U11
+   LUA11,ipiv,info=LinearAlgebra.LAPACK.getrf!(A11)
+   @assert info==0
+
+   # A12 = inv(A11)*A12
+   LinearAlgebra.LAPACK.getrs!('N', LUA11, ipiv, A12)
+
+   # A22 = A22 - A21*A12
+   LinearAlgebra.BLAS.gemm!('N','N',-1.0,A21,A12,1.0,A22)
+
+   # b1 = inv(A11)*b1
+   LinearAlgebra.LAPACK.getrs!('N', LUA11, ipiv, b1)
+
+   # b2 = b2-A21*b1
+   LinearAlgebra.BLAS.gemv!('N',-1.0,A21,b1,1.0,b2)
+
+   #
+   (A22,b2)
 end

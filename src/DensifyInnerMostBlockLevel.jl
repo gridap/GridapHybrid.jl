@@ -2,6 +2,28 @@ struct DensifyInnerMostBlockLevelMap <: Gridap.Fields.Map
 end
 
 function Gridap.Arrays.return_cache(k::DensifyInnerMostBlockLevelMap,
+                                    a::Gridap.Fields.VectorBlock{<:Vector{T}}) where {T}
+  @assert all(a.touched)
+  # Precompute the size of each row block.
+  # We are assuming that the size of each row
+  # block is going to be equivalent for all cells
+  brs=Vector{Int}(undef,size(a)[1])
+  for i=1:size(a)[1]
+    s=s+length(a.array[i])
+    brs[i]=length(a.array[i])
+  end
+  Gridap.Arrays.CachedArray(Vector{T}(undef,(s,))),brs
+end
+
+function Gridap.Arrays.return_cache(k   :: DensifyInnerMostBlockLevelMap,
+                                    brs :: Vector{<:Integer},
+                                    a   :: Gridap.Fields.VectorBlock{<:Vector{T}}) where {T}
+  @assert length(brs)==size(a)[1]
+  Gridap.Arrays.CachedArray(Vector{T}(undef,(sum(brs),)))
+end
+
+
+function Gridap.Arrays.return_cache(k::DensifyInnerMostBlockLevelMap,
                                     a::Gridap.Fields.MatrixBlock{<:Vector{T}}) where {T}
   @assert _check_preconditions(k,a)
   s=Vector{Int}(undef,2)
@@ -179,6 +201,21 @@ end
 
 function Gridap.Arrays.evaluate!(cache,
                                  k::DensifyInnerMostBlockLevelMap,
+                                 a::Gridap.Fields.VectorBlock{<:Vector{T}}) where {T}
+  cache_array, brs = cache
+  _evaluate!(cache_array,brs,a)
+end
+
+function Gridap.Arrays.evaluate!(cache,
+                                 k   :: DensifyInnerMostBlockLevelMap,
+                                 brs :: Vector{<:Integer},
+                                 a   :: Gridap.Fields.VectorBlock{<:Vector{T}}) where {T}
+  _evaluate!(cache,brs,a)
+end
+
+
+function Gridap.Arrays.evaluate!(cache,
+                                 k::DensifyInnerMostBlockLevelMap,
                                  a::Gridap.Fields.MatrixBlock{<:Vector{T}}) where {T}
   cache_array, brs = cache
   _evaluate!(cache_array,brs,a)
@@ -194,17 +231,13 @@ end
 function _evaluate!(cache_array,brs,a)
   output  = cache_array.array
   output .= zero(eltype(output))
-  current_j=1
-  for j=1:size(a)[2]
-    current_i=1
-    for i=1:size(a)[1]
-      range = current_i:current_i+brs[i]-1
-      if (a.touched[i,j])
-         output[range,current_j] = a.array[i,j]
-      end
-      current_i = current_i + length(range)
-    end
-    current_j = current_j + 1
+  current_i=1
+  for i=1:size(a)[1]
+     range = current_i:current_i+brs[i]-1
+     if (a.touched[i])
+        output[range] = a.array[i]
+     end
+     current_i = current_i + length(range)
   end
   output
 end

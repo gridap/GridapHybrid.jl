@@ -1,6 +1,7 @@
 module ExploringGridapHybridization
 using Gridap
 using FillArrays
+using LinearAlgebra
 include("GridapOverloads.jl")
 include("CellBoundary.jl")
 include("DensifyInnerMostBlockLevel.jl")
