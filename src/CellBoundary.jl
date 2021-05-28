@@ -129,10 +129,8 @@ function _restrict_to_cell_boundary_facet_fe_basis(cb::CellBoundary,
                                                    facet_fe_basis::Gridap.FESpaces.FEBasis)
 
   # TO-THINK:
-  #     1) How to deal with Test/Trial FEBasis objects?
-  #     2) How to deal with CellField objects which are NOT FEBasis objects?
-  #     3) How to deal with differential operators applied to FEBasis/CellField objects?
-  @assert Gridap.FESpaces.BasisStyle(facet_fe_basis) == Gridap.FESpaces.TrialBasis()
+  #     1) How to deal with CellField objects which are NOT FEBasis objects?
+  #     2) How to deal with differential operators applied to FEBasis/CellField objects?
   D = num_cell_dims(cb.model)
   @assert isa(get_triangulation(facet_fe_basis),Triangulation{D-1,D})
 
@@ -146,6 +144,7 @@ function _restrict_to_cell_boundary_facet_fe_basis(cb::CellBoundary,
                                           num_cell_facets)
   fe_basis_restricted_to_lfacet_cell_wise_expanded =
     [ _expand_facet_lid_fields_to_num_facets_blocks(
+                            Gridap.FESpaces.BasisStyle(facet_fe_basis),
                             fe_basis_restricted_to_lfacet_cell_wise[facet_lid],
                             num_cell_facets,
                             facet_lid) for facet_lid=1:num_cell_facets ]
@@ -166,10 +165,8 @@ end
 function _restrict_to_cell_boundary_cell_fe_basis(cb::CellBoundary,
                                                   cell_fe_basis::Gridap.FESpaces.FEBasis)
   # TO-THINK:
-  #     1) How to deal with Test/Trial FEBasis objects?
-  #     2) How to deal with CellField objects which are NOT FEBasis objects?
-  #     3) How to deal with differential operators applied to FEBasis objects?
-  @assert Gridap.FESpaces.BasisStyle(cell_fe_basis) == Gridap.FESpaces.TestBasis()
+  #     1) How to deal with CellField objects which are NOT FEBasis objects?
+  #     2) How to deal with differential operators applied to FEBasis objects?
   D = num_cell_dims(cb.model)
   @assert isa(get_triangulation(cell_fe_basis),Triangulation{D,D})
 
@@ -198,12 +195,23 @@ function _restrict_to_cell_boundary_cell_fe_basis(cb::CellBoundary,
   _block_arrays(per_local_facet_fe_basis_cell_wise_arrays...)
 end
 
-function _expand_facet_lid_fields_to_num_facets_blocks(fe_basis_restricted_to_lfacet_cell_wise,
+function _expand_facet_lid_fields_to_num_facets_blocks(::Gridap.FESpaces.TrialBasis,
+                                                       fe_basis_restricted_to_lfacet_cell_wise,
                                                        num_cell_facets,
                                                        facet_lid)
     bl=_get_block_layout(fe_basis_restricted_to_lfacet_cell_wise)[1]
     lazy_map(Gridap.Fields.BlockMap(bl[1],bl[2]),
              lazy_map(Gridap.Fields.BlockMap((1,num_cell_facets),[CartesianIndex((1,facet_lid))]),
+                      lazy_map(x->x[findfirst(x.touched)], fe_basis_restricted_to_lfacet_cell_wise)))
+end
+
+function _expand_facet_lid_fields_to_num_facets_blocks(::Gridap.FESpaces.TestBasis,
+                                                       fe_basis_restricted_to_lfacet_cell_wise,
+                                                       num_cell_facets,
+                                                       facet_lid)
+    bl=_get_block_layout(fe_basis_restricted_to_lfacet_cell_wise)[1]
+    lazy_map(Gridap.Fields.BlockMap(bl[1][1],bl[2]),
+             lazy_map(Gridap.Fields.BlockMap(num_cell_facets,facet_lid),
                       lazy_map(x->x[findfirst(x.touched)], fe_basis_restricted_to_lfacet_cell_wise)))
 end
 
@@ -287,11 +295,12 @@ end
 #    LazyArray{...}. I need to restrict the cell-wise block array to each
 #    individual block, and with a LazyArray{...} this is very efficient as
 #    the array is already restricted to each block in the a.args member variable.
-function integrate_low_level(cb::CellBoundary,
-                             vh::Gridap.Arrays.LazyArray{<:Fill{<:Gridap.Fields.BlockMap}},
-                             uh::Gridap.Arrays.LazyArray{<:Fill{<:Gridap.Fields.BlockMap}},
-                             x::AbstractArray{<:Gridap.Fields.ArrayBlock{<:AbstractArray{<:Point}}},
-                             w::AbstractArray{<:Gridap.Fields.ArrayBlock{<:AbstractVector}})
+function integrate_vh_mult_uh_low_level(
+     cb::CellBoundary,
+     vh::Gridap.Arrays.LazyArray{<:Fill{<:Gridap.Fields.BlockMap}},
+     uh::Gridap.Arrays.LazyArray{<:Fill{<:Gridap.Fields.BlockMap}},
+     x::AbstractArray{<:Gridap.Fields.ArrayBlock{<:AbstractArray{<:Point}}},
+     w::AbstractArray{<:Gridap.Fields.ArrayBlock{<:AbstractVector}})
   vhx=lazy_map(evaluate,vh,x)
   uhx=lazy_map(evaluate,uh,x)
   vhx_mult_uhx=lazy_map(Gridap.Fields.BroadcastingFieldOpMap(*), vhx, uhx)
@@ -302,5 +311,67 @@ function integrate_low_level(cb::CellBoundary,
                     _restrict_cell_array_block_to_block(vhx_mult_uhx,pos),
                     _restrict_cell_array_block_to_block(w,pos),
                     jx.args[pos]) for pos=1:length(vhx.args) ]
+  # TO-DO: investigate why Broadcasting(+) fails here
+  lazy_map(+,args...)
+end
+
+#∫( mh*(uh⋅n) )*dK
+function integrate_mh_mult_uh_cdot_n_low_level(cb::CellBoundary,
+  mh::Gridap.Arrays.LazyArray{<:Fill{<:Gridap.Fields.BlockMap}},
+  uh::Gridap.Arrays.LazyArray{<:Fill{<:Gridap.Fields.BlockMap}},
+  x::AbstractArray{<:Gridap.Fields.ArrayBlock{<:AbstractArray{<:Point}}},
+  w::AbstractArray{<:Gridap.Fields.ArrayBlock{<:AbstractVector}})
+
+  n=get_cell_normal_vector(cb)
+
+  # (uh⋅n)
+  uhx=lazy_map(evaluate,uh,x)
+  nx=lazy_map(evaluate,n,x)
+  uhx_cdot_nx=lazy_map(Gridap.Fields.BroadcastingFieldOpMap(⋅), uhx, nx)
+
+  # mh*(uh⋅n)
+  mhx=lazy_map(evaluate,mh,x)
+  mhx_mult_uhx_cdot_nx = lazy_map(Gridap.Fields.BroadcastingFieldOpMap(*), mhx, uhx_cdot_nx )
+
+
+  j=lazy_map(∇,get_cell_map(cb))
+  jx=lazy_map(evaluate,j,x)
+
+  args = [ lazy_map(Gridap.Fields.IntegrationMap(),
+                    _restrict_cell_array_block_to_block(mhx_mult_uhx_cdot_nx,pos),
+                    _restrict_cell_array_block_to_block(w,pos),
+                    jx.args[pos]) for pos=1:length(uhx.args) ]
+  # TO-DO: investigate why Broadcasting(+) fails here
+  lazy_map(+,args...)
+end
+
+
+#∫( (vh⋅n)*lh )*dK
+function integrate_vh_cdot_n_mult_lh_low_level(
+  cb::CellBoundary,
+  vh::Gridap.Arrays.LazyArray{<:Fill{<:Gridap.Fields.BlockMap}},
+  lh::Gridap.Arrays.LazyArray{<:Fill{<:Gridap.Fields.BlockMap}},
+  x::AbstractArray{<:Gridap.Fields.ArrayBlock{<:AbstractArray{<:Point}}},
+  w::AbstractArray{<:Gridap.Fields.ArrayBlock{<:AbstractVector}})
+
+  n=get_cell_normal_vector(cb)
+
+  # (vh⋅n)
+  vhx=lazy_map(evaluate,vh,x)
+  nx=lazy_map(evaluate,n,x)
+  vhx_cdot_nx=lazy_map(Gridap.Fields.BroadcastingFieldOpMap(⋅), vhx, nx)
+
+  # (vh⋅n)*lh
+  lhx=lazy_map(evaluate,lh,x)
+  vhx_cdot_nx_mult_lhx = lazy_map(Gridap.Fields.BroadcastingFieldOpMap(*), vhx_cdot_nx, lhx)
+
+  j=lazy_map(∇,get_cell_map(cb))
+  jx=lazy_map(evaluate,j,x)
+
+  args = [ lazy_map(Gridap.Fields.IntegrationMap(),
+                    _restrict_cell_array_block_to_block(vhx_cdot_nx_mult_lhx,pos),
+                    _restrict_cell_array_block_to_block(w,pos),
+                    jx.args[pos]) for pos=1:length(vhx.args) ]
+  # TO-DO: investigate why Broadcasting(+) fails here
   lazy_map(+,args...)
 end

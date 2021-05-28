@@ -52,3 +52,42 @@ function Gridap.Arrays.lazy_map(::typeof(∇),
                              <:Gridap.Fields.VectorBlock{<:Gridap.Fields.AffineMap}})
   _block_arrays(map(a->lazy_map(∇,a), a.args)...)
 end
+
+## Polynomials
+
+# Optimizing evaluation at a single point
+
+function Gridap.Arrays.return_cache(f::Gridap.Polynomials.QCurlGradMonomialBasis{D,T},x::Point) where {D,T}
+  ndof = size(f.qgrad)[1]
+  r = Gridap.Arrays.CachedArray(zeros(VectorValue{D,T},(ndof,)))
+  xs = [x]
+  cf = Gridap.Arrays.return_cache(f,xs)
+  r, cf, xs
+end
+
+function Gridap.Arrays.evaluate!(cache,f::Gridap.Polynomials.QCurlGradMonomialBasis{D,T},x::Point) where {D,T}
+  r, cf, xs = cache
+  xs[1] = x
+  v = Gridap.Arrays.evaluate!(cf,f,xs)
+  ndof = size(v,2)
+  Gridap.Arrays.setsize!(r,(ndof,))
+  a = r.array
+  copyto!(a,v)
+  a
+end
+
+# function Gridap.Arrays.return_value(k::Gridap.Fields.Broadcasting{typeof(∘)},
+#                                     g::Gridap.Fields.ArrayBlock{<:Transpose,N},
+#                                     h::Gridap.Fields.Field) where N
+#     i=findfirst(g.touched)
+#     gi=g.array[i].parent
+#     array=Array{typeof(gi),N}(undef,size(g.touched))
+#     touched=g.touched
+#     for i in findall(g.touched)
+#       array[i]=g.array[i].parent
+#     end
+#     Transpose(Gridap.Arrays.return_value(k,Gridap.Fields.ArrayBlock(array,touched),h))
+# end
+
+@inline Gridap.Arrays.evaluate!(cache,f::Gridap.Fields.Broadcasting,
+                 x::Transpose,y::Gridap.Fields.Field)=Transpose(evaluate(f,x.parent,y))
