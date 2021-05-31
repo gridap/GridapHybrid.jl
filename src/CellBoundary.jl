@@ -93,7 +93,7 @@ function quadrature_evaluation_points_and_weights(cell_boundary::CellBoundary, d
   model = cell_boundary.model
   D = num_cell_dims(model)
   p = lazy_map(Gridap.ReferenceFEs.get_polytope,get_reffes(model))
-  @assert length(p) == 1
+  Gridap.Helpers.@check length(p) == 1
   p  = p[1]
   pf = Gridap.ReferenceFEs.Polytope{D-1}(p,1)
   qf = Gridap.ReferenceFEs.Quadrature(pf,degree)
@@ -132,7 +132,7 @@ function _restrict_to_cell_boundary_facet_fe_basis(cb::CellBoundary,
   #     1) How to deal with CellField objects which are NOT FEBasis objects?
   #     2) How to deal with differential operators applied to FEBasis/CellField objects?
   D = num_cell_dims(cb.model)
-  @assert isa(get_triangulation(facet_fe_basis),Triangulation{D-1,D})
+  Gridap.Helpers.@check isa(get_triangulation(facet_fe_basis),Triangulation{D-1,D})
 
   num_cell_facets  = _get_num_facets(cb)
   cell_wise_facets = _get_cell_wise_facets(cb)
@@ -168,7 +168,7 @@ function _restrict_to_cell_boundary_cell_fe_basis(cb::CellBoundary,
   #     1) How to deal with CellField objects which are NOT FEBasis objects?
   #     2) How to deal with differential operators applied to FEBasis objects?
   D = num_cell_dims(cb.model)
-  @assert isa(get_triangulation(cell_fe_basis),Triangulation{D,D})
+  Gridap.Helpers.@check isa(get_triangulation(cell_fe_basis),Triangulation{D,D})
 
   num_cell_facets = _get_num_facets(cb)
 
@@ -218,7 +218,7 @@ end
 function _get_num_facets(cb::CellBoundary)
   model = cb.model
   p = lazy_map(Gridap.ReferenceFEs.get_polytope,get_reffes(model))
-  @assert length(p) == 1
+  Gridap.Helpers.@check length(p) == 1
   num_facets(p[1])
 end
 
@@ -264,8 +264,20 @@ function _get_local_facet_cell_wise_array(tpa,
                                           tma,
                                           signed_cell_wise_facets_ids,
                                           facet_lid)
-  indices=lazy_map((x)->x[facet_lid],signed_cell_wise_facets_ids)
-  lazy_map(Gridap.Arrays.PosNegReindex(tpa,tma),indices)
+  Gridap.Helpers.@check length(tpa) == length(tma)
+  tpa_tma=Gridap.Arrays.AppendedArray(tpa,tma)
+  function transform_signed_index_to_appended_index(x)
+      signed_index=x[facet_lid]
+      Gridap.Helpers.@check signed_index != 0
+      if (signed_index>0)
+        return signed_index
+      else
+        return length(tpa)+abs(signed_index)
+      end
+  end
+  indices=lazy_map(transform_signed_index_to_appended_index,
+                   signed_cell_wise_facets_ids)
+  lazy_map(Gridap.Arrays.Reindex(tpa_tma),indices)
 end
 
 function _get_per_local_facet_cell_wise_arrays(fta, # Facet triangulation array
@@ -312,7 +324,7 @@ function integrate_vh_mult_uh_low_level(
                     _restrict_cell_array_block_to_block(w,pos),
                     jx.args[pos]) for pos=1:length(vhx.args) ]
   # TO-DO: investigate why Broadcasting(+) fails here
-  lazy_map(+,args...)
+  lazy_map(DensifyInnerMostBlockLevelMap(),lazy_map(+,args...))
 end
 
 #∫( mh*(uh⋅n) )*dK
@@ -342,7 +354,7 @@ function integrate_mh_mult_uh_cdot_n_low_level(cb::CellBoundary,
                     _restrict_cell_array_block_to_block(w,pos),
                     jx.args[pos]) for pos=1:length(uhx.args) ]
   # TO-DO: investigate why Broadcasting(+) fails here
-  lazy_map(+,args...)
+  lazy_map(DensifyInnerMostBlockLevelMap(),lazy_map(+,args...))
 end
 
 
@@ -373,5 +385,18 @@ function integrate_vh_cdot_n_mult_lh_low_level(
                     _restrict_cell_array_block_to_block(w,pos),
                     jx.args[pos]) for pos=1:length(vhx.args) ]
   # TO-DO: investigate why Broadcasting(+) fails here
-  lazy_map(+,args...)
+  lazy_map(DensifyInnerMostBlockLevelMap(),lazy_map(+,args...))
+end
+
+function restrict_facet_dof_ids_to_cell_boundary(cb::CellBoundary,facet_dof_ids)
+  cell_wise_facets = _get_cell_wise_facets(cb)
+  num_cell_facets = _get_num_facets(cb)
+
+  facet_dof_ids_restricted_to_lfacet_cell_wise =
+  _get_per_local_facet_cell_wise_arrays(facet_dof_ids,
+                                        cell_wise_facets,
+                                        num_cell_facets)
+
+  lazy_map(first,lazy_map(Gridap.Fields.Broadcasting(vcat),
+           facet_dof_ids_restricted_to_lfacet_cell_wise...))
 end

@@ -7,7 +7,7 @@ struct StaticCondensationMap{IFT <: AbstractVector{<:Int},
   boundary_fields :: BFT
   function StaticCondensationMap(interior_fields::AbstractVector{<:Integer},
                               boundary_fields::AbstractVector{<:Integer})
-    @assert _check_preconditions(interior_fields,boundary_fields)
+    Gridap.Helpers.@check _check_preconditions(interior_fields,boundary_fields)
     IFT=typeof(interior_fields)
     BFT=typeof(boundary_fields)
     new{IFT,BFT}(interior_fields,boundary_fields)
@@ -50,7 +50,7 @@ function Gridap.Arrays.return_cache(k::StaticCondensationMap{IFT,BFT},
   b1_vecblk  = _build_vecblk(b,k.interior_fields)
   b2_vecblk  = _build_vecblk(b,k.boundary_fields)
   brs, bcs   = _compute_brs_bcs(A)
-  @assert brs == bcs
+  Gridap.Helpers.@check brs == bcs
   interior_brs = brs[k.interior_fields]
   boundary_brs = brs[k.boundary_fields]
   k=DensifyInnerMostBlockLevelMap()
@@ -141,7 +141,7 @@ function Gridap.Arrays.evaluate!(cache,
    # TO-DO: ipiv is allocated on each call to getrf! :-(
    # A11 = L11 U11
    LUA11,ipiv,info=LinearAlgebra.LAPACK.getrf!(A11)
-   @assert info==0
+   Gridap.Helpers.@check info==0
 
    # A12 = inv(A11)*A12
    LinearAlgebra.LAPACK.getrs!('N', LUA11, ipiv, A12)

@@ -31,4 +31,17 @@ module StaticCondensationMapTests
                            k,
                            Gridap.Fields.ArrayBlock(y,touched),
                            Gridap.Fields.ArrayBlock(y_v,touched_v))
+
+
+   k=BackwardStaticCondensationMap([1,2],[3])
+   cache=Gridap.Arrays.return_cache(k,
+                                   Gridap.Fields.ArrayBlock(y,touched),
+                                   Gridap.Fields.ArrayBlock(y_v,touched_v),
+                                   a[2])
+
+   b=Gridap.Arrays.evaluate!(cache,
+                             k,
+                             Gridap.Fields.ArrayBlock(y,touched),
+                             Gridap.Fields.ArrayBlock(y_v,touched_v),
+                             a[2])
 end

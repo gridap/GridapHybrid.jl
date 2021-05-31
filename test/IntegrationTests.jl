@@ -19,7 +19,7 @@ function g(x)
   elseif (abs(x[2]-1.0)<tol)
     return x[1]+x[2]
   end
-  @assert false
+  Gridap.Helpers.@check false
 end
 
 # Geometry part
@@ -55,7 +55,7 @@ vh,qh,mh = yh
 xh = get_trial_fe_basis(X)
 uh,ph,lh = xh
 
-
+mhscal=get_fe_basis(M)
 
 trian = Triangulation(model)
 degree = 2*(order+1)
@@ -70,7 +70,7 @@ dΓ = Measure(neumanntrian,degree)
 
 dcmΩ=∫( vh⋅uh - (∇⋅vh)*ph + qh*(∇⋅uh) )*dΩ
 dcvΩ=∫( vh⋅f + qh*(∇⋅u))*dΩ
-dcvΓ=∫(mh*g)*dΓ
+dcvΓ=∫(mhscal*g)*dΓ
 
 data_mΩ=Gridap.CellData.get_contribution(dcmΩ,dΩ.quad.trian)
 data_vΩ=Gridap.CellData.get_contribution(dcvΩ,dΩ.quad.trian)
@@ -82,11 +82,46 @@ x,w    = quadrature_evaluation_points_and_weights(∂T,2)
 #∫( mh*(uh⋅n) )*dK
 uh_∂T = restrict_to_cell_boundary(∂T,uh)
 mh_∂T = restrict_to_cell_boundary(∂T,mh)
-vh_cdot_n_mult_lh=integrate_mh_mult_uh_cdot_n_low_level(∂T,mh_∂T,uh_∂T,x,w)
+mh_mult_uh_cdot_n=integrate_mh_mult_uh_cdot_n_low_level(∂T,mh_∂T,uh_∂T,x,w)
 
 #∫( (vh⋅n)*lh )*dK
 vh_∂T = restrict_to_cell_boundary(∂T,vh)
 lh_∂T = restrict_to_cell_boundary(∂T,lh)
 vh_cdot_n_mult_lh=integrate_vh_cdot_n_mult_lh_low_level(∂T,vh_∂T,lh_∂T,x,w)
 
+cmat=lazy_map(Broadcasting(+),
+              lazy_map(Broadcasting(-),data_mΩ,vh_cdot_n_mult_lh),
+              mh_mult_uh_cdot_n)
+
+cvec=data_vΩ
+
+k=StaticCondensationMap([1,2],[3])
+cmat_cvec_condensed=lazy_map(k,cmat,cvec)
+cmat_condensed=lazy_map(x->x[1],cmat_cvec_condensed)
+cvec_condensed=lazy_map(x->x[2],cmat_cvec_condensed)
+
+
+# Include Neumann term
+w = []
+r = []
+push!(w,data_vΓ)
+push!(r,lazy_map(Gridap.Arrays.Reindex(get_cell_dof_ids(M)),
+                 get_cell_to_bgcell(dΓ.quad.trian.face_trian)))
+
+# Include cell term
+fdofscb=restrict_facet_dof_ids_to_cell_boundary(∂T,get_cell_dof_ids(M))
+push!(w,cvec_condensed)
+push!(r,fdofscb)
+
+assem = SparseMatrixAssembler(M,L)
+b     = assemble_vector(assem,(w,r))
+A     = assemble_matrix(assem,( [cmat_condensed], [fdofscb], [fdofscb]))
+x     = A\b
+xh    = FEFunction(L,x)
+
+k=BackwardStaticCondensationMap([1,2],[3])
+xhₖ= lazy_map(Gridap.Fields.Broadcasting(Gridap.Fields.PosNegReindex(
+                      Gridap.FESpaces.get_free_dof_values(xh),xh.dirichlet_values)),
+                      fdofscb)
+x1x2=lazy_map(k,cmat,cvec,xhₖ)
 end

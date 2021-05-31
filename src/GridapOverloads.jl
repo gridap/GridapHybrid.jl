@@ -1,34 +1,6 @@
 
 ## Arrays
 
-function Gridap.Arrays.lazy_map(::typeof(evaluate),::Type{T},a::Gridap.Arrays.LazyArray{<:Fill{<:Gridap.Fields.PosNegReindex}},x::AbstractArray) where T
-  i_to_iposneg = a.args[1]
-  ipos_to_i = findall((x)->(x>0),i_to_iposneg)
-  ineg_to_i = findall((x)->(x<0),i_to_iposneg)
-  xpos = lazy_map(Reindex(x),ipos_to_i)
-  xneg = lazy_map(Reindex(x),ineg_to_i)
-  apos = lazy_map(Reindex(a.maps.value.values_pos),i_to_iposneg[ipos_to_i])
-  aneg = lazy_map(Reindex(a.maps.value.values_neg),-i_to_iposneg[ineg_to_i])
-  cpos = lazy_map(evaluate,apos,xpos)
-  cneg = lazy_map(evaluate,aneg,xneg)
-  function f(x)
-    npos=0
-    nneg=0
-    o=similar(x)
-    for (i,v)  in enumerate(x)
-      if v>0
-        npos+=1
-        o[i]=npos
-      else
-        nneg+=1
-        o[i]=-nneg
-      end
-    end
-    o
-  end
-  lazy_map(Gridap.Fields.PosNegReindex(cpos,cneg),T,f(i_to_iposneg))
-end
-
 # TO-THINK: is this reasonable from an efficiency point of view?
 function _restrict_cell_array_block_to_block(x,block)
   lazy_map(i->i[block],x)
@@ -75,19 +47,3 @@ function Gridap.Arrays.evaluate!(cache,f::Gridap.Polynomials.QCurlGradMonomialBa
   copyto!(a,v)
   a
 end
-
-# function Gridap.Arrays.return_value(k::Gridap.Fields.Broadcasting{typeof(∘)},
-#                                     g::Gridap.Fields.ArrayBlock{<:Transpose,N},
-#                                     h::Gridap.Fields.Field) where N
-#     i=findfirst(g.touched)
-#     gi=g.array[i].parent
-#     array=Array{typeof(gi),N}(undef,size(g.touched))
-#     touched=g.touched
-#     for i in findall(g.touched)
-#       array[i]=g.array[i].parent
-#     end
-#     Transpose(Gridap.Arrays.return_value(k,Gridap.Fields.ArrayBlock(array,touched),h))
-# end
-
-@inline Gridap.Arrays.evaluate!(cache,f::Gridap.Fields.Broadcasting,
-                 x::Transpose,y::Gridap.Fields.Field)=Transpose(evaluate(f,x.parent,y))
