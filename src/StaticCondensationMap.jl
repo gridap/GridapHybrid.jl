@@ -124,19 +124,19 @@ function Gridap.Arrays.evaluate!(cache,
   A::Gridap.Fields.MatrixBlock{<:Matrix{T}},
   b::Gridap.Fields.VectorBlock{<:Vector{T}}) where {IFT<:AbstractVector{<:Integer}, BFT <: AbstractVector{<:Integer}, T}
 
-   k,interior_bs,boundary_bs,A11t,A21t,A12t,A22t,b1t,b2t=cache
+   k,interior_brs,boundary_brs,A11t,A21t,A12t,A22t,b1t,b2t=cache
    A11_matblk,A11_cache=A11t
    A21_matblk,A21_cache=A21t
    A12_matblk,A12_cache=A12t
    A22_matblk,A22_cache=A22t
    b1_vecblk,b1_cache=b1t
    b2_vecblk,b2_cache=b2t
-   A11=Gridap.Arrays.evaluate!(A11_cache,k,interior_bs,interior_bs,A11_matblk)
-   A21=Gridap.Arrays.evaluate!(A21_cache,k,boundary_bs,interior_bs,A21_matblk)
-   A12=Gridap.Arrays.evaluate!(A12_cache,k,interior_bs,boundary_bs,A12_matblk)
-   A22=Gridap.Arrays.evaluate!(A22_cache,k,boundary_bs,interior_bs,A22_matblk)
-   b1=Gridap.Arrays.evaluate!(b1_cache,k,interior_bs,b1_vecblk)
-   b2=Gridap.Arrays.evaluate!(b2_cache,k,boundary_bs,b2_vecblk)
+   A11=Gridap.Arrays.evaluate!(A11_cache,k,interior_brs,interior_brs,A11_matblk)
+   A21=Gridap.Arrays.evaluate!(A21_cache,k,boundary_brs,interior_brs,A21_matblk)
+   A12=Gridap.Arrays.evaluate!(A12_cache,k,interior_brs,boundary_brs,A12_matblk)
+   A22=Gridap.Arrays.evaluate!(A22_cache,k,boundary_brs,interior_brs,A22_matblk)
+   b1=Gridap.Arrays.evaluate!(b1_cache,k,interior_brs,b1_vecblk)
+   b2=Gridap.Arrays.evaluate!(b2_cache,k,boundary_brs,b2_vecblk)
 
    # TO-DO: ipiv is allocated on each call to getrf! :-(
    # A11 = L11 U11
