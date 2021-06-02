@@ -59,6 +59,9 @@ function Gridap.Arrays.evaluate!(cache,
 
    b2 = x
 
+   # b1 = b1-A12*b2
+   LinearAlgebra.BLAS.gemv!('N',-1.0,A12,b2,1.0,b1)
+
    # TO-DO: ipiv is allocated on each call to getrf! :-(
    # A11 = L11 U11
    LUA11,ipiv,info=LinearAlgebra.LAPACK.getrf!(A11)
@@ -66,9 +69,6 @@ function Gridap.Arrays.evaluate!(cache,
 
    # b1 = inv(A11)*b1
    LinearAlgebra.LAPACK.getrs!('N', LUA11, ipiv, b1)
-
-   # b1 = b1-A12*b2
-   LinearAlgebra.BLAS.gemv!('N',-1.0,A12,b2,1.0,b1)
 
    Gridap.Arrays.evaluate!(cache2,k.reblock,interior_brs,boundary_brs,b1,b2)
 end
