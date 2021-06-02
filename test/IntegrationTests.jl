@@ -126,9 +126,6 @@ cvec=data_vΩ
 
 k=StaticCondensationMap([1,2],[3])
 cmat_cvec_condensed=lazy_map(k,cmat,cvec)
-cmat_condensed=lazy_map(x->x[1],cmat_cvec_condensed)
-cvec_condensed=lazy_map(x->x[2],cmat_cvec_condensed)
-
 
 fdofsn=lazy_map(Gridap.Arrays.Reindex(get_cell_dof_ids(M)),
                                       get_cell_to_bgcell(dΓ.quad.trian.face_trian))
