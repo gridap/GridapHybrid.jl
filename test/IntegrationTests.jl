@@ -133,6 +133,7 @@ cvec_condensed=lazy_map(x->x[2],cmat_cvec_condensed)
 fdofsn=lazy_map(Gridap.Arrays.Reindex(get_cell_dof_ids(M)),
                                       get_cell_to_bgcell(dΓ.quad.trian.face_trian))
 fdofscb=restrict_facet_dof_ids_to_cell_boundary(∂T,get_cell_dof_ids(M))
+assem = SparseMatrixAssembler(M,L)
 A,b=assemble_matrix_and_vector(assem,(([cmat_cvec_condensed], [fdofscb], [fdofscb]),
                                       ([],[],[]),
                                       ([data_vΓ],[fdofsn])))
