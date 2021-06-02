@@ -103,6 +103,21 @@ function _build_matblk(a::Gridap.Fields.MatrixBlock{<:Matrix{T}},
   Gridap.Fields.ArrayBlock(array,touched)
 end
 
+
+function _set_matblk!(a::Gridap.Fields.MatrixBlock{<:Matrix{T}},
+                      b::Gridap.Fields.MatrixBlock{<:Matrix{T}},
+                      rf::AbstractVector{<:Integer},
+                      cf::AbstractVector{<:Integer}) where {T}
+  for (J,BJ) in enumerate(cf)
+    for (I,BI) in enumerate(rf)
+      Gridap.Helpers.@check a.touched[I,J] == b.touched[BI,BJ]
+      if (b.touched[BI,BJ])
+        a.array[I,J]=b.array[BI,BJ]
+      end
+    end
+  end
+end
+
 function _build_vecblk(a::Gridap.Fields.VectorBlock{<:Vector{T}},
                        F::AbstractVector{<:Integer}) where {T}
   s = length(F)
@@ -118,25 +133,41 @@ function _build_vecblk(a::Gridap.Fields.VectorBlock{<:Vector{T}},
   Gridap.Fields.ArrayBlock(array,touched)
 end
 
+function _set_vecblk!(a::Gridap.Fields.VectorBlock{<:Vector{T}},
+                      b::Gridap.Fields.VectorBlock{<:Vector{T}},
+                      F::AbstractVector{<:Integer}) where {T}
+  for (I,BI) in enumerate(F)
+    Gridap.Helpers.@check a.touched[I] == b.touched[BI]
+    if (a.touched[I])
+      a.array[I]=b.array[BI]
+    end
+  end
+end
 
 function Gridap.Arrays.evaluate!(cache,
   k::StaticCondensationMap{IFT,BFT},
   A::Gridap.Fields.MatrixBlock{<:Matrix{T}},
   b::Gridap.Fields.VectorBlock{<:Vector{T}}) where {IFT<:AbstractVector{<:Integer}, BFT <: AbstractVector{<:Integer}, T}
 
-   k,interior_brs,boundary_brs,A11t,A21t,A12t,A22t,b1t,b2t=cache
+   kdensify,interior_brs,boundary_brs,A11t,A21t,A12t,A22t,b1t,b2t=cache
    A11_matblk,A11_cache=A11t
+   _set_matblk!(A11_matblk,A,k.interior_fields,k.interior_fields)
    A21_matblk,A21_cache=A21t
+   _set_matblk!(A21_matblk,A,k.boundary_fields,k.interior_fields)
    A12_matblk,A12_cache=A12t
+   _set_matblk!(A12_matblk,A,k.interior_fields,k.boundary_fields)
    A22_matblk,A22_cache=A22t
+   _set_matblk!(A22_matblk,A,k.boundary_fields,k.boundary_fields)
    b1_vecblk,b1_cache=b1t
    b2_vecblk,b2_cache=b2t
-   A11=Gridap.Arrays.evaluate!(A11_cache,k,interior_brs,interior_brs,A11_matblk)
-   A21=Gridap.Arrays.evaluate!(A21_cache,k,boundary_brs,interior_brs,A21_matblk)
-   A12=Gridap.Arrays.evaluate!(A12_cache,k,interior_brs,boundary_brs,A12_matblk)
-   A22=Gridap.Arrays.evaluate!(A22_cache,k,boundary_brs,interior_brs,A22_matblk)
-   b1=Gridap.Arrays.evaluate!(b1_cache,k,interior_brs,b1_vecblk)
-   b2=Gridap.Arrays.evaluate!(b2_cache,k,boundary_brs,b2_vecblk)
+   _set_vecblk!(b1_vecblk,b,k.interior_fields)
+   _set_vecblk!(b2_vecblk,b,k.boundary_fields)
+   A11=Gridap.Arrays.evaluate!(A11_cache,kdensify,interior_brs,interior_brs,A11_matblk)
+   A21=Gridap.Arrays.evaluate!(A21_cache,kdensify,boundary_brs,interior_brs,A21_matblk)
+   A12=Gridap.Arrays.evaluate!(A12_cache,kdensify,interior_brs,boundary_brs,A12_matblk)
+   A22=Gridap.Arrays.evaluate!(A22_cache,kdensify,boundary_brs,interior_brs,A22_matblk)
+   b1=Gridap.Arrays.evaluate!(b1_cache,kdensify,interior_brs,b1_vecblk)
+   b2=Gridap.Arrays.evaluate!(b2_cache,kdensify,boundary_brs,b2_vecblk)
 
    # TO-DO: ipiv is allocated on each call to getrf! :-(
    # A11 = L11 U11

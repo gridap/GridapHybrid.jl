@@ -70,9 +70,6 @@ function Gridap.Arrays.evaluate!(cache,
    # b1 = b1-A12*b2
    LinearAlgebra.BLAS.gemv!('N',-1.0,A12,b2,1.0,b1)
 
-   println(b1)
-   println(b2)
-
    Gridap.Arrays.evaluate!(cache2,k.reblock,interior_brs,boundary_brs,b1,b2)
 end
 

@@ -22,6 +22,35 @@ function g(x)
   Gridap.Helpers.@check false
 end
 
+
+function solve_darcy_rt_hdiv()
+  domain = (0,1,0,1)
+  partition = (1,2)
+  order = 0
+  model = CartesianDiscreteModel(domain,partition)
+  V = FESpace(model,
+              ReferenceFE(raviart_thomas,Float64,order),
+              conformity=:Hdiv,dirichlet_tags=[5,6])
+  Q = FESpace(model,ReferenceFE(lagrangian,Float64,order); conformity=:L2)
+  U = TrialFESpace(V,u)
+  P = TrialFESpace(Q)
+  Y = MultiFieldFESpace([V, Q])
+  X = MultiFieldFESpace([U, P])
+  trian = Triangulation(model)
+  degree = 2
+  dΩ = Measure(trian,degree)
+  neumanntags = [7,8]
+  btrian = BoundaryTriangulation(model,tags=neumanntags)
+  degree = 2*(order+1)
+  dΓ = Measure(btrian,degree)
+  nb = get_normal_vector(btrian)
+  a((u, p),(v, q)) = ∫( u⋅v - (∇⋅v)*p + q*(∇⋅u) )*dΩ
+  b(( v, q)) = ∫( v⋅f + q*(∇⋅u))*dΩ - ∫((v⋅nb)*p )*dΓ
+  op = AffineFEOperator(a,b,X,Y)
+  xh = solve(op)
+end
+
+
 # Geometry part
 D=2
 domain  = (0,1,0,1)
@@ -101,27 +130,22 @@ cmat_condensed=lazy_map(x->x[1],cmat_cvec_condensed)
 cvec_condensed=lazy_map(x->x[2],cmat_cvec_condensed)
 
 
-# Include Neumann term
-w = []
-r = []
-push!(w,data_vΓ)
-push!(r,lazy_map(Gridap.Arrays.Reindex(get_cell_dof_ids(M)),
-                 get_cell_to_bgcell(dΓ.quad.trian.face_trian)))
-
-# Include cell term
+fdofsn=lazy_map(Gridap.Arrays.Reindex(get_cell_dof_ids(M)),
+                                      get_cell_to_bgcell(dΓ.quad.trian.face_trian))
 fdofscb=restrict_facet_dof_ids_to_cell_boundary(∂T,get_cell_dof_ids(M))
-push!(w,cvec_condensed)
-push!(r,fdofscb)
+A,b=assemble_matrix_and_vector(assem,(([cmat_cvec_condensed], [fdofscb], [fdofscb]),
+                                      ([],[],[]),
+                                      ([data_vΓ],[fdofsn])))
 
-assem = SparseMatrixAssembler(M,L)
-b     = assemble_vector(assem,(w,r))
-A     = assemble_matrix(assem,( [cmat_condensed], [fdofscb], [fdofscb]))
 x     = A\b
-xh    = FEFunction(L,x)
+lh    = FEFunction(L,x)
 
 k=BackwardStaticCondensationMap([1,2],[3])
-xhₖ= lazy_map(Gridap.Fields.Broadcasting(Gridap.Fields.PosNegReindex(
-                      Gridap.FESpaces.get_free_dof_values(xh),xh.dirichlet_values)),
+lhₖ= lazy_map(Gridap.Fields.Broadcasting(Gridap.Fields.PosNegReindex(
+                      Gridap.FESpaces.get_free_dof_values(lh),lh.dirichlet_values)),
                       fdofscb)
-x1x2=lazy_map(k,cmat,cvec,xhₖ)
+uhphlhₖ=lazy_map(k,cmat,cvec,lhₖ)
 end
+
+
+end # module
