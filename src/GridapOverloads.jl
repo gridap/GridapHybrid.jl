@@ -1,4 +1,13 @@
 
+##
+
+function Gridap.FESpaces.get_cell_shapefuns(model::DiscreteModel,
+                       cell_reffe::AbstractArray{<:Gridap.ReferenceFEs.GenericRefFE{Gridap.ReferenceFEs.RaviartThomas}},
+                       ::Gridap.ReferenceFEs.L2Conformity)
+    Gridap.FESpaces.get_cell_shapefuns(model,cell_reffe,Gridap.ReferenceFEs.DivConformity())
+end
+
+
 ## Arrays
 
 # TO-THINK: is this reasonable from an efficiency point of view?

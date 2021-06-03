@@ -1,5 +1,5 @@
 module ExploringGridapHybridization
-using Base: _Set
+using Base: _Set, ArithmeticRounds
 using Gridap
 using FillArrays
 using LinearAlgebra

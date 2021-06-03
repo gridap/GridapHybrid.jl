@@ -108,6 +108,7 @@ data_vΓ=Gridap.CellData.get_contribution(dcvΓ,dΓ.quad.trian)
 ∂T     = CellBoundary(model)
 x,w    = quadrature_evaluation_points_and_weights(∂T,2)
 
+
 #∫( mh*(uh⋅n) )*dK
 uh_∂T = restrict_to_cell_boundary(∂T,uh)
 mh_∂T = restrict_to_cell_boundary(∂T,mh)
@@ -123,6 +124,14 @@ cmat=lazy_map(Broadcasting(+),
               mh_mult_uh_cdot_n)
 
 cvec=data_vΩ
+
+# cell=2
+# A11=vcat(hcat(cmat[cell][1,1],cmat[cell][1,2]),hcat(cmat[cell][2,1],0.0))
+# A12=vcat(cmat[cell][1,3],zeros(1,4))
+# A21=hcat(cmat[cell][3,1],zeros(4))
+# S22=-A21*inv(A11)*A12
+# b1=vcat(cvec[cell][1],cvec[cell][2])
+# y2=-A21*inv(A11)*b1
 
 k=StaticCondensationMap([1,2],[3])
 cmat_cvec_condensed=lazy_map(k,cmat,cvec)
@@ -143,7 +152,32 @@ lhₖ= lazy_map(Gridap.Fields.Broadcasting(Gridap.Fields.PosNegReindex(
                       Gridap.FESpaces.get_free_dof_values(lh),lh.dirichlet_values)),
                       fdofscb)
 uhphlhₖ=lazy_map(k,cmat,cvec,lhₖ)
-end
+
+
+lhₑ=lazy_map(Gridap.Fields.BlockMap(3,3),ExploringGridapHybridization.convert_cell_wise_dofs_array_to_facet_dofs_array(∂T,
+      lhₖ,get_cell_dof_ids(M)))
+
+assem = SparseMatrixAssembler(Y,X)
+lhₑ_dofs=get_cell_dof_ids(X,Triangulation(model_Γ))
+
+uhph_dofs=get_cell_dof_ids(X,Triangulation(model))
+uhph_dofs = lazy_map(Gridap.Fields.BlockMap(2,[1,2]),uhph_dofs.args[1],uhph_dofs.args[2])
+
+uh=lazy_map(x->x[1],uhphlhₖ)
+ph=lazy_map(x->x[2],uhphlhₖ)
+uhphₖ=lazy_map(Gridap.Fields.BlockMap(2,[1,2]),uh,ph)
+
+free_dof_values=assemble_vector(assem,([lhₑ,uhphₖ],[lhₑ_dofs,uhph_dofs]))
+xh=FEFunction(X,free_dof_values)
+
+# cell=1
+# A11=vcat(hcat(cmat[cell][1,1],cmat[cell][1,2]),hcat(cmat[cell][2,1],0.0))
+# A12=vcat(cmat[cell][1,3],zeros(1,4))
+# A21=hcat(cmat[cell][3,1],zeros(4))
+# b1=vcat(cvec[cell][1],cvec[cell][2])
+# x2=lhₖ[cell]
+# x1=inv(A11)*(b1-A12*x2)
+
 
 
 end # module

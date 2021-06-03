@@ -229,6 +229,13 @@ function _get_cell_wise_facets(cb::CellBoundary)
   Gridap.Geometry.get_faces(gtopo, D, D-1)
 end
 
+function _get_cells_around_facets(cb::CellBoundary)
+  model = cb.model
+  gtopo = get_grid_topology(model)
+  D     = num_cell_dims(model)
+  Gridap.Geometry.get_faces(gtopo, D-1, D)
+end
+
 function _get_signed_cell_wise_facets(cb::CellBoundary)
   lazy_map(Broadcasting((y,x)-> y ? -x : x),
                         cb.sign_flip,
@@ -399,4 +406,65 @@ function restrict_facet_dof_ids_to_cell_boundary(cb::CellBoundary,facet_dof_ids)
 
   lazy_map(first,lazy_map(Gridap.Fields.Broadcasting(vcat),
            facet_dof_ids_restricted_to_lfacet_cell_wise...))
+end
+
+
+function _generate_glue_among_facet_and_cell_wise_dofs_arrays(cb::CellBoundary,facet_dof_ids)
+  cells_around_facets=_get_cells_around_facets(cb)
+  c1=array_cache(cells_around_facets)
+  cell_wise_facets=_get_cell_wise_facets(cb)
+  c2=array_cache(cell_wise_facets)
+  c3=array_cache(facet_dof_ids)
+
+  result=Vector{NTuple{3,Int}}(undef,length(facet_dof_ids))
+  current=1
+  ndofs=0
+  for facet_gid=1:length(cells_around_facets)
+    cell_gid=Gridap.Arrays.getindex!(c1,cells_around_facets,facet_gid)[1]
+    current_cell_facets=Gridap.Arrays.getindex!(c2,cell_wise_facets,cell_gid)
+    pos=1
+    for facet_gid_in_cell in current_cell_facets
+      ndofs=length(Gridap.Arrays.getindex!(c3,facet_dof_ids,facet_gid_in_cell))
+      if (facet_gid == facet_gid_in_cell)
+        break
+      else
+        pos=pos+ndofs
+      end
+    end
+    result[facet_gid]=(cell_gid,pos,ndofs)
+  end
+  result
+end
+
+struct ExtractFacetDofsFromCellDofs{T<:AbstractVector{<:AbstractVector}} <: Gridap.Fields.Map
+   cell_dofs::T
+end
+
+function Gridap.Arrays.return_cache(k::ExtractFacetDofsFromCellDofs,
+                                    cellgid_facetlpos_ndofs::NTuple{3})
+  cell_dofs_cache  = Gridap.Arrays.array_cache(k.cell_dofs)
+  T=eltype(eltype(k.cell_dofs))
+  facet_dofs_cache = Gridap.Arrays.CachedArray(zeros(T,cellgid_facetlpos_ndofs[3]))
+  cell_dofs_cache, facet_dofs_cache
+end
+
+function Gridap.Arrays.evaluate!(cache,
+                                 k::ExtractFacetDofsFromCellDofs,
+                                 cellgid_facetlpos_ndofs::NTuple{3})
+  cell_dofs_cache, facet_dofs_cache = cache
+  cellgid,facetlpos,ndofs=cellgid_facetlpos_ndofs
+  Gridap.Arrays.setsize!(facet_dofs_cache,(ndofs,))
+  facet_dofs  = facet_dofs_cache.array
+  cell_dofs   = Gridap.Arrays.getindex!(cell_dofs_cache,k.cell_dofs,cellgid)
+  facet_dofs .= cell_dofs[facetlpos:facetlpos+ndofs-1]
+end
+
+
+function convert_cell_wise_dofs_array_to_facet_dofs_array(
+       cb::CellBoundary,
+       cell_dofs_array::AbstractVector{<:AbstractVector},
+       facet_dof_ids)
+  glue = _generate_glue_among_facet_and_cell_wise_dofs_arrays(cb,facet_dof_ids)
+  k=ExtractFacetDofsFromCellDofs(cell_dofs_array)
+  lazy_map(k,glue)
 end
