@@ -110,18 +110,18 @@ x,w    = quadrature_evaluation_points_and_weights(∂T,2)
 
 
 #∫( mh*(uh⋅n) )*dK
-uh_∂T = restrict_to_cell_boundary(∂T,uh)
-mh_∂T = restrict_to_cell_boundary(∂T,mh)
-mh_mult_uh_cdot_n=integrate_mh_mult_uh_cdot_n_low_level(∂T,mh_∂T,uh_∂T,x,w)
+@time uh_∂T = restrict_to_cell_boundary(∂T,uh)
+@time mh_∂T = restrict_to_cell_boundary(∂T,mh)
+@time mh_mult_uh_cdot_n=integrate_mh_mult_uh_cdot_n_low_level(∂T,mh_∂T,uh_∂T,x,w)
 
 #∫( (vh⋅n)*lh )*dK
-vh_∂T = restrict_to_cell_boundary(∂T,vh)
-lh_∂T = restrict_to_cell_boundary(∂T,lh)
-vh_cdot_n_mult_lh=integrate_vh_cdot_n_mult_lh_low_level(∂T,vh_∂T,lh_∂T,x,w)
+@time vh_∂T = restrict_to_cell_boundary(∂T,vh)
+@time lh_∂T = restrict_to_cell_boundary(∂T,lh)
+@time vh_cdot_n_mult_lh=integrate_vh_cdot_n_mult_lh_low_level(∂T,vh_∂T,lh_∂T,x,w)
 
 cmat=lazy_map(Broadcasting(+),
-              lazy_map(Broadcasting(-),data_mΩ,vh_cdot_n_mult_lh),
-              mh_mult_uh_cdot_n)
+              lazy_map(Broadcasting(-),vh_cdot_n_mult_lh,mh_mult_uh_cdot_n),
+              data_mΩ)
 
 cvec=data_vΩ
 
@@ -140,7 +140,7 @@ fdofsn=lazy_map(Gridap.Arrays.Reindex(get_cell_dof_ids(M)),
                                       get_cell_to_bgcell(dΓ.quad.trian.face_trian))
 fdofscb=restrict_facet_dof_ids_to_cell_boundary(∂T,get_cell_dof_ids(M))
 assem = SparseMatrixAssembler(M,L)
-A,b=assemble_matrix_and_vector(assem,(([cmat_cvec_condensed], [fdofscb], [fdofscb]),
+@time A,b=assemble_matrix_and_vector(assem,(([cmat_cvec_condensed], [fdofscb], [fdofscb]),
                                       ([],[],[]),
                                       ([data_vΓ],[fdofsn])))
 

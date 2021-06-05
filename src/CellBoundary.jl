@@ -309,30 +309,11 @@ end
 
 # This function will eventually play the role of its counterpart in Gridap
 # function integrate(f::CellField,quad::CellQuadrature)
-# TO-THINK: vh,uh currently as LazyArray{...}
+# TO-THINK: mh,uh currently as LazyArray{...}
 #    Not sure if we are loosing generality by constraining a to be of type
 #    LazyArray{...}. I need to restrict the cell-wise block array to each
 #    individual block, and with a LazyArray{...} this is very efficient as
 #    the array is already restricted to each block in the a.args member variable.
-function integrate_vh_mult_uh_low_level(
-     cb::CellBoundary,
-     vh::Gridap.Arrays.LazyArray{<:Fill{<:Gridap.Fields.BlockMap}},
-     uh::Gridap.Arrays.LazyArray{<:Fill{<:Gridap.Fields.BlockMap}},
-     x::AbstractArray{<:Gridap.Fields.ArrayBlock{<:AbstractArray{<:Point}}},
-     w::AbstractArray{<:Gridap.Fields.ArrayBlock{<:AbstractVector}})
-  vhx=lazy_map(evaluate,vh,x)
-  uhx=lazy_map(evaluate,uh,x)
-  vhx_mult_uhx=lazy_map(Gridap.Fields.BroadcastingFieldOpMap(*), vhx, uhx)
-  j=lazy_map(∇,get_cell_map(cb))
-  jx=lazy_map(evaluate,j,x)
-
-  args = [ lazy_map(Gridap.Fields.IntegrationMap(),
-                    _restrict_cell_array_block_to_block(vhx_mult_uhx,pos),
-                    _restrict_cell_array_block_to_block(w,pos),
-                    jx.args[pos]) for pos=1:length(vhx.args) ]
-  # TO-DO: investigate why Broadcasting(+) fails here
-  lazy_map(DensifyInnerMostBlockLevelMap(),lazy_map(+,args...))
-end
 
 #∫( mh*(uh⋅n) )*dK
 function integrate_mh_mult_uh_cdot_n_low_level(cb::CellBoundary,
@@ -352,16 +333,18 @@ function integrate_mh_mult_uh_cdot_n_low_level(cb::CellBoundary,
   mhx=lazy_map(evaluate,mh,x)
   mhx_mult_uhx_cdot_nx = lazy_map(Gridap.Fields.BroadcastingFieldOpMap(*), mhx, uhx_cdot_nx )
 
-
   j=lazy_map(∇,get_cell_map(cb))
   jx=lazy_map(evaluate,j,x)
 
-  args = [ lazy_map(Gridap.Fields.IntegrationMap(),
-                    _restrict_cell_array_block_to_block(mhx_mult_uhx_cdot_nx,pos),
-                    _restrict_cell_array_block_to_block(w,pos),
-                    jx.args[pos]) for pos=1:length(uhx.args) ]
-  # TO-DO: investigate why Broadcasting(+) fails here
-  lazy_map(DensifyInnerMostBlockLevelMap(),lazy_map(+,args...))
+  sum_facets=lazy_map(Broadcasting(+),
+                      _set_up_integrate_block(mhx_mult_uhx_cdot_nx,w,jx,1),
+                      _set_up_integrate_block(mhx_mult_uhx_cdot_nx,w,jx,2))
+
+  for i=3:length(uhx.args)
+    sum_facets = lazy_map(Broadcasting(+),sum_facets,
+                  _set_up_integrate_block(mhx_mult_uhx_cdot_nx,w,jx,i))
+  end
+  lazy_map(DensifyInnerMostBlockLevelMap(),sum_facets)
 end
 
 
@@ -387,12 +370,22 @@ function integrate_vh_cdot_n_mult_lh_low_level(
   j=lazy_map(∇,get_cell_map(cb))
   jx=lazy_map(evaluate,j,x)
 
-  args = [ lazy_map(Gridap.Fields.IntegrationMap(),
-                    _restrict_cell_array_block_to_block(vhx_cdot_nx_mult_lhx,pos),
-                    _restrict_cell_array_block_to_block(w,pos),
-                    jx.args[pos]) for pos=1:length(vhx.args) ]
-  # TO-DO: investigate why Broadcasting(+) fails here
-  lazy_map(DensifyInnerMostBlockLevelMap(),lazy_map(+,args...))
+  sum_facets=lazy_map(Broadcasting(+),
+           _set_up_integrate_block(vhx_cdot_nx_mult_lhx,w,jx,1),
+           _set_up_integrate_block(vhx_cdot_nx_mult_lhx,w,jx,2))
+
+  for i=3:length(vhx.args)
+     sum_facets = lazy_map(Broadcasting(+),sum_facets,
+                           _set_up_integrate_block(vhx_cdot_nx_mult_lhx,w,jx,i))
+  end
+  lazy_map(DensifyInnerMostBlockLevelMap(),sum_facets)
+end
+
+function _set_up_integrate_block(intq,w,jq,block)
+  lazy_map(Gridap.Fields.IntegrationMap(),
+           _restrict_cell_array_block_to_block(intq,block),
+           _restrict_cell_array_block_to_block(w,block),
+           _restrict_cell_array_block_to_block(jq,block))
 end
 
 function restrict_facet_dof_ids_to_cell_boundary(cb::CellBoundary,facet_dof_ids)
