@@ -120,7 +120,7 @@ x,w    = quadrature_evaluation_points_and_weights(∂T,2)
 @time vh_cdot_n_mult_lh=integrate_vh_cdot_n_mult_lh_low_level(∂T,vh_∂T,lh_∂T,x,w)
 
 cmat=lazy_map(Broadcasting(+),
-              lazy_map(Broadcasting(-),vh_cdot_n_mult_lh,mh_mult_uh_cdot_n),
+              lazy_map(Broadcasting(+),vh_cdot_n_mult_lh,mh_mult_uh_cdot_n),
               data_mΩ)
 
 cvec=data_vΩ
