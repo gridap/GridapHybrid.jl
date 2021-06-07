@@ -5,19 +5,19 @@ using FillArrays
 using Gridap.Geometry
 using ExploringGridapHybridization
 
-u(x) = VectorValue(2*x[1],x[1]+x[2])
-Gridap.divergence(::typeof(u)) = (x) -> 3
-p(x) = x[1]-x[2]
-∇p(x) = VectorValue(1,-1)
+u(x) = VectorValue(1+x[1],1+x[2])
+Gridap.divergence(::typeof(u)) = (x) -> 2
+p(x) = -3.14
+∇p(x) = VectorValue(0,0)
 Gridap.∇(::typeof(p)) = ∇p
 f(x) = u(x) + ∇p(x)
 # Normal component of u(x) on Neumann boundary
 function g(x)
   tol=1.0e-14
   if (abs(x[2])<tol)
-    return -x[1]-x[2]
+    return -x[2] #-x[1]-x[2]
   elseif (abs(x[2]-1.0)<tol)
-    return x[1]+x[2]
+    return x[2] # x[1]+x[2]
   end
   Gridap.Helpers.@check false
 end
@@ -25,28 +25,29 @@ end
 
 function solve_darcy_rt_hdiv()
   domain = (0,1,0,1)
-  partition = (1,2)
+  partition = (1,1)
   order = 0
   model = CartesianDiscreteModel(domain,partition)
   V = FESpace(model,
               ReferenceFE(raviart_thomas,Float64,order),
-              conformity=:Hdiv,dirichlet_tags=[5,6])
+              conformity=:Hdiv)#,dirichlet_tags=[5,6,7,8])
   Q = FESpace(model,ReferenceFE(lagrangian,Float64,order); conformity=:L2)
   U = TrialFESpace(V,u)
   P = TrialFESpace(Q)
   Y = MultiFieldFESpace([V, Q])
   X = MultiFieldFESpace([U, P])
   trian = Triangulation(model)
-  degree = 2
-  dΩ = Measure(trian,degree)
-  neumanntags = [7,8]
-  btrian = BoundaryTriangulation(model,tags=neumanntags)
   degree = 2*(order+1)
+  dΩ = Measure(trian,degree)
+  neumanntags = [5,6,7,8]
+  btrian = BoundaryTriangulation(model,tags=neumanntags)
   dΓ = Measure(btrian,degree)
   nb = get_normal_vector(btrian)
   a((u, p),(v, q)) = ∫( u⋅v - (∇⋅v)*p + q*(∇⋅u) )*dΩ
   b(( v, q)) = ∫( v⋅f + q*(∇⋅u))*dΩ - ∫((v⋅nb)*p )*dΓ
   op = AffineFEOperator(a,b,X,Y)
+  println(op.op.matrix)
+  println(op.op.vector)
   xh = solve(op)
 end
 
@@ -54,7 +55,7 @@ end
 # Geometry part
 D=2
 domain  = (0,1,0,1)
-cells   = (1,2)
+cells   = (1,1)
 model   = CartesianDiscreteModel(domain,cells)
 model_Γ = BoundaryDiscreteModel(Polytope{D-1},model,collect(1:num_facets(model)))
 
@@ -69,13 +70,13 @@ reffeₗ = ReferenceFE(lagrangian,Float64,order)
 # Define test FESpaces
 V = TestFESpace(model  , reffeᵤ; conformity=:L2)
 Q = TestFESpace(model  , reffeₚ; conformity=:L2)
-M = TestFESpace(model_Γ, reffeₗ; conformity=:L2, dirichlet_tags=[7,8])
+M = TestFESpace(model_Γ, reffeₗ; conformity=:L2)
 Y = MultiFieldFESpace([V,Q,M])
 
 # Create trial spaces
 U = TrialFESpace(V)
 P = TrialFESpace(Q)
-L = TrialFESpace(M,p)
+L = TrialFESpace(M)
 X = MultiFieldFESpace([U, P, L])
 
 yh = get_fe_basis(Y)
@@ -85,25 +86,34 @@ xh = get_trial_fe_basis(X)
 uh,ph,lh = xh
 
 mhscal=get_fe_basis(M)
+lhscal=get_fe_basis(L)
 
 trian = Triangulation(model)
 degree = 2*(order+1)
 dΩ = Measure(trian,degree)
 
-neumanntags  = [5,6]
-# TO-DO: neumanntrian = Triangulation(model_Γ,tags=neumanntags) this causes
-# dcvΓ=∫(mh*g)*dΓ to fail in change_domain ...
-neumanntrian = BoundaryTriangulation(model,tags=neumanntags)
-degree = 2*(order+1)
-dΓ = Measure(neumanntrian,degree)
+# neumanntags  = [5,6]
+# # TO-DO: neumanntrian = Triangulation(model_Γ,tags=neumanntags) this causes
+# # dcvΓ=∫(mh*g)*dΓ to fail in change_domain ...
+# neumanntrian = BoundaryTriangulation(model,tags=neumanntags)
+# degree = 2*(order+1)
+# dΓn = Measure(neumanntrian,degree)
+
+dirichlettags  = [5,6,7,8]
+dirichlettrian = BoundaryTriangulation(model,tags=dirichlettags)
+dΓd = Measure(dirichlettrian,degree)
 
 dcmΩ=∫( vh⋅uh - (∇⋅vh)*ph + qh*(∇⋅uh) )*dΩ
+dvmΓd=∫(mhscal*lhscal)*dΓd
 dcvΩ=∫( vh⋅f + qh*(∇⋅u))*dΩ
-dcvΓ=∫(mhscal*g)*dΓ
+#dcvΓn=∫(mhscal*g)*dΓn
+dcvΓd=∫(mhscal*p)*dΓd
 
 data_mΩ=Gridap.CellData.get_contribution(dcmΩ,dΩ.quad.trian)
+data_mΓd=Gridap.CellData.get_contribution(dvmΓd,dΓd.quad.trian)
 data_vΩ=Gridap.CellData.get_contribution(dcvΩ,dΩ.quad.trian)
-data_vΓ=Gridap.CellData.get_contribution(dcvΓ,dΓ.quad.trian)
+#data_vΓn=Gridap.CellData.get_contribution(dcvΓn,dΓn.quad.trian)
+data_vΓd=Gridap.CellData.get_contribution(dcvΓd,dΓd.quad.trian)
 
 ∂T     = CellBoundary(model)
 x,w    = quadrature_evaluation_points_and_weights(∂T,2)
@@ -136,14 +146,17 @@ cvec=data_vΩ
 k=StaticCondensationMap([1,2],[3])
 cmat_cvec_condensed=lazy_map(k,cmat,cvec)
 
-fdofsn=lazy_map(Gridap.Arrays.Reindex(get_cell_dof_ids(M)),
-                                      get_cell_to_bgcell(dΓ.quad.trian.face_trian))
+#fdofsn=get_cell_dof_ids(M,neumanntrian)
+fdofsd=get_cell_dof_ids(M,dirichlettrian)
+
 fdofscb=restrict_facet_dof_ids_to_cell_boundary(∂T,get_cell_dof_ids(M))
 assem = SparseMatrixAssembler(M,L)
+#@time A,b=assemble_matrix_and_vector(assem,(([cmat_cvec_condensed], [fdofscb], [fdofscb]),
+#                                      ([data_mΓd],[fdofsd],[fdofsd]),
+#                                      ([data_vΓn,data_vΓd],[fdofsn,fdofsd])))
 @time A,b=assemble_matrix_and_vector(assem,(([cmat_cvec_condensed], [fdofscb], [fdofscb]),
-                                      ([],[],[]),
-                                      ([data_vΓ],[fdofsn])))
-
+                                      ([data_mΓd],[fdofsd],[fdofsd]),
+                                      ([data_vΓd],[fdofsd])))
 x     = A\b
 lh    = FEFunction(L,x)
 
@@ -153,6 +166,24 @@ lhₖ= lazy_map(Gridap.Fields.Broadcasting(Gridap.Fields.PosNegReindex(
                       fdofscb)
 uhphlhₖ=lazy_map(k,cmat,cvec,lhₖ)
 
+tol=1.0e-12
+
+cell=1
+A11=vcat(hcat(cmat[cell][1,1],cmat[cell][1,2]),hcat(cmat[cell][2,1],0.0))
+A12=vcat(cmat[cell][1,3],zeros(1,4))
+A21=hcat(cmat[cell][3,1],zeros(4))
+Am=vcat(hcat(A11,A12),hcat(A21,zeros(4,4)))
+Am[6,6]=1.0
+Am[7,7]=1.0
+Am[8,8]=1.0
+Am[9,9]=1.0
+
+Sm=Am[6:9,6:9]-Am[6:9,1:5]*inv(Am[1:5,1:5])*Am[1:5,6:9]
+ym=vcat(data_vΓd...)-A21*inv(Am[1:5,1:5])*vcat(cvec[1][1],cvec[1][2])
+xm=Sm\ym
+@assert norm(xm-x) < tol
+bm=vcat(cvec[1][1],cvec[1][2],data_vΓd...)
+Am\bm
 
 lhₑ=lazy_map(Gridap.Fields.BlockMap(3,3),ExploringGridapHybridization.convert_cell_wise_dofs_array_to_facet_dofs_array(∂T,
       lhₖ,get_cell_dof_ids(M)))
