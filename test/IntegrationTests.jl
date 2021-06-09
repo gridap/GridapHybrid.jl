@@ -25,7 +25,7 @@ end
 
 function solve_darcy_rt_hdiv()
   domain = (0,1,0,1)
-  partition = (1,1)
+  partition = (1,2)
   order = 0
   model = CartesianDiscreteModel(domain,partition)
   V = FESpace(model,
@@ -55,7 +55,7 @@ end
 # Geometry part
 D=2
 domain  = (0,1,0,1)
-cells   = (1,1)
+cells   = (1,2)
 model   = CartesianDiscreteModel(domain,cells)
 model_Γ = BoundaryDiscreteModel(Polytope{D-1},model,collect(1:num_facets(model)))
 
@@ -67,16 +67,56 @@ reffeᵤ = ReferenceFE(raviart_thomas,Float64,order)
 reffeₚ = ReferenceFE(lagrangian,Float64,order)
 reffeₗ = ReferenceFE(lagrangian,Float64,order)
 
+# Compute the Dof values of Dirichlet DoFs (L2 projection)
+M = TestFESpace(model_Γ, reffeₗ; conformity=:L2, dirichlet_tags=[9])
+L = TrialFESpace(M)
+dirichlettags=[5,6,7,8]
+dirichlettrian=BoundaryTriangulation(model,tags=dirichlettags)
+degree = 2*(order+1)
+dΓd = Measure(dirichlettrian,degree)
+mh = get_fe_basis(M)
+lh = get_fe_basis(L)
+mass=∫(mh*lh)*dΓd
+rhs=∫(mh*p)*dΓd
+fdofsd=get_cell_dof_ids(M,dirichlettrian)
+data_a=Gridap.CellData.get_contribution(mass,dirichlettrian)
+data_b=Gridap.CellData.get_contribution(rhs,dirichlettrian)
+assem=SparseMatrixAssembler(M,L)
+A,b=assemble_matrix_and_vector(assem,(([],[],[]),
+                                      ([data_a],[fdofsd],[fdofsd]),
+                                      ([data_b],[fdofsd])))
+dirichlet_dofs=A\b
+
+M = TestFESpace(model_Γ, reffeₗ; conformity=:L2,dirichlet_tags=[5,6,7,8])
+fdofsd_new=get_cell_dof_ids(M,dirichlettrian)
+L = TrialFESpace(dirichlet_dofs[-vcat(fdofsd_new...)],M)
+
+# TO-DO: DIRTY (approach abandoned temporarily)
+# Begin compute DoF values Dirichlet via moment evaluation
+# (As far as I understand, only works for piece-wise constant functions on the facets,
+#  for higher degrees we need change of basis, or L2 projection)
+# dcvΓd_num=∫(mhscal*p)*dΓd
+# dcvΓd_den=∫(x->1.0)*dΓd
+# data_vΓd_num=Gridap.CellData.get_contribution(dcvΓd_num,dΓd.quad.trian)
+# data_vΓd_den=Gridap.CellData.get_contribution(dcvΓd_den,dΓd.quad.trian)
+# data_vΓd_num_den=lazy_map(Broadcasting(/),data_vΓd_num,data_vΓd_den)
+# dc = Gridap.CellData.DomainContribution()
+# Gridap.CellData.add_contribution!(dc, dirichlettrian, data_vΓd_num_den)
+# data = Gridap.FESpaces.collect_cell_vector(M,dc)
+# data[2] .= -data[2]
+# assem = SparseMatrixAssembler(M,L)
+# dirichlet_dof_values = zeros(num_dirichlet_dofs(M))
+# Gridap.FESpaces.assemble_vector!(dirichlet_dof_values,assem,data)
+# L=TrialFESpace(dirichlet_dof_values,M)
+
 # Define test FESpaces
 V = TestFESpace(model  , reffeᵤ; conformity=:L2)
 Q = TestFESpace(model  , reffeₚ; conformity=:L2)
-M = TestFESpace(model_Γ, reffeₗ; conformity=:L2)
 Y = MultiFieldFESpace([V,Q,M])
 
 # Create trial spaces
 U = TrialFESpace(V)
 P = TrialFESpace(Q)
-L = TrialFESpace(M)
 X = MultiFieldFESpace([U, P, L])
 
 yh = get_fe_basis(Y)
@@ -84,9 +124,6 @@ vh,qh,mh = yh
 
 xh = get_trial_fe_basis(X)
 uh,ph,lh = xh
-
-mhscal=get_fe_basis(M)
-lhscal=get_fe_basis(L)
 
 trian = Triangulation(model)
 degree = 2*(order+1)
@@ -99,25 +136,13 @@ dΩ = Measure(trian,degree)
 # degree = 2*(order+1)
 # dΓn = Measure(neumanntrian,degree)
 
-dirichlettags  = [5,6,7,8]
-dirichlettrian = BoundaryTriangulation(model,tags=dirichlettags)
-dΓd = Measure(dirichlettrian,degree)
-
 dcmΩ=∫( vh⋅uh - (∇⋅vh)*ph + qh*(∇⋅uh) )*dΩ
-dvmΓd=∫(mhscal*lhscal)*dΓd
 dcvΩ=∫( vh⋅f + qh*(∇⋅u))*dΩ
-#dcvΓn=∫(mhscal*g)*dΓn
-dcvΓd=∫(mhscal*p)*dΓd
-
 data_mΩ=Gridap.CellData.get_contribution(dcmΩ,dΩ.quad.trian)
-data_mΓd=Gridap.CellData.get_contribution(dvmΓd,dΓd.quad.trian)
 data_vΩ=Gridap.CellData.get_contribution(dcvΩ,dΩ.quad.trian)
-#data_vΓn=Gridap.CellData.get_contribution(dcvΓn,dΓn.quad.trian)
-data_vΓd=Gridap.CellData.get_contribution(dcvΓd,dΓd.quad.trian)
 
 ∂T     = CellBoundary(model)
 x,w    = quadrature_evaluation_points_and_weights(∂T,2)
-
 
 #∫( mh*(uh⋅n) )*dK
 @time uh_∂T = restrict_to_cell_boundary(∂T,uh)
@@ -135,7 +160,7 @@ cmat=lazy_map(Broadcasting(+),
 
 cvec=data_vΩ
 
-# cell=2
+# cell=1
 # A11=vcat(hcat(cmat[cell][1,1],cmat[cell][1,2]),hcat(cmat[cell][2,1],0.0))
 # A12=vcat(cmat[cell][1,3],zeros(1,4))
 # A21=hcat(cmat[cell][3,1],zeros(4))
@@ -147,16 +172,19 @@ k=StaticCondensationMap([1,2],[3])
 cmat_cvec_condensed=lazy_map(k,cmat,cvec)
 
 #fdofsn=get_cell_dof_ids(M,neumanntrian)
-fdofsd=get_cell_dof_ids(M,dirichlettrian)
+#fdofsd=get_cell_dof_ids(M,dirichlettrian)
 
 fdofscb=restrict_facet_dof_ids_to_cell_boundary(∂T,get_cell_dof_ids(M))
 assem = SparseMatrixAssembler(M,L)
+@time A,b=assemble_matrix_and_vector(assem,(([cmat_cvec_condensed], [fdofscb], [fdofscb]),
+                                            ([],[],[]),
+                                            ([],[])))
 #@time A,b=assemble_matrix_and_vector(assem,(([cmat_cvec_condensed], [fdofscb], [fdofscb]),
 #                                      ([data_mΓd],[fdofsd],[fdofsd]),
 #                                      ([data_vΓn,data_vΓd],[fdofsn,fdofsd])))
-@time A,b=assemble_matrix_and_vector(assem,(([cmat_cvec_condensed], [fdofscb], [fdofscb]),
-                                      ([data_mΓd],[fdofsd],[fdofsd]),
-                                      ([data_vΓd],[fdofsd])))
+#@time A,b=assemble_matrix_and_vector(assem,(([cmat_cvec_condensed], [fdofscb], [fdofscb]),
+#                                      ([data_mΓd],[fdofsd],[fdofsd]),
+#                                      ([data_vΓd],[fdofsd])))
 x     = A\b
 lh    = FEFunction(L,x)
 
@@ -166,24 +194,23 @@ lhₖ= lazy_map(Gridap.Fields.Broadcasting(Gridap.Fields.PosNegReindex(
                       fdofscb)
 uhphlhₖ=lazy_map(k,cmat,cvec,lhₖ)
 
-tol=1.0e-12
+# tol=1.0e-12
+# cell=1
+# A11=vcat(hcat(cmat[cell][1,1],cmat[cell][1,2]),hcat(cmat[cell][2,1],0.0))
+# A12=vcat(cmat[cell][1,3],zeros(1,4))
+# A21=hcat(cmat[cell][3,1],zeros(4))
 
-cell=1
-A11=vcat(hcat(cmat[cell][1,1],cmat[cell][1,2]),hcat(cmat[cell][2,1],0.0))
-A12=vcat(cmat[cell][1,3],zeros(1,4))
-A21=hcat(cmat[cell][3,1],zeros(4))
-Am=vcat(hcat(A11,A12),hcat(A21,zeros(4,4)))
-Am[6,6]=1.0
-Am[7,7]=1.0
-Am[8,8]=1.0
-Am[9,9]=1.0
-
-Sm=Am[6:9,6:9]-Am[6:9,1:5]*inv(Am[1:5,1:5])*Am[1:5,6:9]
-ym=vcat(data_vΓd...)-A21*inv(Am[1:5,1:5])*vcat(cvec[1][1],cvec[1][2])
-xm=Sm\ym
-@assert norm(xm-x) < tol
-bm=vcat(cvec[1][1],cvec[1][2],data_vΓd...)
-Am\bm
+# Am=vcat(hcat(A11,A12),hcat(A21,zeros(4,4)))
+# Am[6,6]=1.0
+# Am[7,7]=1.0
+# Am[8,8]=1.0
+# Am[9,9]=1.0
+# Sm=Am[6:9,6:9]-Am[6:9,1:5]*inv(Am[1:5,1:5])*Am[1:5,6:9]
+# ym=vcat(data_vΓd...)-A21*inv(Am[1:5,1:5])*vcat(cvec[1][1],cvec[1][2])
+# xm=Sm\ym
+# @assert norm(xm-x) < tol
+# bm=vcat(cvec[1][1],cvec[1][2],data_vΓd...)
+# Am\bm
 
 lhₑ=lazy_map(Gridap.Fields.BlockMap(3,3),ExploringGridapHybridization.convert_cell_wise_dofs_array_to_facet_dofs_array(∂T,
       lhₖ,get_cell_dof_ids(M)))
@@ -208,7 +235,5 @@ xh=FEFunction(X,free_dof_values)
 # b1=vcat(cvec[cell][1],cvec[cell][2])
 # x2=lhₖ[cell]
 # x1=inv(A11)*(b1-A12*x2)
-
-
 
 end # module

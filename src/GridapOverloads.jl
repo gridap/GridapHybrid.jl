@@ -4,7 +4,14 @@
 function Gridap.FESpaces.get_cell_shapefuns(model::DiscreteModel,
                        cell_reffe::AbstractArray{<:Gridap.ReferenceFEs.GenericRefFE{Gridap.ReferenceFEs.RaviartThomas}},
                        ::Gridap.ReferenceFEs.L2Conformity)
-    Gridap.FESpaces.get_cell_shapefuns(model,cell_reffe,Gridap.ReferenceFEs.DivConformity())
+    sign_flip = collect(Gridap.FESpaces.get_sign_flip(model, cell_reffe))
+    for i=1:length(sign_flip)
+       sign_flip[i] .= 1.0
+    end
+    lazy_map(Gridap.FESpaces._transform_rt_shapefuns,
+             cell_reffe,
+             get_cell_map(Triangulation(model)),
+             lazy_map(Broadcasting(Gridap.Fields.constant_field), sign_flip))
 end
 
 
