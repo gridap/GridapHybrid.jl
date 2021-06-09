@@ -54,7 +54,7 @@ end
 
 # Geometry part
 D=2
-domain  = (0,1,0,1)
+domain  = (0,1,0,2)
 cells   = (1,2)
 model   = CartesianDiscreteModel(domain,cells)
 model_Γ = BoundaryDiscreteModel(Polytope{D-1},model,collect(1:num_facets(model)))
@@ -90,6 +90,9 @@ dirichlet_dofs=A\b
 M = TestFESpace(model_Γ, reffeₗ; conformity=:L2,dirichlet_tags=[5,6,7,8])
 fdofsd_new=get_cell_dof_ids(M,dirichlettrian)
 L = TrialFESpace(dirichlet_dofs[-vcat(fdofsd_new...)],M)
+#M = TestFESpace(model_Γ, reffeₗ; conformity=:L2)
+#L = TrialFESpace(M)
+
 
 # TO-DO: DIRTY (approach abandoned temporarily)
 # Begin compute DoF values Dirichlet via moment evaluation
