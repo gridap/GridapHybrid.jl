@@ -45,15 +45,17 @@ function Gridap.Arrays.evaluate!(cache,
    cache1,cache2=cache
    kdensify,interior_brs,boundary_brs,A11t,A21t,A12t,A22t,b1t,b2t=cache1
    A11_matblk,A11_cache=A11t
-   #A21_matblk,A21_cache=A21t
+   _set_matblk!(A11_matblk,
+                A,k.static_condensation.interior_fields,
+                k.static_condensation.interior_fields)
    A12_matblk,A12_cache=A12t
-   #A22_matblk,A22_cache=A22t
+   _set_matblk!(A12_matblk,A,
+                k.static_condensation.interior_fields,
+                k.static_condensation.boundary_fields)
    b1_vecblk,b1_cache=b1t
    b2_vecblk,b2_cache=b2t
    A11=Gridap.Arrays.evaluate!(A11_cache,kdensify,interior_brs,interior_brs,A11_matblk)
-   #A21=Gridap.Arrays.evaluate!(A21_cache,k,boundary_bs,interior_bs,A21_matblk)
    A12=Gridap.Arrays.evaluate!(A12_cache,kdensify,interior_brs,boundary_brs,A12_matblk)
-   #A22=Gridap.Arrays.evaluate!(A22_cache,k,boundary_bs,interior_bs,A22_matblk)
    b1=Gridap.Arrays.evaluate!(b1_cache,kdensify,interior_brs,b1_vecblk)
    b2=Gridap.Arrays.evaluate!(b2_cache,kdensify,boundary_brs,b2_vecblk)
 
