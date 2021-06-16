@@ -122,6 +122,19 @@ function restrict_to_cell_boundary(cb::CellBoundary, fe_basis::Gridap.FESpaces.F
   end
 end
 
+function restrict_to_cell_boundary(cb::CellBoundary, cell_field::Gridap.CellData.CellField)
+  model = cb.model
+  D = num_cell_dims(model)
+  trian = get_triangulation(cell_field)
+  if isa(trian,Triangulation{D-1,D})
+    # _restrict_to_cell_boundary_facet_fe_basis(cb,cell_field)
+    @assert false
+  elseif isa(trian,Triangulation{D,D})
+    _restrict_to_cell_boundary_cell_fe_basis(cb,cell_field)
+  end
+end
+
+
 function _restrict_to_cell_boundary_facet_fe_basis(cb::CellBoundary,
                                                    facet_fe_basis::Gridap.FESpaces.FEBasis)
 
@@ -160,7 +173,7 @@ function _get_block_layout(fields_array::AbstractArray{<:Gridap.Fields.ArrayBloc
 end
 
 function _restrict_to_cell_boundary_cell_fe_basis(cb::CellBoundary,
-                                                  cell_fe_basis::Gridap.FESpaces.FEBasis)
+                                                  cell_fe_basis::Union{Gridap.FESpaces.FEBasis,Gridap.CellData.CellField})
   # TO-THINK:
   #     1) How to deal with CellField objects which are NOT FEBasis objects?
   #     2) How to deal with differential operators applied to FEBasis objects?
@@ -377,6 +390,34 @@ function integrate_vh_cdot_n_mult_lh_low_level(
   end
   lazy_map(DensifyInnerMostBlockLevelMap(),sum_facets)
 end
+
+
+function integrate_xh_mult_uh_cdot_n_plus_stab_low_level(
+  cb::CellBoundary,
+  qh::Gridap.Arrays.LazyArray{<:Fill{<:Gridap.Fields.BlockMap}},
+  uh::Gridap.Arrays.LazyArray{<:Fill{<:Gridap.Fields.BlockMap}},
+  τ ::Gridap.Arrays.LazyArray{<:Fill{<:Gridap.Fields.BlockMap}},
+  ph::Gridap.Arrays.LazyArray{<:Fill{<:Gridap.Fields.BlockMap}},
+  lh::Gridap.Arrays.LazyArray{<:Fill{<:Gridap.Fields.BlockMap}},
+  x::AbstractArray{<:Gridap.Fields.ArrayBlock{<:AbstractArray{<:Point}}},
+  w::AbstractArray{<:Gridap.Fields.ArrayBlock{<:AbstractVector}})
+
+  # (n⋅no)
+  n=get_cell_normal_vector(cb)
+  no=get_cell_owner_normal_vector(cb)
+  nx=lazy_map(evaluate,n,x)
+  nox=lazy_map(evaluate,no,x)
+  nx_cdot_nox=lazy_map(Gridap.Fields.BroadcastingFieldOpMap(⋅), nx, nox)
+
+  # (ph-lh)
+  phx=lazy_map(evaluate,ph,x)
+  lhx=lazy_map(evaluate,lh,x)
+  println(phx[1])
+  #phx_minus_lhx=lazy_map(Gridap.Fields.BroadcastingFieldOpMap(-), phx, lhx)
+
+end
+
+
 
 function _set_up_integrate_block(intq,w,jq,block)
   lazy_map(Gridap.Fields.IntegrationMap(),
