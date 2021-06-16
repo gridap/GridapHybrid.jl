@@ -1,4 +1,4 @@
-struct ReblockInteriorDofs <: Gridap.Fields.Map
+struct ReblockInteriorDofsMap <: Gridap.Fields.Map
 end
 
 
@@ -8,12 +8,12 @@ struct BackwardStaticCondensationMap{IFT <: AbstractVector{<:Int},
                                      BFT <: Union{AbstractVector{<:Integer},
                                                   AbstractVector{<:AbstractVector{<:Integer}}}} <: Gridap.Fields.Map
   static_condensation::StaticCondensationMap{IFT,BFT}
-  reblock::ReblockInteriorDofs
+  reblock::ReblockInteriorDofsMap
   function BackwardStaticCondensationMap(interior_fields::AbstractVector{<:Integer},
                               boundary_fields::AbstractVector{<:Integer})
     IFT=typeof(interior_fields)
     BFT=typeof(boundary_fields)
-    new{IFT,BFT}(StaticCondensationMap(interior_fields,boundary_fields),ReblockInteriorDofs())
+    new{IFT,BFT}(StaticCondensationMap(interior_fields,boundary_fields),ReblockInteriorDofsMap())
   end
   function BackwardStaticCondensationMap(interior_fields::AbstractVector{<:Integer},
                               boundary_fields::AbstractVector{<:AbstractVector{<:Integer}})
@@ -80,7 +80,7 @@ function Gridap.Arrays.evaluate!(cache,
 end
 
 
-function Gridap.Arrays.return_cache(k::ReblockInteriorDofs,
+function Gridap.Arrays.return_cache(k::ReblockInteriorDofsMap,
                                     interior_brs::Vector{<:Integer},
                                     boundary_brs::Vector{<:Integer},
                                     vinterior::Vector{T},
@@ -100,7 +100,7 @@ function Gridap.Arrays.return_cache(k::ReblockInteriorDofs,
 end
 
 function Gridap.Arrays.evaluate!(cache,
-                                 k::ReblockInteriorDofs,
+                                 k::ReblockInteriorDofsMap,
                                  interior_brs::Vector{<:Integer},
                                  boundary_brs::Vector{<:Integer},
                                  vinterior::Vector{T},

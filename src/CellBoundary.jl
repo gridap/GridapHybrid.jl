@@ -106,9 +106,6 @@ function quadrature_evaluation_points_and_weights(cell_boundary::CellBoundary, d
   wf_array_block=_block_arrays(Fill(Fill(wf,num_cells(model)),num_cell_facets)...)
 
   (xf_array_block,wf_array_block)
-  # TO-THINK: should actually be this triangulation the one that goes into
-  # the CellQuadrature of CellBoundary?
-  #Gridap.CellData.CellQuadrature(get_triangulation(model),qcb)
 end
 
 # This function plays a similar role of the change_domain function in Gridap.

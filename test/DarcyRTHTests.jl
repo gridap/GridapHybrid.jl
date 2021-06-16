@@ -137,7 +137,7 @@ function solve_darcy_hybrid_rt(model,order)
   ∂T     = CellBoundary(model)
   x,w    = quadrature_evaluation_points_and_weights(∂T,2)
 
-  #∫( mh*(uh⋅n) )*dK
+  #∫( mh*(uh⋅n) )*d∂K
   print("restrict_to_cell_boundary(∂T,uh)")
   @time uh_∂T = restrict_to_cell_boundary(∂T,uh)
   print("restrict_to_cell_boundary(∂T,mh)")
@@ -145,7 +145,7 @@ function solve_darcy_hybrid_rt(model,order)
   print("integrate_mh_mult_uh_cdot_n_low_level(∂T,mh_∂T,uh_∂T,x,w)")
   @time mh_mult_uh_cdot_n=integrate_mh_mult_uh_cdot_n_low_level(∂T,mh_∂T,uh_∂T,x,w)
 
-  #∫( (vh⋅n)*lh )*dK
+  #∫( (vh⋅n)*lh )*d∂K
   print("restrict_to_cell_boundary(∂T,vh)")
   @time vh_∂T = restrict_to_cell_boundary(∂T,vh)
   print("restrict_to_cell_boundary(∂T,lh)")
