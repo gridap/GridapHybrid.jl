@@ -1,4 +1,4 @@
-module IntegrationTests
+module DarcyRTHTests
 
 using Test
 using Gridap
@@ -68,7 +68,7 @@ function solve_darcy_hybrid_rt(model,order)
   degree = 2*(order+1)
   dΓd = Measure(dirichlettrian,degree)
   mh = get_fe_basis(M)
-  lh = get_fe_basis(L)
+  lh = get_trial_fe_basis(L)
   mass=∫(mh*lh)*dΓd
   rhs=∫(mh*p)*dΓd
   fdofsd=get_cell_dof_ids(M,dirichlettrian)
