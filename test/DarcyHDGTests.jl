@@ -136,161 +136,162 @@ function solve_darcy_hdg(model,order)
   ∂T     = CellBoundary(model)
   x,w    = quadrature_evaluation_points_and_weights(∂T,2)
 
-  τvals      = rand(num_cells(trian))
+  τvals      = Fill(1, num_cells(trian))# rand(num_cells(trian))
   τfield     = lazy_map(Broadcasting(Gridap.Fields.ConstantField),τvals)
   τcfield    = Gridap.CellData.GenericCellField(τfield,trian,ReferenceDomain())
 
+  #∫( (vh⋅n)*lh )*d∂K
+  print("restrict_to_cell_boundary(∂T,vh)")
+  @time vh_∂T = restrict_to_cell_boundary(∂T,vh)
+  print("restrict_to_cell_boundary(∂T,lh)")
+  @time lh_∂T = restrict_to_cell_boundary(∂T,lh)
+  print("integrate_vh_cdot_n_mult_lh_low_level(∂T,vh_∂T,lh_∂T,x,w)")
+  @time vh_cdot_n_mult_lh=integrate_vh_cdot_n_mult_lh_low_level(∂T,vh_∂T,lh_∂T,x,w)
 
-# ∫(qh*(uh⋅n+τ*(ph-lh)*n⋅no))*d∂K
-@time qh_∂T = restrict_to_cell_boundary(∂T,qh)
-@time uh_∂T = restrict_to_cell_boundary(∂T,uh)
-@time τ_∂T = restrict_to_cell_boundary(∂T,τcfield)
-@time ph_∂T = restrict_to_cell_boundary(∂T,ph)
-@time lh_∂T = restrict_to_cell_boundary(∂T,lh)
-@time qh_mult_uh_cdot_n_plus_stab=
-    integrate_xh_mult_uh_cdot_n_plus_stab_low_level(∂T,qh_∂T,uh_∂T,τ_∂T,ph_∂T,lh_∂T,x,w)
 
-#   print("restrict_to_cell_boundary(∂T,uh)")
-#   @time uh_∂T = restrict_to_cell_boundary(∂T,uh)
-#   print("restrict_to_cell_boundary(∂T,mh)")
-#   @time mh_∂T = restrict_to_cell_boundary(∂T,mh)
-#   print("integrate_mh_mult_uh_cdot_n_low_level(∂T,mh_∂T,uh_∂T,x,w)")
-#   @time mh_mult_uh_cdot_n=integrate_mh_mult_uh_cdot_n_low_level(∂T,mh_∂T,uh_∂T,x,w)
+  #∫(qh*(uh⋅n+τ*(ph-lh)*n⋅no))*d∂K
+  @time qh_∂T = restrict_to_cell_boundary(∂T,qh)
+  @time uh_∂T = restrict_to_cell_boundary(∂T,uh)
+  @time τ_∂T = restrict_to_cell_boundary(∂T,τcfield)
+  @time ph_∂T = restrict_to_cell_boundary(∂T,ph)
+  print("integrate_qh_mult_uh_cdot_n_plus_stab_low_level(∂T,qh_∂T,uh_∂T,τ_∂T,ph_∂T,lh_∂T,x,w)")
+  @time qh_mult_uh_cdot_n_plus_stab=
+      integrate_qh_mult_uh_cdot_n_plus_stab_low_level(∂T,qh_∂T,uh_∂T,τ_∂T,ph_∂T,lh_∂T,x,w)
 
-#   #∫( (vh⋅n)*lh )*d∂K
-#   print("restrict_to_cell_boundary(∂T,vh)")
-#   @time vh_∂T = restrict_to_cell_boundary(∂T,vh)
-#   print("restrict_to_cell_boundary(∂T,lh)")
-#   @time lh_∂T = restrict_to_cell_boundary(∂T,lh)
-#   print("integrate_vh_cdot_n_mult_lh_low_level(∂T,vh_∂T,lh_∂T,x,w)")
-#   @time vh_cdot_n_mult_lh=integrate_vh_cdot_n_mult_lh_low_level(∂T,vh_∂T,lh_∂T,x,w)
+  # ∫(mh*(uh⋅n+τ*(ph-lh)*n⋅no))*d∂K
+  @time mh_∂T   = restrict_to_cell_boundary(∂T,mh)
+  print("integrate_mh_mult_uh_cdot_n_plus_stab_low_level(∂T,mh_∂T,uh_∂T,τ_∂T,ph_∂T,lh_∂T,x,w)")
+  @time mh_mult_uh_cdot_n_plus_stab=
+      integrate_mh_mult_uh_cdot_n_plus_stab_low_level(∂T,mh_∂T,uh_∂T,τ_∂T,ph_∂T,lh_∂T,x,w)
 
-#   print("Broadcasting(+),vh_cdot_n_mult_lh,mh_mult_uh_cdot_n,data_mΩ")
-#   @time cmat=lazy_map(Broadcasting(+),
-#                 lazy_map(Broadcasting(+),vh_cdot_n_mult_lh,mh_mult_uh_cdot_n),
-#               data_mΩ)
+  print("Broadcasting(+),hybrid,data_mΩ")
+  @time cmat=lazy_map(Broadcasting(+),qh_mult_uh_cdot_n_plus_stab,
+                                mh_mult_uh_cdot_n_plus_stab)
+  @time cmat=lazy_map(Broadcasting(+),cmat,vh_cdot_n_mult_lh)
+  @time cmat=lazy_map(Broadcasting(+),cmat,data_mΩ)
 
-#   cvec=data_vΩ
+  cvec=data_vΩ
 
-#   # cell=1
-#   # A11=vcat(hcat(cmat[cell][1,1],cmat[cell][1,2]),hcat(cmat[cell][2,1],0.0))
-#   # A12=vcat(cmat[cell][1,3],zeros(1,4))
-#   # A21=hcat(cmat[cell][3,1],zeros(4))
-#   # S22=-A21*inv(A11)*A12
-#   # b1=vcat(cvec[cell][1],cvec[cell][2])
-#   # y2=-A21*inv(A11)*b1
+  # cell=1
+  # A11=vcat(hcat(cmat[cell][1,1],cmat[cell][1,2]),hcat(cmat[cell][2,1],0.0))
+  # A12=vcat(cmat[cell][1,3],zeros(1,4))
+  # A21=hcat(cmat[cell][3,1],zeros(4))
+  # S22=-A21*inv(A11)*A12
+  # b1=vcat(cvec[cell][1],cvec[cell][2])
+  # y2=-A21*inv(A11)*b1
 
-#   k=StaticCondensationMap([1,2],[3])
-#   print("lazy_map(StaticCondensationMap,cmat,cvec)")
-#   @time cmat_cvec_condensed=lazy_map(k,cmat,cvec)
+  k=StaticCondensationMap([1,2],[3])
+  print("lazy_map(StaticCondensationMap,cmat,cvec)")
+  @time cmat_cvec_condensed=lazy_map(k,cmat,cvec)
 
-#   #fdofsn=get_cell_dof_ids(M,neumanntrian)
-#   #fdofsd=get_cell_dof_ids(M,dirichlettrian)
+  #fdofsn=get_cell_dof_ids(M,neumanntrian)
+  #fdofsd=get_cell_dof_ids(M,dirichlettrian)
 
-#   fdofscb=restrict_facet_dof_ids_to_cell_boundary(∂T,get_cell_dof_ids(M))
-#   assem = SparseMatrixAssembler(M,L)
+  fdofscb=restrict_facet_dof_ids_to_cell_boundary(∂T,get_cell_dof_ids(M))
+  assem = SparseMatrixAssembler(M,L)
 
-#   # This array is stored as a member variable of UnconstrainedFESpace in Gridap
-#   cell_is_dirichlet=Gridap.FESpaces._generate_cell_is_dirichlet(fdofscb)
+  # This array is stored as a member variable of UnconstrainedFESpace in Gridap
+  cell_is_dirichlet=Gridap.FESpaces._generate_cell_is_dirichlet(fdofscb)
 
-#   # This would be computed using get_cell_dof_values(lhd,cell_boundary) inside Gridap
-#   posnegreindexk=Gridap.Fields.PosNegReindex(zeros(num_free_dofs(M)),L.dirichlet_values)
-#   lhₖ= lazy_map(Gridap.Fields.Broadcasting(posnegreindexk),fdofscb)
+  # This would be computed using get_cell_dof_values(lhd,cell_boundary) inside Gridap
+  posnegreindexk=Gridap.Fields.PosNegReindex(zeros(num_free_dofs(M)),L.dirichlet_values)
+  lhₖ= lazy_map(Gridap.Fields.Broadcasting(posnegreindexk),fdofscb)
 
-#   # This function is called from function _pair_contribution_when_possible(biform,liform,uhd)
-#   print("attach_dirichlet(cmat_cvec_condensed,lhₖ,cell_is_dirichlet)")
-#   @time cmat_cvec_condensed_dirichlet=Gridap.FESpaces.attach_dirichlet(cmat_cvec_condensed,
-#                                                                        lhₖ,
-#                                                                        cell_is_dirichlet)
+  # This function is called from function _pair_contribution_when_possible(biform,liform,uhd)
+  print("attach_dirichlet(cmat_cvec_condensed,lhₖ,cell_is_dirichlet)")
+  @time cmat_cvec_condensed_dirichlet=Gridap.FESpaces.attach_dirichlet(cmat_cvec_condensed,
+                                                                       lhₖ,
+                                                                       cell_is_dirichlet)
 
-#   print("assemble_matrix_and_vector")
-#   @time A,b=assemble_matrix_and_vector(assem,
-#         (([cmat_cvec_condensed_dirichlet], [fdofscb], [fdofscb]),
-#                                             ([],[],[]),
-#                                             ([],[])))
+  print("assemble_matrix_and_vector")
+  @time A,b=assemble_matrix_and_vector(assem,
+        (([cmat_cvec_condensed_dirichlet], [fdofscb], [fdofscb]),
+                                            ([],[],[]),
+                                            ([],[])))
+
 # #@time A,b=assemble_matrix_and_vector(assem,(([cmat_cvec_condensed], [fdofscb], [fdofscb]),
 # #                                      ([data_mΓd],[fdofsd],[fdofsd]),
 # #                                      ([data_vΓn,data_vΓd],[fdofsn,fdofsd])))
 # #@time A,b=assemble_matrix_and_vector(assem,(([cmat_cvec_condensed], [fdofscb], [fdofscb]),
 # #                                      ([data_mΓd],[fdofsd],[fdofsd]),
 # #                                      ([data_vΓd],[fdofsd])))
-#   x     = A\b
-#   lh    = FEFunction(L,x)
+  x     = A\b
+  lh    = FEFunction(L,x)
 
-#   k=BackwardStaticCondensationMap([1,2],[3])
-#   lhₖ= lazy_map(Gridap.Fields.Broadcasting(Gridap.Fields.PosNegReindex(
-#                          Gridap.FESpaces.get_free_dof_values(lh),lh.dirichlet_values)),
-#                       fdofscb)
+  k=BackwardStaticCondensationMap([1,2],[3])
+  lhₖ= lazy_map(Gridap.Fields.Broadcasting(Gridap.Fields.PosNegReindex(
+                         Gridap.FESpaces.get_free_dof_values(lh),lh.dirichlet_values)),
+                      fdofscb)
 
-#   print("lazy_map(BackwardStaticCondensationMap,cmat,cvec,lhₖ)")
-#   @time uhphlhₖ=lazy_map(k,cmat,cvec,lhₖ)
+  print("lazy_map(BackwardStaticCondensationMap,cmat,cvec,lhₖ)")
+  @time uhphlhₖ=lazy_map(k,cmat,cvec,lhₖ)
 
-#   # tol=1.0e-12
-#   # cell=1
-#   # A11=vcat(hcat(cmat[cell][1,1],cmat[cell][1,2]),hcat(cmat[cell][2,1],0.0))
-#   # A12=vcat(cmat[cell][1,3],zeros(1,4))
-#   # A21=hcat(cmat[cell][3,1],zeros(4))
+  # tol=1.0e-12
+  # cell=1
+  # A11=vcat(hcat(cmat[cell][1,1],cmat[cell][1,2]),hcat(cmat[cell][2,1],0.0))
+  # A12=vcat(cmat[cell][1,3],zeros(1,4))
+  # A21=hcat(cmat[cell][3,1],zeros(4))
 
-#   # Am=vcat(hcat(A11,A12),hcat(A21,zeros(4,4)))
-#   # Am[6,6]=1.0
-#   # Am[7,7]=1.0
-#   # Am[8,8]=1.0
-#   # Am[9,9]=1.0
-#   # Sm=Am[6:9,6:9]-Am[6:9,1:5]*inv(Am[1:5,1:5])*Am[1:5,6:9]
-#   # ym=vcat(data_vΓd...)-A21*inv(Am[1:5,1:5])*vcat(cvec[1][1],cvec[1][2])
-#   # xm=Sm\ym
-#   # @assert norm(xm-x) < tol
-#   # bm=vcat(cvec[1][1],cvec[1][2],data_vΓd...)
-#   # Am\bm
+  # Am=vcat(hcat(A11,A12),hcat(A21,zeros(4,4)))
+  # Am[6,6]=1.0
+  # Am[7,7]=1.0
+  # Am[8,8]=1.0
+  # Am[9,9]=1.0
+  # Sm=Am[6:9,6:9]-Am[6:9,1:5]*inv(Am[1:5,1:5])*Am[1:5,6:9]
+  # ym=vcat(data_vΓd...)-A21*inv(Am[1:5,1:5])*vcat(cvec[1][1],cvec[1][2])
+  # xm=Sm\ym
+  # @assert norm(xm-x) < tol
+  # bm=vcat(cvec[1][1],cvec[1][2],data_vΓd...)
+  # Am\bm
 
-#   lhₑ=lazy_map(Gridap.Fields.BlockMap(3,3),ExploringGridapHybridization.convert_cell_wise_dofs_array_to_facet_dofs_array(∂T,
-#       lhₖ,get_cell_dof_ids(M)))
+  lhₑ=lazy_map(Gridap.Fields.BlockMap(3,3),ExploringGridapHybridization.convert_cell_wise_dofs_array_to_facet_dofs_array(∂T,
+      lhₖ,get_cell_dof_ids(M)))
 
-#   assem = SparseMatrixAssembler(Y,X)
-#   lhₑ_dofs=get_cell_dof_ids(X,Triangulation(model_Γ))
+  assem = SparseMatrixAssembler(Y,X)
+  lhₑ_dofs=get_cell_dof_ids(X,Triangulation(model_Γ))
 
-#   uhph_dofs=get_cell_dof_ids(X,Triangulation(model))
-#   uhph_dofs = lazy_map(Gridap.Fields.BlockMap(2,[1,2]),uhph_dofs.args[1],uhph_dofs.args[2])
+  uhph_dofs=get_cell_dof_ids(X,Triangulation(model))
+  uhph_dofs = lazy_map(Gridap.Fields.BlockMap(2,[1,2]),uhph_dofs.args[1],uhph_dofs.args[2])
 
-#   print("uh=lazy_map(x->x[1],uhphlhₖ)")
-#   @time uh=lazy_map(x->x[1],uhphlhₖ)
-#   print("ph=lazy_map(x->x[2],uhphlhₖ)")
-#   @time ph=lazy_map(x->x[2],uhphlhₖ)
-#   print("uhphₖ=lazy_map(Gridap.Fields.BlockMap(2,[1,2]),uh,ph)")
-#   @time uhphₖ=lazy_map(Gridap.Fields.BlockMap(2,[1,2]),uh,ph)
+  print("uh=lazy_map(x->x[1],uhphlhₖ)")
+  @time uh=lazy_map(x->x[1],uhphlhₖ)
+  print("ph=lazy_map(x->x[2],uhphlhₖ)")
+  @time ph=lazy_map(x->x[2],uhphlhₖ)
+  print("uhphₖ=lazy_map(Gridap.Fields.BlockMap(2,[1,2]),uh,ph)")
+  @time uhphₖ=lazy_map(Gridap.Fields.BlockMap(2,[1,2]),uh,ph)
 
-#   print("free_dof_values=assemble_vector(assem,([lhₑ,uhphₖ],[lhₑ_dofs,uhph_dofs]))")
-#   @time free_dof_values=assemble_vector(assem,([lhₑ,uhphₖ],[lhₑ_dofs,uhph_dofs]))
-#   xh=FEFunction(X,free_dof_values)
+  print("free_dof_values=assemble_vector(assem,([lhₑ,uhphₖ],[lhₑ_dofs,uhph_dofs]))")
+  @time free_dof_values=assemble_vector(assem,([lhₑ,uhphₖ],[lhₑ_dofs,uhph_dofs]))
+  xh=FEFunction(X,free_dof_values)
 
-#   # cell=1
-#   # A11=vcat(hcat(cmat[cell][1,1],cmat[cell][1,2]),hcat(cmat[cell][2,1],0.0))
-#   # A12=vcat(cmat[cell][1,3],zeros(1,4))
-#   # A21=hcat(cmat[cell][3,1],zeros(4))
-#   # b1=vcat(cvec[cell][1],cvec[cell][2])
-#   # x2=lhₖ[cell]
-#   # x1=inv(A11)*(b1-A12*x2)
-#   #end
+  # cell=1
+  # A11=vcat(hcat(cmat[cell][1,1],cmat[cell][1,2]),hcat(cmat[cell][2,1],0.0))
+  # A12=vcat(cmat[cell][1,3],zeros(1,4))
+  # A21=hcat(cmat[cell][3,1],zeros(4))
+  # b1=vcat(cvec[cell][1],cvec[cell][2])
+  # x2=lhₖ[cell]
+  # x1=inv(A11)*(b1-A12*x2)
+  #end
 end
 
 domain = (0,1,0,1)
 partition = (2,2)
 model = CartesianDiscreteModel(domain,partition)
-# print("solve_darcy_rt_hdiv ")
-# @time sol_conforming=solve_darcy_rt_hdiv(model,order)
-# print("solve_darcy_hybrid_rt 1")
 order = 1
+print("solve_darcy_rt_hdiv ")
+@time sol_conforming=solve_darcy_rt_hdiv(model,order)
+print("solve_darcy_hdg 1")
 @time sol_nonconforming=solve_darcy_hdg(model,order)
-# print("solve_darcy_hybrid_rt 2")
-# @time sol_nonconforming=solve_darcy_hdg(model,order)
-# print("solve_darcy_hybrid_rt 3")
-# @time sol_nonconforming=solve_darcy_hdg(model,order)
-# trian = Triangulation(model)
-# degree = 2*(order+1)
-# dΩ = Measure(trian,degree)
-# uhc,_=sol_conforming
-# uhnc,_,_=sol_nonconforming
+print("solve_darcy_hybrid_rt 2")
+@time sol_nonconforming=solve_darcy_hdg(model,order)
+print("solve_darcy_hybrid_rt 3")
+@time sol_nonconforming=solve_darcy_hdg(model,order)
+trian = Triangulation(model)
+degree = 2*(order+1)
+dΩ = Measure(trian,degree)
+uhc,_=sol_conforming
+uhnc,_,_=sol_nonconforming
 
-# @test sqrt(sum(∫((uhc-uhnc)⋅(uhc-uhnc))dΩ)) < 1.0e-12
+@test sqrt(sum(∫((uhc-uhnc)⋅(uhc-uhnc))dΩ)) < 1.0e-12
 
 end # module

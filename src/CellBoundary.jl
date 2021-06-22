@@ -111,7 +111,8 @@ end
 # This function plays a similar role of the change_domain function in Gridap.
 # Except it does not, by now, deal with Triangulation and DomainStyle instances.
 # (TO-THINK)
-function restrict_to_cell_boundary(cb::CellBoundary, fe_basis::Gridap.FESpaces.FEBasis)
+function restrict_to_cell_boundary(cb::CellBoundary,
+                                   fe_basis::Gridap.FESpaces.FEBasis)
   model = cb.model
   D = num_cell_dims(model)
   trian = get_triangulation(fe_basis)
@@ -136,7 +137,8 @@ end
 
 
 function _restrict_to_cell_boundary_facet_fe_basis(cb::CellBoundary,
-                                                   facet_fe_basis::Gridap.FESpaces.FEBasis)
+                                                   facet_fe_basis::Gridap.FESpaces.FEBasis;
+                                                   facet_last_block_level=true)
 
   # TO-THINK:
   #     1) How to deal with CellField objects which are NOT FEBasis objects?
@@ -153,7 +155,7 @@ function _restrict_to_cell_boundary_facet_fe_basis(cb::CellBoundary,
                                           cell_wise_facets,
                                           num_cell_facets)
   fe_basis_restricted_to_lfacet_cell_wise_expanded =
-    [ _expand_facet_lid_fields_to_num_facets_blocks(
+         [ _expand_facet_lid_fields_to_num_facets_blocks(
                             Gridap.FESpaces.BasisStyle(facet_fe_basis),
                             fe_basis_restricted_to_lfacet_cell_wise[facet_lid],
                             num_cell_facets,
@@ -346,17 +348,20 @@ function integrate_mh_mult_uh_cdot_n_low_level(cb::CellBoundary,
   j=lazy_map(∇,get_cell_map(cb))
   jx=lazy_map(evaluate,j,x)
 
-  sum_facets=lazy_map(Broadcasting(+),
-                      _set_up_integrate_block(mhx_mult_uhx_cdot_nx,w,jx,1),
-                      _set_up_integrate_block(mhx_mult_uhx_cdot_nx,w,jx,2))
-
-  for i=3:length(uhx.args)
-    sum_facets = lazy_map(Broadcasting(+),sum_facets,
-                  _set_up_integrate_block(mhx_mult_uhx_cdot_nx,w,jx,i))
-  end
+  sum_facets=_sum_facets(cb,mhx_mult_uhx_cdot_nx,jx,w)
   lazy_map(DensifyInnerMostBlockLevelMap(),sum_facets)
 end
 
+function _sum_facets(cb,vx,jx,w)
+ result=lazy_map(Broadcasting(+),
+                 _set_up_integrate_block(vx,w,jx,1),
+                 _set_up_integrate_block(vx,w,jx,2))
+ for i=3:_get_num_facets(cb)
+   result = lazy_map(Broadcasting(+),result,
+                 _set_up_integrate_block(vx,w,jx,i))
+ end
+ result
+end
 
 #∫( (vh⋅n)*lh )*dK
 function integrate_vh_cdot_n_mult_lh_low_level(
@@ -380,19 +385,11 @@ function integrate_vh_cdot_n_mult_lh_low_level(
   j=lazy_map(∇,get_cell_map(cb))
   jx=lazy_map(evaluate,j,x)
 
-  sum_facets=lazy_map(Broadcasting(+),
-           _set_up_integrate_block(vhx_cdot_nx_mult_lhx,w,jx,1),
-           _set_up_integrate_block(vhx_cdot_nx_mult_lhx,w,jx,2))
-
-  for i=3:length(vhx.args)
-     sum_facets = lazy_map(Broadcasting(+),sum_facets,
-                           _set_up_integrate_block(vhx_cdot_nx_mult_lhx,w,jx,i))
-  end
-  lazy_map(DensifyInnerMostBlockLevelMap(),sum_facets)
+  lazy_map(DensifyInnerMostBlockLevelMap(),_sum_facets(cb,vhx_cdot_nx_mult_lhx,jx,w))
 end
 
-
-function integrate_xh_mult_uh_cdot_n_plus_stab_low_level(
+# ∫(qh*(uh⋅n+τ*(ph-lh)*n⋅no))*d∂K
+function integrate_qh_mult_uh_cdot_n_plus_stab_low_level(
   cb::CellBoundary,
   qh::Gridap.Arrays.LazyArray{<:Fill{<:Gridap.Fields.BlockMap}},
   uh::Gridap.Arrays.LazyArray{<:Fill{<:Gridap.Fields.BlockMap}},
@@ -409,15 +406,97 @@ function integrate_xh_mult_uh_cdot_n_plus_stab_low_level(
   nox=lazy_map(evaluate,no,x)
   nx_cdot_nox=lazy_map(Gridap.Fields.BroadcastingFieldOpMap(⋅), nx, nox)
 
-  # (ph-lh)
-  phx=lazy_map(evaluate,ph,x)
-  lhx=lazy_map(evaluate,lh,x)
-  println(phx[1])
-  #phx_minus_lhx=lazy_map(Gridap.Fields.BroadcastingFieldOpMap(-), phx, lhx)
+  # ∫(qh*(uh⋅n)d∂K
+  qhx=lazy_map(evaluate,qh,x)
+  uhx=lazy_map(evaluate,uh,x)
+  uhx_cdot_nx=lazy_map(Gridap.Fields.BroadcastingFieldOpMap(⋅), uhx, nx)
+  qhx_mult_uhx_cdot_nx=lazy_map(Gridap.Fields.BroadcastingFieldOpMap(*), qhx, uhx_cdot_nx)
 
+  # ∫(qh*(τ*(ph)*(n⋅no))d∂K
+  phx=lazy_map(evaluate,ph,x)
+  phx_mult_n_cdot_no=lazy_map(Gridap.Fields.BroadcastingFieldOpMap(*), phx, nx_cdot_nox)
+  τx=lazy_map(evaluate,τ,x)
+  τx_mult_phx_mult_n_cdot_no=
+      lazy_map(Gridap.Fields.BroadcastingFieldOpMap(*), τx, phx_mult_n_cdot_no)
+  qhx_mult_τx_mult_phx_mult_n_cdot_no=
+      lazy_map(Gridap.Fields.BroadcastingFieldOpMap(*), qhx, τx_mult_phx_mult_n_cdot_no)
+
+  # -∫(qh*(τ*(lh)*(n⋅no))d∂K
+  lhx=lazy_map(evaluate,lh,x)
+  lhx_mult_n_cdot_no=lazy_map(Gridap.Fields.BroadcastingFieldOpMap(*), lhx, nx_cdot_nox)
+  τx_mult_lhx_mult_n_cdot_no=
+      lazy_map(Gridap.Fields.BroadcastingFieldOpMap(*), τx, lhx_mult_n_cdot_no)
+  qhx_mult_τx_mult_lhx_mult_n_cdot_no=
+      lazy_map(Gridap.Fields.BroadcastingFieldOpMap(*), qhx, τx_mult_lhx_mult_n_cdot_no)
+
+  j=lazy_map(∇,get_cell_map(cb))
+  jx=lazy_map(evaluate,j,x)
+
+  arg1=lazy_map(Broadcasting(+),
+                _sum_facets(cb,qhx_mult_uhx_cdot_nx,jx,w),
+                _sum_facets(cb,qhx_mult_τx_mult_phx_mult_n_cdot_no,jx,w))
+
+  arg2=lazy_map(DensifyInnerMostBlockLevelMap(),
+                _sum_facets(cb,qhx_mult_τx_mult_lhx_mult_n_cdot_no,jx,w))
+
+  lazy_map(Broadcasting(-),arg1,arg2)
 end
 
+# ∫(mh*(uh⋅n+τ*(ph-lh)*n⋅no))*d∂K
+function integrate_mh_mult_uh_cdot_n_plus_stab_low_level(
+  cb::CellBoundary,
+  mh::Gridap.Arrays.LazyArray{<:Fill{<:Gridap.Fields.BlockMap}},
+  uh::Gridap.Arrays.LazyArray{<:Fill{<:Gridap.Fields.BlockMap}},
+  τ::Gridap.Arrays.LazyArray{<:Fill{<:Gridap.Fields.BlockMap}},
+  ph::Gridap.Arrays.LazyArray{<:Fill{<:Gridap.Fields.BlockMap}},
+  lh::Gridap.Arrays.LazyArray{<:Fill{<:Gridap.Fields.BlockMap}},
+  x::AbstractArray{<:Gridap.Fields.ArrayBlock{<:AbstractArray{<:Point}}},
+  w::AbstractArray{<:Gridap.Fields.ArrayBlock{<:AbstractVector}})
 
+  # (n⋅no)
+  n=get_cell_normal_vector(cb)
+  no=get_cell_owner_normal_vector(cb)
+  nx=lazy_map(evaluate,n,x)
+  nox=lazy_map(evaluate,no,x)
+  nx_cdot_nox=lazy_map(Gridap.Fields.BroadcastingFieldOpMap(⋅), nx, nox)
+
+  # ∫(mh*(uh⋅n)d∂K
+  mhx=lazy_map(evaluate,mh,x)
+  uhx=lazy_map(evaluate,uh,x)
+  uhx_cdot_nx=lazy_map(Gridap.Fields.BroadcastingFieldOpMap(⋅), uhx, nx)
+  mhx_mult_uhx_cdot_nx=lazy_map(Gridap.Fields.BroadcastingFieldOpMap(*), mhx, uhx_cdot_nx)
+
+  # ∫(mh*(τ*(ph)*(n⋅no))d∂K
+  phx=lazy_map(evaluate,ph,x)
+  phx_mult_n_cdot_no=lazy_map(Gridap.Fields.BroadcastingFieldOpMap(*), phx, nx_cdot_nox)
+  τx=lazy_map(evaluate,τ,x)
+  τx_mult_phx_mult_n_cdot_no=
+      lazy_map(Gridap.Fields.BroadcastingFieldOpMap(*), τx, phx_mult_n_cdot_no)
+  mhx_mult_τx_mult_phx_mult_n_cdot_no=
+      lazy_map(Gridap.Fields.BroadcastingFieldOpMap(*), mhx, τx_mult_phx_mult_n_cdot_no)
+
+  # -∫(mh*(τ*(lh)*(n⋅no))d∂K
+  mhx=lazy_map(evaluate,mh,x)
+  lhx=lazy_map(evaluate,lh,x)
+  lhx_mult_n_cdot_no=lazy_map(Gridap.Fields.BroadcastingFieldOpMap(*), lhx, nx_cdot_nox)
+  τx_mult_lhx_mult_n_cdot_no=
+      lazy_map(Gridap.Fields.BroadcastingFieldOpMap(*), τx, lhx_mult_n_cdot_no)
+  mhx_mult_τx_mult_lhx_mult_n_cdot_no=
+      lazy_map(Gridap.Fields.BroadcastingFieldOpMap(*), mhx, τx_mult_lhx_mult_n_cdot_no)
+
+  j=lazy_map(∇,get_cell_map(cb))
+  jx=lazy_map(evaluate,j,x)
+
+  arg1=lazy_map(DensifyInnerMostBlockLevelMap(),
+               _sum_facets(cb,mhx_mult_uhx_cdot_nx,jx,w))
+  arg2=lazy_map(DensifyInnerMostBlockLevelMap(),
+               _sum_facets(cb,mhx_mult_τx_mult_phx_mult_n_cdot_no,jx,w))
+  arg3=lazy_map(DensifyInnerMostBlockLevelMap(),
+               _sum_facets(cb,mhx_mult_τx_mult_lhx_mult_n_cdot_no,jx,w))
+
+  result=lazy_map(Broadcasting(+),arg1,arg2)
+  result=lazy_map(Broadcasting(-),result,arg3)
+end
 
 function _set_up_integrate_block(intq,w,jq,block)
   lazy_map(Gridap.Fields.IntegrationMap(),
@@ -435,8 +514,12 @@ function restrict_facet_dof_ids_to_cell_boundary(cb::CellBoundary,facet_dof_ids)
                                         cell_wise_facets,
                                         num_cell_facets)
 
-  lazy_map(first,lazy_map(Gridap.Fields.Broadcasting(vcat),
-           facet_dof_ids_restricted_to_lfacet_cell_wise...))
+  # TO-DO: define LazyArray cache for mycat
+  function mycat(x::Union{<:Vector{<:Integer},Integer}...)
+    cat(x...,dims=1)
+  end
+
+  lazy_map(mycat,facet_dof_ids_restricted_to_lfacet_cell_wise...)
 end
 
 

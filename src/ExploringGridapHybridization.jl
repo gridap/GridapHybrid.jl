@@ -23,6 +23,7 @@ export restrict_facet_dof_ids_to_cell_boundary
 
 export integrate_vh_cdot_n_mult_lh_low_level
 export integrate_mh_mult_uh_cdot_n_low_level
-export integrate_xh_mult_uh_cdot_n_plus_stab_low_level
+export integrate_qh_mult_uh_cdot_n_plus_stab_low_level
+export integrate_mh_mult_uh_cdot_n_plus_stab_low_level
 
 end # module

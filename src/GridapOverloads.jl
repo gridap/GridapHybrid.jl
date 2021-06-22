@@ -9,6 +9,12 @@ function _restrict_cell_array_block_to_block(x,block)
   #lazy_map(i->i[block],x)
 end
 
+function _restrict_cell_array_block_to_block(
+       x::Gridap.Arrays.CompressedArray{<:Gridap.Fields.VectorBlock},block)
+    @assert length(x.values)==1
+    Fill(x.values[1][block],length(x))
+end
+
 function _restrict_cell_array_block_to_block(x::Fill{<:Gridap.Fields.VectorBlock},block)
   Fill(x.value[block],length(x))
 end
@@ -24,6 +30,13 @@ function _restrict_cell_array_block_to_block(
   args = map(xi->_restrict_cell_array_block_to_block(xi,block), x.args)
   lazy_map(x.maps.value, args...)
 end
+
+function _restrict_cell_array_block_to_block(
+  x::Gridap.Arrays.LazyArray{<:Fill{<:Gridap.Fields.Broadcasting}},block)
+  args = map(xi->_restrict_cell_array_block_to_block(xi,block), x.args)
+  lazy_map(x.maps.value, args...)
+end
+
 
 
 

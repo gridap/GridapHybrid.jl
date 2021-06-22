@@ -165,7 +165,7 @@ function Gridap.Arrays.evaluate!(cache,
    A11=Gridap.Arrays.evaluate!(A11_cache,kdensify,interior_brs,interior_brs,A11_matblk)
    A21=Gridap.Arrays.evaluate!(A21_cache,kdensify,boundary_brs,interior_brs,A21_matblk)
    A12=Gridap.Arrays.evaluate!(A12_cache,kdensify,interior_brs,boundary_brs,A12_matblk)
-   A22=Gridap.Arrays.evaluate!(A22_cache,kdensify,boundary_brs,interior_brs,A22_matblk)
+   A22=Gridap.Arrays.evaluate!(A22_cache,kdensify,boundary_brs,boundary_brs,A22_matblk)
    b1=Gridap.Arrays.evaluate!(b1_cache,kdensify,interior_brs,b1_vecblk)
    b2=Gridap.Arrays.evaluate!(b2_cache,kdensify,boundary_brs,b2_vecblk)
 
