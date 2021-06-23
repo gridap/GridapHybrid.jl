@@ -262,7 +262,7 @@ function solve_darcy_hybrid_rt(model,order)
 end
 
 domain = (0,1,0,1)
-partition = (1,2)
+partition = (2,2)
 order = 0
 model = CartesianDiscreteModel(domain,partition)
 print("solve_darcy_rt_hdiv ")

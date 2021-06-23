@@ -150,24 +150,31 @@ function solve_darcy_hdg(model,order)
 
 
   #∫(qh*(uh⋅n+τ*(ph-lh)*n⋅no))*d∂K
+  print("restrict_to_cell_boundary(∂T,qh)")
   @time qh_∂T = restrict_to_cell_boundary(∂T,qh)
+  print("restrict_to_cell_boundary(∂T,uh)")
   @time uh_∂T = restrict_to_cell_boundary(∂T,uh)
+  print("restrict_to_cell_boundary(∂T,τcfield)")
   @time τ_∂T = restrict_to_cell_boundary(∂T,τcfield)
+  print("restrict_to_cell_boundary(∂T,uh)")
   @time ph_∂T = restrict_to_cell_boundary(∂T,ph)
   print("integrate_qh_mult_uh_cdot_n_plus_stab_low_level(∂T,qh_∂T,uh_∂T,τ_∂T,ph_∂T,lh_∂T,x,w)")
   @time qh_mult_uh_cdot_n_plus_stab=
       integrate_qh_mult_uh_cdot_n_plus_stab_low_level(∂T,qh_∂T,uh_∂T,τ_∂T,ph_∂T,lh_∂T,x,w)
 
   # ∫(mh*(uh⋅n+τ*(ph-lh)*n⋅no))*d∂K
+  print("restrict_to_cell_boundary(∂T,mh)")
   @time mh_∂T   = restrict_to_cell_boundary(∂T,mh)
   print("integrate_mh_mult_uh_cdot_n_plus_stab_low_level(∂T,mh_∂T,uh_∂T,τ_∂T,ph_∂T,lh_∂T,x,w)")
   @time mh_mult_uh_cdot_n_plus_stab=
       integrate_mh_mult_uh_cdot_n_plus_stab_low_level(∂T,mh_∂T,uh_∂T,τ_∂T,ph_∂T,lh_∂T,x,w)
 
-  print("Broadcasting(+),hybrid,data_mΩ")
+  print("Broadcasting(+),qh_mult_uh_cdot_n_plus_stab,mh_mult_uh_cdot_n_plus_stab")
   @time cmat=lazy_map(Broadcasting(+),qh_mult_uh_cdot_n_plus_stab,
                                 mh_mult_uh_cdot_n_plus_stab)
+  print("Broadcasting(+),cmat,vh_cdot_n_mult_lh")
   @time cmat=lazy_map(Broadcasting(+),cmat,vh_cdot_n_mult_lh)
+  print("Broadcasting(+),cmat,data_mΩ")
   @time cmat=lazy_map(Broadcasting(+),cmat,data_mΩ)
 
   cvec=data_vΩ
@@ -282,9 +289,9 @@ print("solve_darcy_rt_hdiv ")
 @time sol_conforming=solve_darcy_rt_hdiv(model,order)
 print("solve_darcy_hdg 1")
 @time sol_nonconforming=solve_darcy_hdg(model,order)
-print("solve_darcy_hybrid_rt 2")
+print("solve_darcy_hdg 2")
 @time sol_nonconforming=solve_darcy_hdg(model,order)
-print("solve_darcy_hybrid_rt 3")
+print("solve_darcy_hdg 3")
 @time sol_nonconforming=solve_darcy_hdg(model,order)
 trian = Triangulation(model)
 degree = 2*(order+1)
