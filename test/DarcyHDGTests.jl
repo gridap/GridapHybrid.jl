@@ -134,7 +134,7 @@ function solve_darcy_hdg(model,order)
   data_vΩ=Gridap.CellData.get_contribution(dcvΩ,dΩ.quad.trian)
 
   ∂T     = CellBoundary(model)
-  x,w    = quadrature_evaluation_points_and_weights(∂T,2)
+  x,w    = quadrature_points_and_weights(∂T,2)
 
   τvals      = Fill(1, num_cells(trian))# rand(num_cells(trian))
   τfield     = lazy_map(Broadcasting(Gridap.Fields.ConstantField),τvals)

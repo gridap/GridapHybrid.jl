@@ -89,7 +89,7 @@ function get_cell_owner_normal_vector(cb::CellBoundary)
   _block_arrays(per_local_facet_normal_cell_wise_arrays...)
 end
 
-function quadrature_evaluation_points_and_weights(cell_boundary::CellBoundary, degree::Integer)
+function quadrature_points_and_weights(cell_boundary::CellBoundary, degree::Integer)
   model = cell_boundary.model
   D = num_cell_dims(model)
   p = lazy_map(Gridap.ReferenceFEs.get_polytope,get_reffes(model))

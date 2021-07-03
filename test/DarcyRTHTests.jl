@@ -135,7 +135,7 @@ function solve_darcy_hybrid_rt(model,order)
   data_vΩ=Gridap.CellData.get_contribution(dcvΩ,dΩ.quad.trian)
 
   ∂T     = CellBoundary(model)
-  x,w    = quadrature_evaluation_points_and_weights(∂T,2)
+  x,w    = quadrature_points_and_weights(∂T,2)
 
   #∫( mh*(uh⋅n) )*d∂K
   print("restrict_to_cell_boundary(∂T,uh)")
