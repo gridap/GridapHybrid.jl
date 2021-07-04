@@ -368,8 +368,7 @@ function _restrict_to_cell_boundary_cell_fe_basis(cb::CellBoundaryBis,
   #     2) How to deal with differential operators applied to FEBasis objects?
   D = num_cell_dims(cb.model)
   Gridap.Helpers.@check isa(get_triangulation(cell_fe_basis),Triangulation{D,D})
-  #TO-DO: MemoArray
-  cell_a_q = transform_cell_to_cell_lface_array(cb.btrian.glue,Gridap.CellData.get_data(cell_fe_basis).parent)
+  cell_a_q = transform_cell_to_cell_lface_array(cb.btrian.glue,Gridap.CellData.get_data(cell_fe_basis))
   cell_s2q = get_cell_ref_map(cb)
   lazy_map(Broadcasting(∘),cell_a_q,cell_s2q)
 end
