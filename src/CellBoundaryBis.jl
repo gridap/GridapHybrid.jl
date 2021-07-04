@@ -123,10 +123,18 @@ function transform_cell_to_cell_lface_array(glue,
   Gridap.Arrays.CompressedArray(ctype_to_vector_block,glue.cell_to_ctype)
 end
 
+function transform_cell_to_cell_lface_array(
+  glue,
+  cell_array::Gridap.Arrays.LazyArray{<:Fill{typeof(transpose)}})
+  Gridap.Helpers.@check typeof(cell_array.args[1]) <: Fill
+  cell_array_fill = Fill(evaluate(transpose,cell_array.args[1].value),length(cell_array))
+  transform_cell_to_cell_lface_array(glue,cell_array_fill)
+end
+
 function Gridap.Arrays.lazy_map(k::Gridap.Fields.LinearCombinationMap,
                   ::Type{T},b::CellBoundaryCompressedVector,c::Fill) where T
   d = Gridap.Arrays.CompressedArray([c.value,],Fill(1,length(c)))
-  lazy_map(k,T,a,b,d)
+  lazy_map(k,T,b,d)
 end
 
 function Gridap.Arrays.lazy_map(k::Gridap.Fields.LinearCombinationMap,

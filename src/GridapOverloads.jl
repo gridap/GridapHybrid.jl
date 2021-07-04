@@ -53,16 +53,16 @@ function Gridap.Arrays.lazy_map(::typeof(evaluate),
   lazy_map(k,args...)
 end
 
-function Gridap.Arrays.lazy_map(::typeof(evaluate),
-  a::Gridap.Arrays.AbstractArray{<:Gridap.Fields.ArrayBlock},
-  x::AbstractArray{<:Gridap.Fields.ArrayBlock{<:AbstractArray{<:Point}}})
+# function Gridap.Arrays.lazy_map(::typeof(evaluate),
+#   a::Gridap.Arrays.CompressedArray{<:Gridap.Fields.ArrayBlock},
+#   x::AbstractArray{<:Gridap.Fields.ArrayBlock{<:AbstractArray{<:Point}}})
 
-  args = [ lazy_map(evaluate,
-                    _restrict_cell_array_block_to_block(a,pos),
-                    _restrict_cell_array_block_to_block(x,pos)) for pos=1:length(a[1]) ]
-  k = Gridap.Fields.BlockMap(length(a[1]),collect(1:length(a[1])))
-  lazy_map(k,args...)
-end
+#   args = [ lazy_map(evaluate,
+#                     _restrict_cell_array_block_to_block(a,pos),
+#                     _restrict_cell_array_block_to_block(x,pos)) for pos=1:length(a[1]) ]
+#   k = Gridap.Fields.BlockMap(length(a[1]),collect(1:length(a[1])))
+#   lazy_map(k,args...)
+# end
 
 function Gridap.Arrays.lazy_map(::typeof(∇),
   a::Gridap.Arrays.LazyArray{<:Fill{<:Gridap.Fields.BlockMap},

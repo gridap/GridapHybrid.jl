@@ -37,10 +37,17 @@ module CellBoundaryTests
    @time vh_∂Tbis   = restrict_to_cell_boundary(∂Tbis,vh)
    @time vh_∂Tbis_x = lazy_map(evaluate,vh_∂Tbis,xbis)
 
+   @time uh_∂Tbis   = restrict_to_cell_boundary(∂Tbis,uh)
+   @time uh_∂Tbis_x = lazy_map(evaluate,uh_∂Tbis,xbis)
+
    ∂T=CellBoundary(model)
    x,w=quadrature_points_and_weights(∂T,2)
+
    @time vh_∂T   = restrict_to_cell_boundary(∂T,vh)
    @time vh_∂T_x = lazy_map(evaluate,vh_∂T,x)
    @test all(vh_∂Tbis_x == vh_∂T_x)
 
+   @time uh_∂T   = restrict_to_cell_boundary(∂T,uh)
+   @time uh_∂T_x = lazy_map(evaluate,uh_∂T,x)
+   @test all(uh_∂Tbis_x == uh_∂T_x)
 end
