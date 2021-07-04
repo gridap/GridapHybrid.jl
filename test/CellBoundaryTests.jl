@@ -1,4 +1,4 @@
-module CellBoundaryTests
+#module CellBoundaryTests
    using Test
    using Gridap
    using ExploringGridapHybridization
@@ -34,20 +34,35 @@ module CellBoundaryTests
    xh = get_trial_fe_basis(X)
    uh,ph,lh = xh
 
-   @time vh_∂Tbis   = restrict_to_cell_boundary(∂Tbis,vh)
-   @time vh_∂Tbis_x = lazy_map(evaluate,vh_∂Tbis,xbis)
-
-   @time uh_∂Tbis   = restrict_to_cell_boundary(∂Tbis,uh)
-   @time uh_∂Tbis_x = lazy_map(evaluate,uh_∂Tbis,xbis)
-
    ∂T=CellBoundary(model)
    x,w=quadrature_points_and_weights(∂T,2)
+
+   @time vh_∂Tbis   = restrict_to_cell_boundary(∂Tbis,vh)
+   @time vh_∂Tbis_x = lazy_map(evaluate,vh_∂Tbis,xbis)
 
    @time vh_∂T   = restrict_to_cell_boundary(∂T,vh)
    @time vh_∂T_x = lazy_map(evaluate,vh_∂T,x)
    @test all(vh_∂Tbis_x == vh_∂T_x)
 
+   @time uh_∂Tbis   = restrict_to_cell_boundary(∂Tbis,uh)
+   @time uh_∂Tbis_x = lazy_map(evaluate,uh_∂Tbis,xbis)
+
    @time uh_∂T   = restrict_to_cell_boundary(∂T,uh)
    @time uh_∂T_x = lazy_map(evaluate,uh_∂T,x)
    @test all(uh_∂Tbis_x == uh_∂T_x)
-end
+
+   @time mh_∂Tbis   = restrict_to_cell_boundary(∂Tbis,mh)
+   @time mh_∂Tbis_x = lazy_map(evaluate,mh_∂Tbis,x)
+
+   @time mh_∂T   = restrict_to_cell_boundary(∂T,mh)
+   @time mh_∂T_x = lazy_map(evaluate,mh_∂T,x)
+   @test all(mh_∂Tbis_x == mh_∂T_x)
+
+   @time lh_∂Tbis   = restrict_to_cell_boundary(∂Tbis,lh)
+   @time lh_∂Tbis_x = lazy_map(evaluate,lh_∂Tbis,x)
+
+   @time lh_∂T   = restrict_to_cell_boundary(∂T,lh)
+   @time lh_∂T_x = lazy_map(evaluate,lh_∂T,x)
+   @test all(lh_∂Tbis_x == lh_∂T_x)
+
+#end

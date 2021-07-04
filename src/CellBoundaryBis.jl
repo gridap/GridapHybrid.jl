@@ -98,6 +98,81 @@ function transform_face_to_cell_lface_array(glue,
   Gridap.Arrays.CompressedArray(ctype_to_vector_block,glue.cell_to_ctype)
 end
 
+function transform_face_to_cell_lface_expanded_array(
+  glue,
+  face_array::Gridap.Arrays.LazyArray{<:Fill{typeof(transpose)}})
+  Gridap.Helpers.@check typeof(face_array.args[1]) <: Gridap.Arrays.CompressedArray
+
+  T = Gridap.Arrays.return_type(transpose,face_array.args[1].values[1])
+  v = Vector{T}(undef,length(face_array.args[1].values))
+  for i=1:length(face_array.args[1].values)
+    v[i]=evaluate(transpose,face_array.args[1].values[i])
+  end
+  face_array_compressed=Gridap.Arrays.CompressedArray(v,face_array.args[1].ptrs)
+  #face_array_fill = Fill(evaluate(transpose,face_array.args[1].value),length(face_array))
+  transform_face_to_cell_lface_expanded_array(glue,face_array_compressed)
+end
+
+
+function transform_face_to_cell_lface_expanded_array(glue,
+                                                     face_array::Gridap.Arrays.CompressedArray)
+  ftype_to_block_layout=_get_block_layout(face_array.values)
+  T=eltype(face_array.values[1])
+  if length(ftype_to_block_layout[1][1]) == 1
+    TB=Gridap.Fields.VectorBlock{T}
+    TF1=Gridap.Fields.VectorBlock{TB}
+  else
+    Gridap.Helpers.@check length(ftype_to_block_layout[1][1])==2
+    TB=Gridap.Fields.MatrixBlock{T}
+    TF1=Gridap.Fields.MatrixBlock{TB}
+  end
+  ctype_to_vector_block= #[c][f1][b][f2] or [c][f1][1,b][1,f2]
+    Vector{Gridap.Fields.VectorBlock{TF1}}(undef,length(glue.ctype_to_lface_to_ftype))
+  for ctype=1:length(glue.ctype_to_lface_to_ftype)
+     num_facets=length(glue.ctype_to_lface_to_ftype[ctype])
+     vf1=Vector{TF1}(undef,num_facets)
+     tf1=Vector{Bool}(undef,num_facets)
+     tf1.=true
+     for lface=1:num_facets
+      ftype=glue.ctype_to_lface_to_ftype[ctype][lface]
+      if length(ftype_to_block_layout[ftype][1])==1
+        vb = Vector{TB}(undef,length(face_array.values[ftype]))
+        tb = Vector{Bool}(undef,length(face_array.values[ftype]))
+      else
+        vb = Matrix{TB}(undef,(1,length(face_array.values[ftype])))
+        tb = Matrix{Bool}(undef,(1,length(face_array.values[ftype])))
+      end
+      tb .= false
+      for blk=1:length(face_array.values[ftype])
+        if face_array.values[ftype].touched[blk]
+          if length(ftype_to_block_layout[ftype][1])==1
+            vf2 = Vector{T}(undef,num_facets)
+            tf2 = Vector{Bool}(undef,num_facets)
+            tf2.= false
+            tf2[lface]=true
+            vf2[lface]=face_array.values[ftype].array[blk]
+            vb[blk]=Gridap.Fields.ArrayBlock(vf2,tf2)
+            tb[blk]=true
+          else
+            Gridap.Helpers.@check length(ftype_to_block_layout[ftype][1])==2
+            vf2 = Matrix{T}(undef,(1,num_facets))
+            tf2 = Matrix{Bool}(undef,(1,num_facets))
+            tf2.= false
+            tf2[1,lface]=true
+            vf2[1,lface]=face_array.values[ftype].array[1,blk]
+            vb[1,blk]=Gridap.Fields.ArrayBlock(vf2,tf2)
+            tb[1,blk]=true
+          end
+        end
+      end
+      vf1[lface]=Gridap.Fields.ArrayBlock(vb,tb)
+     end
+     ctype_to_vector_block[ctype]=Gridap.Fields.ArrayBlock(vf1,tf1)
+  end
+  Gridap.Arrays.CompressedArray(ctype_to_vector_block,glue.cell_to_ctype)
+end
+
+
 function transform_cell_to_cell_lface_array(glue,
                                             cell_array::Fill)
     d = Gridap.Arrays.CompressedArray([cell_array.value,],Fill(1,length(cell_array)))
@@ -179,6 +254,20 @@ function Gridap.Arrays.lazy_map(k::typeof(evaluate),
   end
   Gridap.Arrays.CompressedArray(values_r,b.ptrs)
 end
+
+function Gridap.Arrays.lazy_map(k::typeof(evaluate),
+                                ::Type{T},
+                                b::Gridap.Arrays.CompressedArray{<:Gridap.Fields.VectorBlock},
+                                c::Fill{<:Gridap.Fields.VectorBlock}) where T
+  Gridap.Helpers.@check length(b) == length(c)
+  values_r = Vector{T}(undef,length(b))
+  for i=1:length(b.values)
+    values_r[i]=evaluate(k,b.values[i],c.value)
+  end
+  Gridap.Arrays.CompressedArray(values_r,b.ptrs)
+end
+
+
 
 function Gridap.Arrays.lazy_map(
   k::typeof(Gridap.Arrays.evaluate),
@@ -363,7 +452,7 @@ function restrict_to_cell_boundary(cb::CellBoundaryBis,
   D = num_cell_dims(model)
   trian = get_triangulation(fe_basis)
   if isa(trian,Triangulation{D-1,D})
-    #_restrict_to_cell_boundary_facet_fe_basis(cb,fe_basis)
+    _restrict_to_cell_boundary_facet_fe_basis(cb,fe_basis)
   elseif isa(trian,Triangulation{D,D})
     _restrict_to_cell_boundary_cell_fe_basis(cb,fe_basis)
   end
@@ -380,6 +469,21 @@ function _restrict_to_cell_boundary_cell_fe_basis(cb::CellBoundaryBis,
   cell_s2q = get_cell_ref_map(cb)
   lazy_map(Broadcasting(∘),cell_a_q,cell_s2q)
 end
+
+function _restrict_to_cell_boundary_facet_fe_basis(cb::CellBoundaryBis,
+                                                   facet_fe_basis::Gridap.FESpaces.FEBasis)
+
+  # TO-THINK:
+  #     1) How to deal with CellField objects which are NOT FEBasis objects?
+  #     2) How to deal with differential operators applied to FEBasis/CellField objects?
+  D = num_cell_dims(cb.model)
+  Gridap.Helpers.@check isa(get_triangulation(facet_fe_basis),Triangulation{D-1,D})
+
+  transform_face_to_cell_lface_expanded_array(
+    cb.btrian.glue,
+    Gridap.CellData.get_data(facet_fe_basis))
+end
+
 
 function Gridap.Arrays.return_value(
   k::Broadcasting{typeof(∘)},
