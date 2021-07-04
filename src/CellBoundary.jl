@@ -329,7 +329,7 @@ end
 
 #∫( mh*(uh⋅n) )*dK
 function integrate_mh_mult_uh_cdot_n_low_level(cb::CellBoundary,
-  mh::Gridap.Arrays.LazyArray{<:Fill{<:Gridap.Fields.BlockMap}},
+  mh,
   uh::Gridap.Arrays.LazyArray{<:Fill{<:Gridap.Fields.BlockMap}},
   x::AbstractArray{<:Gridap.Fields.ArrayBlock{<:AbstractArray{<:Point}}},
   w::AbstractArray{<:Gridap.Fields.ArrayBlock{<:AbstractVector}})
