@@ -7,10 +7,10 @@ module CellBoundaryTests
    model = CartesianDiscreteModel(domain,partition)
    D=2
    model_Γ = Gridap.Geometry.BoundaryDiscreteModel(Polytope{D-1},model,collect(1:num_facets(model)))
-   ∂Tbis=CellBoundaryOpt(model)
-   m=Gridap.Geometry.get_cell_ref_map(∂Tbis)
-   xbis,wbis=quadrature_points_and_weights(∂Tbis,2)
-   mx=lazy_map(evaluate,m,xbis)
+   ∂Topt=CellBoundaryOpt(model)
+   m=Gridap.Geometry.get_cell_ref_map(∂Topt)
+   xopt,wopt=quadrature_points_and_weights(∂Topt,2)
+   mx=lazy_map(evaluate,m,xopt)
 
    # Define test FESpaces
    order=0
@@ -37,43 +37,43 @@ module CellBoundaryTests
    ∂T=CellBoundary(model)
    x,w=quadrature_points_and_weights(∂T,2)
 
-   @time vh_∂Tbis   = restrict_to_cell_boundary(∂Tbis,vh)
-   @time vh_∂Tbis_x = lazy_map(evaluate,vh_∂Tbis,xbis)
+   @time vh_∂Topt   = restrict_to_cell_boundary(∂Topt,vh)
+   @time vh_∂Topt_x = lazy_map(evaluate,vh_∂Topt,xopt)
 
    @time vh_∂T   = restrict_to_cell_boundary(∂T,vh)
    @time vh_∂T_x = lazy_map(evaluate,vh_∂T,x)
-   @test all(vh_∂Tbis_x == vh_∂T_x)
+   @test all(vh_∂Topt_x == vh_∂T_x)
 
-   @time uh_∂Tbis   = restrict_to_cell_boundary(∂Tbis,uh)
-   @time uh_∂Tbis_x = lazy_map(evaluate,uh_∂Tbis,xbis)
+   @time uh_∂Topt   = restrict_to_cell_boundary(∂Topt,uh)
+   @time uh_∂Topt_x = lazy_map(evaluate,uh_∂Topt,xopt)
 
    @time uh_∂T   = restrict_to_cell_boundary(∂T,uh)
    @time uh_∂T_x = lazy_map(evaluate,uh_∂T,x)
-   @test all(uh_∂Tbis_x == uh_∂T_x)
+   @test all(uh_∂Topt_x == uh_∂T_x)
 
-   @time mh_∂Tbis   = restrict_to_cell_boundary(∂Tbis,mh)
-   @time mh_∂Tbis_x = lazy_map(evaluate,mh_∂Tbis,x)
+   @time mh_∂Topt   = restrict_to_cell_boundary(∂Topt,mh)
+   @time mh_∂Topt_x = lazy_map(evaluate,mh_∂Topt,x)
 
    @time mh_∂T   = restrict_to_cell_boundary(∂T,mh)
    @time mh_∂T_x = lazy_map(evaluate,mh_∂T,x)
-   @test all(mh_∂Tbis_x == mh_∂T_x)
+   @test all(mh_∂Topt_x == mh_∂T_x)
 
-   @time lh_∂Tbis   = restrict_to_cell_boundary(∂Tbis,lh)
-   @time lh_∂Tbis_x = lazy_map(evaluate,lh_∂Tbis,x)
+   @time lh_∂Topt   = restrict_to_cell_boundary(∂Topt,lh)
+   @time lh_∂Topt_x = lazy_map(evaluate,lh_∂Topt,x)
 
    @time lh_∂T   = restrict_to_cell_boundary(∂T,lh)
    @time lh_∂T_x = lazy_map(evaluate,lh_∂T,x)
-   @test all(lh_∂Tbis_x == lh_∂T_x)
+   @test all(lh_∂Topt_x == lh_∂T_x)
 
-   # nf=Gridap.Geometry.get_facet_normal(∂Tbis.btrian)
-   # dΓ=Measure(∂Tbis.btrian,2)
+   # nf=Gridap.Geometry.get_facet_normal(∂Topt.btrian)
+   # dΓ=Measure(∂Topt.btrian,2)
    # nfx=lazy_map(evaluate,nf,Gridap.CellData.get_data(get_cell_points(dΓ.quad)))
 
    @time n=get_cell_normal_vector(∂T)
    @time nx=lazy_map(evaluate,n,x)
 
-   @time nbis=get_cell_normal_vector(∂Tbis)
-   @time nbisx=lazy_map(evaluate,n,xbis)
+   @time nopt=get_cell_normal_vector(∂Topt)
+   @time noptx=lazy_map(evaluate,n,xopt)
 
-   @test all(nx == nbisx)
+   @test all(nx == noptx)
 end
