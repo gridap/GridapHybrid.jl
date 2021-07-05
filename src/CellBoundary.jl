@@ -445,7 +445,7 @@ end
 # ∫(mh*(uh⋅n+τ*(ph-lh)*n⋅no))*d∂K
 function integrate_mh_mult_uh_cdot_n_plus_stab_low_level(
   cb::CellBoundary,
-  mh::Gridap.Arrays.LazyArray{<:Fill{<:Gridap.Fields.BlockMap}},
+  mh,
   uh::Gridap.Arrays.LazyArray{<:Fill{<:Gridap.Fields.BlockMap}},
   τ::Gridap.Arrays.LazyArray{<:Fill{<:Gridap.Fields.BlockMap}},
   ph::Gridap.Arrays.LazyArray{<:Fill{<:Gridap.Fields.BlockMap}},
