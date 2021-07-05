@@ -40,10 +40,10 @@ Base.size(a::CellBoundaryCompressedVector) = (length(a.glue.cell_to_ctype),)
 
 Base.IndexStyle(::Type{<:CellBoundaryCompressedVector}) = IndexLinear()
 
-struct CellBoundaryBis{M<:DiscreteModel,TBT<:Triangulation}
+struct CellBoundaryOpt{M<:DiscreteModel,TBT<:Triangulation}
   model::M
   btrian::TBT
-  function CellBoundaryBis(model::M) where M<:DiscreteModel
+  function CellBoundaryOpt(model::M) where M<:DiscreteModel
     face_to_bgface = collect(1:num_facets(model))
     btrian=BoundaryTriangulation(model,
                               face_to_bgface,
@@ -53,7 +53,7 @@ struct CellBoundaryBis{M<:DiscreteModel,TBT<:Triangulation}
   end
 end
 
-function get_cell_normal_vector(cb::CellBoundaryBis)
+function get_cell_normal_vector(cb::CellBoundaryOpt)
 
   glue = cb.btrian.glue
   cell_trian = cb.btrian.cell_trian
@@ -89,14 +89,14 @@ end
 
 
 
-function _get_cell_wise_facets(cb::CellBoundaryBis)
+function _get_cell_wise_facets(cb::CellBoundaryOpt)
   model = cb.model
   gtopo = get_grid_topology(model)
   D     = num_cell_dims(model)
   Gridap.Geometry.get_faces(gtopo, D, D-1)
 end
 
-function Gridap.Geometry.get_cell_ref_map(cb::CellBoundaryBis)
+function Gridap.Geometry.get_cell_ref_map(cb::CellBoundaryOpt)
   cell_lface_to_q_vertex_coords = _compute_cell_lface_to_q_vertex_coords(cb)
   f(p) = Gridap.ReferenceFEs.get_shapefuns(Gridap.ReferenceFEs.LagrangianRefFE(Float64,Gridap.ReferenceFEs.get_polytope(p),1))
   ftype_to_shapefuns = map( f, Gridap.Geometry.get_reffes(cb.btrian) )
@@ -107,7 +107,7 @@ function Gridap.Geometry.get_cell_ref_map(cb::CellBoundaryBis)
                       cell_to_lface_to_shapefuns)
 end
 
-function _compute_cell_lface_to_q_vertex_coords(cb::CellBoundaryBis)
+function _compute_cell_lface_to_q_vertex_coords(cb::CellBoundaryOpt)
   ctype_to_lface_to_pindex_to_qcoords=Gridap.Geometry._compute_face_to_q_vertex_coords(cb.btrian)
   CellBoundaryCompressedVector(
     ctype_to_lface_to_pindex_to_qcoords.ctype_lface_pindex_to_value,
@@ -410,7 +410,7 @@ end
 #   CellBoundaryCompressedVector(ctype_lface_pindex_to_r,b.glue)
 # end
 
-function quadrature_points_and_weights(cb::CellBoundaryBis, degree::Integer)
+function quadrature_points_and_weights(cb::CellBoundaryOpt, degree::Integer)
   model = cb.model
   D = num_cell_dims(model)
   p = lazy_map(Gridap.ReferenceFEs.get_polytope,get_reffes(model))
@@ -483,7 +483,7 @@ function Gridap.Arrays.evaluate!(
   r
 end
 
-function restrict_to_cell_boundary(cb::CellBoundaryBis,
+function restrict_to_cell_boundary(cb::CellBoundaryOpt,
                                    fe_basis::Gridap.FESpaces.FEBasis)
   model = cb.model
   D = num_cell_dims(model)
@@ -495,7 +495,7 @@ function restrict_to_cell_boundary(cb::CellBoundaryBis,
   end
 end
 
-function _restrict_to_cell_boundary_cell_fe_basis(cb::CellBoundaryBis,
+function _restrict_to_cell_boundary_cell_fe_basis(cb::CellBoundaryOpt,
                                                   cell_fe_basis::Union{Gridap.FESpaces.FEBasis,Gridap.CellData.CellField})
   # TO-THINK:
   #     1) How to deal with CellField objects which are NOT FEBasis objects?
@@ -507,7 +507,7 @@ function _restrict_to_cell_boundary_cell_fe_basis(cb::CellBoundaryBis,
   lazy_map(Broadcasting(∘),cell_a_q,cell_s2q)
 end
 
-function _restrict_to_cell_boundary_facet_fe_basis(cb::CellBoundaryBis,
+function _restrict_to_cell_boundary_facet_fe_basis(cb::CellBoundaryOpt,
                                                    facet_fe_basis::Gridap.FESpaces.FEBasis)
 
   # TO-THINK:

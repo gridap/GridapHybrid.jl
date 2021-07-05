@@ -5,7 +5,7 @@ using FillArrays
 using LinearAlgebra
 include("GridapOverloads.jl")
 include("CellBoundary.jl")
-include("CellBoundaryBis.jl")
+include("CellBoundaryOpt.jl")
 include("DensifyInnerMostBlockLevel.jl")
 include("StaticCondensationMap.jl")
 include("BackwardStaticCondensationMap.jl")
@@ -16,7 +16,7 @@ export StaticCondensationMap
 export BackwardStaticCondensationMap
 
 export CellBoundary
-export CellBoundaryBis
+export CellBoundaryOpt
 export get_cell_owner_normal_vector
 export get_cell_normal_vector
 export quadrature_points_and_weights

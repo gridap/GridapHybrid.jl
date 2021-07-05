@@ -7,7 +7,7 @@ module CellBoundaryTests
    model = CartesianDiscreteModel(domain,partition)
    D=2
    model_Γ = Gridap.Geometry.BoundaryDiscreteModel(Polytope{D-1},model,collect(1:num_facets(model)))
-   ∂Tbis=CellBoundaryBis(model)
+   ∂Tbis=CellBoundaryOpt(model)
    m=Gridap.Geometry.get_cell_ref_map(∂Tbis)
    xbis,wbis=quadrature_points_and_weights(∂Tbis,2)
    mx=lazy_map(evaluate,m,xbis)

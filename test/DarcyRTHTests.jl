@@ -282,7 +282,7 @@ uhnc,_,_=sol_nonconforming
 
 @test sqrt(sum(∫((uhc-uhnc)⋅(uhc-uhnc))dΩ)) < 1.0e-12
 
-#∂Tbis = CellBoundaryBis(model)
+#∂Tbis = CellBoundaryOpt(model)
 #print("solve_darcy_hybrid_rt_bis 1")
 #@time sol_nonconforming=solve_darcy_hybrid_rt(model,∂Tbis,order)
 
