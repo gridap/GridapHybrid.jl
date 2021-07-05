@@ -281,7 +281,7 @@ function Gridap.Arrays.lazy_map(k::typeof(evaluate),
                                 c::Gridap.Arrays.CompressedArray{<:Gridap.Fields.VectorBlock}) where T
   Gridap.Helpers.@check length(b) == length(c)
   if c.ptrs === b.ptrs || c.ptrs == b.ptrs
-     values_r = Vector{T}(undef,length(b))
+     values_r = Vector{T}(undef,length(b.values))
      for i=1:length(b.values)
         values_r[i] =evaluate(k,b.values[i],c.values[i])
      end
@@ -296,7 +296,7 @@ function Gridap.Arrays.lazy_map(k::typeof(evaluate),
                                 b::Gridap.Arrays.CompressedArray{<:Gridap.Fields.VectorBlock},
                                 c::Fill{<:Gridap.Fields.VectorBlock}) where T
   Gridap.Helpers.@check length(b) == length(c)
-  values_r = Vector{T}(undef,length(b))
+  values_r = Vector{T}(undef,length(b.values))
   for i=1:length(b.values)
     values_r[i]=evaluate(k,b.values[i],c.value)
   end
