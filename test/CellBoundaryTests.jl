@@ -1,4 +1,4 @@
-#module CellBoundaryTests
+module CellBoundaryTests
    using Test
    using Gridap
    using ExploringGridapHybridization
@@ -65,4 +65,15 @@
    @time lh_∂T_x = lazy_map(evaluate,lh_∂T,x)
    @test all(lh_∂Tbis_x == lh_∂T_x)
 
-#end
+   # nf=Gridap.Geometry.get_facet_normal(∂Tbis.btrian)
+   # dΓ=Measure(∂Tbis.btrian,2)
+   # nfx=lazy_map(evaluate,nf,Gridap.CellData.get_data(get_cell_points(dΓ.quad)))
+
+   @time n=get_cell_normal_vector(∂T)
+   @time nx=lazy_map(evaluate,n,x)
+
+   @time nbis=get_cell_normal_vector(∂Tbis)
+   @time nbisx=lazy_map(evaluate,n,xbis)
+
+   @test all(nx == nbisx)
+end

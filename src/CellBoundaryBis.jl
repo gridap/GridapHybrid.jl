@@ -53,6 +53,42 @@ struct CellBoundaryBis{M<:DiscreteModel,TBT<:Triangulation}
   end
 end
 
+function get_cell_normal_vector(cb::CellBoundaryBis)
+
+  glue = cb.btrian.glue
+  cell_trian = cb.btrian.cell_trian
+
+  ## Reference normal
+  function f(r)
+    p = Gridap.ReferenceFEs.get_polytope(r)
+    lface_to_n = Gridap.ReferenceFEs.get_facet_normal(p)
+    lface_to_pindex_to_perm = Gridap.ReferenceFEs.get_face_vertex_permutations(p,num_cell_dims(p)-1)
+    nlfaces = length(lface_to_n)
+    lface_pindex_to_n = [ fill(lface_to_n[lface],length(lface_to_pindex_to_perm[lface])) for lface in 1:nlfaces ]
+    lface_pindex_to_n
+  end
+  ctype_lface_pindex_to_nref = map(f, get_reffes(cell_trian))
+  cell_lface_to_nref = CellBoundaryCompressedVector(ctype_lface_pindex_to_nref,glue)
+  cell_lface_s_nref = lazy_map(Gridap.Fields.constant_field,cell_lface_to_nref)
+
+  # Inverse of the Jacobian transpose
+  cell_q_x = get_cell_map(cell_trian)
+  cell_q_Jt = lazy_map(∇,cell_q_x)
+  cell_q_invJt = lazy_map(Operation(Gridap.Fields.pinvJt),cell_q_Jt)
+  cell_lface_q_invJt = transform_cell_to_cell_lface_array(glue, cell_q_invJt)
+
+  # Change of domain
+  cell_lface_s_q = get_cell_ref_map(cb)
+  cell_lface_s_invJt = lazy_map(∘,cell_lface_q_invJt,cell_lface_s_q)
+  #face_s_n =
+  lazy_map(Broadcasting(Operation(Gridap.Geometry.push_normal)),
+           cell_lface_s_invJt,
+           cell_lface_s_nref)
+  #Fields.MemoArray(face_s_n)
+end
+
+
+
 function _get_cell_wise_facets(cb::CellBoundaryBis)
   model = cb.model
   gtopo = get_grid_topology(model)
@@ -326,11 +362,12 @@ function Gridap.Arrays.lazy_map(
   b::CellBoundaryCompressedVector,
   a::Gridap.Arrays.CompressedArray{<:Gridap.Fields.VectorBlock}) where T
   Gridap.Helpers.@check length(a) == length(b)
-  ctype_lface_pindex_to_r = Vector{Vector{Vector{T}}}(undef,length(b.ctype_lface_pindex_to_value))
+  ET=eltype(T)
+  ctype_lface_pindex_to_r = Vector{Vector{Vector{ET}}}(undef,length(b.ctype_lface_pindex_to_value))
   for (ctype, lface_pindex_to_value) in enumerate(b.ctype_lface_pindex_to_value)
-    lface_pindex_to_r = Vector{Vector{T}}(undef,length(lface_pindex_to_value))
+    lface_pindex_to_r = Vector{Vector{ET}}(undef,length(lface_pindex_to_value))
     for (lface, pindex_to_value) in enumerate(lface_pindex_to_value)
-      pindex_to_r = Vector{T}(undef,length(pindex_to_value))
+      pindex_to_r = Vector{ET}(undef,length(pindex_to_value))
       ftype = b.glue.ctype_to_lface_to_ftype[ctype][lface]
       if ftype != Gridap.Arrays.UNSET
         for (pindex, value) in enumerate(pindex_to_value)
@@ -528,20 +565,57 @@ function Gridap.Arrays.evaluate!(
   g
 end
 
-# # Optimization for
-# #
-# #  g = lazy_map(Broadcasting(∘),cell_to_i_to_f,cell_to_h)
-# #  lazy_map(evaluate,g)
-# #
-# function Gridap.Arrays.lazy_map(
-#   ::typeof(evaluate),
-#   a::Gridap.Arrays.LazyArray{<:Fill{Broadcasting{typeof(∘)}}},
-#   x::AbstractArray{<:Gridap.Fields.VectorBlock})
+function Gridap.Fields.constant_field(a::Gridap.Fields.ArrayBlock{T,N}) where {T<:Number,N}
+  v=Array{Gridap.Fields.ConstantField{T},N}(undef,size(a))
+  for (i,e) in enumerate(a.array)
+    v[i]=Gridap.Fields.ConstantField(e)
+  end
+  Gridap.Fields.ArrayBlock(v,a.touched)
+end
 
-#   f = a.args[1]
-#   g = a.args[2]
-#   gx = lazy_map(evaluate,g,x)
+function Gridap.Arrays.return_value(
+  op::Broadcasting{<:Operation},
+  x::Gridap.Fields.ArrayBlock{<:Gridap.Fields.Field,N}...) where N
+  xi=map(a->a.array[1],x)
+  T=Gridap.Arrays.return_type(op,xi...)
+  v=Array{T,N}(undef,size(x[1]))
+  for i in eachindex(v)
+    xi=map(a->a.array[i],x)
+    v[i]=Gridap.Arrays.return_value(op,xi...)
+  end
+  Gridap.Fields.ArrayBlock(v,x[1].touched)
+end
 
-#   fx = lazy_map(evaluate,f,gx)
-#   fx
-# end
+function Gridap.Arrays.evaluate!(cache,
+  op::Broadcasting{<:Operation},
+  x::Gridap.Fields.ArrayBlock{<:Gridap.Fields.Field,N}...) where N
+  Gridap.Arrays.return_value(op,x...)
+end
+
+function Gridap.Arrays.return_cache(
+  op::Broadcasting{<:Operation},
+  x::Gridap.Fields.ArrayBlock{<:Gridap.Fields.Field,N}...) where N
+  xi=map(a->a.array[1],x)
+  T=Gridap.Arrays.return_type(op,xi...)
+  Tc=typeof(Gridap.Arrays.return_cache(op,xi...))
+  v=Array{T,N}(undef,size(x[1]))
+  vc=Array{Tc,N}(undef,size(x[1]))
+  for i in eachindex(v)
+    xi=map(a->a.array[i],x)
+    vc[i]=Gridap.Arrays.return_cache(op,xi...)
+  end
+  Gridap.Fields.ArrayBlock(v,x[1].touched), Gridap.Fields.ArrayBlock(vc,x[1].touched)
+end
+
+function Base.:(∘)(a::Gridap.Fields.VectorBlock{<:Gridap.Fields.Field},
+                b::Gridap.Fields.VectorBlock{<:Gridap.Fields.Field})
+  Gridap.Helpers.@check size(a)==size(b)
+  Gridap.Helpers.@check all(a.touched==b.touched)
+  Gridap.Helpers.@check all(a.touched)
+  T=Gridap.Arrays.return_type(∘,a.array[1],b.array[1])
+  v=Vector{T}(undef,length(a.array))
+  for i=1:length(v)
+    v[i]=a.array[i]∘b.array[i]
+  end
+  Gridap.Fields.ArrayBlock(v,a.touched)
+end
