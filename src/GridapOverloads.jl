@@ -53,16 +53,56 @@ function Gridap.Arrays.lazy_map(::typeof(evaluate),
   lazy_map(k,args...)
 end
 
-# function Gridap.Arrays.lazy_map(::typeof(evaluate),
-#   a::Gridap.Arrays.CompressedArray{<:Gridap.Fields.ArrayBlock},
-#   x::AbstractArray{<:Gridap.Fields.ArrayBlock{<:AbstractArray{<:Point}}})
+function Gridap.Arrays.lazy_map(k::typeof(evaluate),
+                                ::Type{T},
+                                b::Gridap.Arrays.CompressedArray{<:Gridap.Fields.VectorBlock},
+                                c::Fill{<:Gridap.Fields.VectorBlock}) where T
+  Gridap.Helpers.@check length(b) == length(c)
+  values_r = Vector{T}(undef,length(b.values))
+  for i=1:length(b.values)
+    values_r[i]=evaluate(k,b.values[i],c.value)
+  end
+  Gridap.Arrays.CompressedArray(values_r,b.ptrs)
+end
 
-#   args = [ lazy_map(evaluate,
-#                     _restrict_cell_array_block_to_block(a,pos),
-#                     _restrict_cell_array_block_to_block(x,pos)) for pos=1:length(a[1]) ]
-#   k = Gridap.Fields.BlockMap(length(a[1]),collect(1:length(a[1])))
-#   lazy_map(k,args...)
-# end
+function Gridap.Arrays.return_cache(
+  ::typeof(evaluate),
+  a::Gridap.Fields.VectorBlock,
+  x::Gridap.Fields.VectorBlock)
+
+   Gridap.Helpers.@check length(a.array) == length(x.array)
+   Gridap.Helpers.@check a.touched == x.touched
+   Gridap.Helpers.@check all(a.touched)
+   T=Gridap.Arrays.return_type(evaluate,a.array[1],x.array[1])
+   Tc=typeof(Gridap.Arrays.return_cache(evaluate,a.array[1],x.array[1]))
+   r=Vector{T}(undef,length(a.array))
+   rc=Vector{Tc}(undef,length(a.array))
+   rc[1]=Gridap.Arrays.return_cache(evaluate,a.array[1],x.array[1])
+   for i=2:length(a.array)
+      if a.array[i] === a.array[1]
+        rc[i]=rc[1]
+      else
+        rc[i]=Gridap.Arrays.return_cache(evaluate,a.array[i],x.array[i])
+      end
+   end
+   (Gridap.Fields.ArrayBlock(r,a.touched),Gridap.Fields.ArrayBlock(rc,a.touched))
+end
+
+function Gridap.Arrays.evaluate!(
+  cache,
+  ::typeof(evaluate),
+  a::Gridap.Fields.VectorBlock,
+  x::Gridap.Fields.VectorBlock)
+  Gridap.Helpers.@check length(a.array) == length(x.array)
+  Gridap.Helpers.@check a.touched == x.touched
+  Gridap.Helpers.@check all(a.touched)
+  (r,rc)=cache
+  Gridap.Helpers.@check length(r.array) == length(a.array)
+  for i=1:length(a.array)
+    r.array[i]=Gridap.Arrays.evaluate!(rc.array[i],evaluate,a.array[i],x.array[i])
+  end
+  r
+end
 
 function Gridap.Arrays.lazy_map(::typeof(∇),
   a::Gridap.Arrays.LazyArray{<:Fill{<:Gridap.Fields.BlockMap},
