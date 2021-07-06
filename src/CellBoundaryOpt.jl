@@ -87,7 +87,11 @@ function get_cell_normal_vector(cb::CellBoundaryOpt)
   #Fields.MemoArray(face_s_n)
 end
 
-
+function Gridap.Geometry.get_cell_map(cb::CellBoundaryOpt)
+  cell_map=get_cell_map(cb.btrian.cell_trian)
+  cell_lface_ref_map=get_cell_ref_map(cb)
+  r=lazy_map(Broadcasting(∘),cell_map,cell_lface_ref_map)
+end
 
 function _get_cell_wise_facets(cb::CellBoundaryOpt)
   model = cb.model
@@ -434,6 +438,12 @@ end
 #  g = lazy_map( linear_combination, cell_to_i_to_val,cell_to_i_to_f)
 #  lazy_map(evaluate,g,cell_to_x)
 #
+# Required for the following lines in RTH driver
+#    ∂Topt=CellBoundaryOpt(model)
+#    m=Gridap.Geometry.get_cell_ref_map(∂Topt)
+#    xopt,wopt=quadrature_points_and_weights(∂Topt,2)
+#    mx=lazy_map(evaluate,m,xopt)
+
 function Gridap.Arrays.lazy_map(
   ::typeof(evaluate), a::Gridap.Arrays.LazyArray{<:Fill{typeof(Gridap.Fields.linear_combination)}},
                       x::Gridap.Arrays.CompressedArray{<:Gridap.Fields.VectorBlock})
@@ -444,41 +454,74 @@ function Gridap.Arrays.lazy_map(
   lazy_map(Gridap.Fields.LinearCombinationMap(:),i_to_values,i_to_basis_x)
 end
 
+# function Gridap.Arrays.return_cache(
+#   ::typeof(evaluate),
+#   a::Gridap.Fields.VectorBlock,
+#   x::Gridap.Fields.VectorBlock)
+
+#    Gridap.Helpers.@check length(a.array) == length(x.array)
+#    Gridap.Helpers.@check a.touched == x.touched
+#    Gridap.Helpers.@check all(a.touched)
+#    T=Gridap.Arrays.return_type(evaluate,a.array[1],x.array[1])
+#    Tc=typeof(Gridap.Arrays.return_cache(evaluate,a.array[1],x.array[1]))
+#    r=Vector{T}(undef,length(a.array))
+#    rc=Vector{Tc}(undef,length(a.array))
+#    rc[1]=Gridap.Arrays.return_cache(evaluate,a.array[1],x.array[1])
+#    for i=2:length(a.array)
+#       if a.array[i] === a.array[1]
+#         rc[i]=rc[1]
+#       else
+#         rc[i]=Gridap.Arrays.return_cache(evaluate,a.array[i],x.array[i])
+#       end
+#    end
+#    (Gridap.Fields.ArrayBlock(r,a.touched),Gridap.Fields.ArrayBlock(rc,a.touched))
+# end
+
+# function Gridap.Arrays.evaluate!(
+#   cache,
+#   ::typeof(evaluate),
+#   a::Gridap.Fields.VectorBlock,
+#   x::Gridap.Fields.VectorBlock)
+#   Gridap.Helpers.@check length(a.array) == length(x.array)
+#   Gridap.Helpers.@check a.touched == x.touched
+#   Gridap.Helpers.@check all(a.touched)
+#   (r,rc)=cache
+#   Gridap.Helpers.@check length(r.array) == length(a.array)
+#   for i=1:length(a.array)
+#     r.array[i]=Gridap.Arrays.evaluate!(rc.array[i],evaluate,a.array[i],x.array[i])
+#   end
+#   r
+# end
+
+
 function Gridap.Arrays.return_cache(
-  ::typeof(evaluate),
-  a::Gridap.Fields.VectorBlock,
+  a::Gridap.Fields.Field,
   x::Gridap.Fields.VectorBlock)
 
-   Gridap.Helpers.@check length(a.array) == length(x.array)
-   Gridap.Helpers.@check a.touched == x.touched
-   Gridap.Helpers.@check all(a.touched)
-   T=Gridap.Arrays.return_type(evaluate,a.array[1],x.array[1])
-   Tc=typeof(Gridap.Arrays.return_cache(evaluate,a.array[1],x.array[1]))
-   r=Vector{T}(undef,length(a.array))
-   rc=Vector{Tc}(undef,length(a.array))
-   rc[1]=Gridap.Arrays.return_cache(evaluate,a.array[1],x.array[1])
-   for i=2:length(a.array)
-      if a.array[i] === a.array[1]
+   Gridap.Helpers.@check all(x.touched)
+   T=Gridap.Arrays.return_type(evaluate,a,x.array[1])
+   Tc=typeof(Gridap.Arrays.return_cache(evaluate,a,x.array[1]))
+   r=Vector{T}(undef,length(x.array))
+   rc=Vector{Tc}(undef,length(x.array))
+   rc[1]=Gridap.Arrays.return_cache(evaluate,a,x.array[1])
+   for i=2:length(x.array)
+      if x.array[i] === x.array[1]
         rc[i]=rc[1]
       else
-        rc[i]=Gridap.Arrays.return_cache(evaluate,a.array[i],x.array[i])
+        rc[i]=Gridap.Arrays.return_cache(evaluate,a,x.array[i])
       end
    end
-   (Gridap.Fields.ArrayBlock(r,a.touched),Gridap.Fields.ArrayBlock(rc,a.touched))
+   (Gridap.Fields.ArrayBlock(r,x.touched),Gridap.Fields.ArrayBlock(rc,x.touched))
 end
 
 function Gridap.Arrays.evaluate!(
   cache,
-  ::typeof(evaluate),
-  a::Gridap.Fields.VectorBlock,
+  a::Gridap.Fields.Field,
   x::Gridap.Fields.VectorBlock)
-  Gridap.Helpers.@check length(a.array) == length(x.array)
-  Gridap.Helpers.@check a.touched == x.touched
-  Gridap.Helpers.@check all(a.touched)
+  Gridap.Helpers.@check all(x.touched)
   (r,rc)=cache
-  Gridap.Helpers.@check length(r.array) == length(a.array)
-  for i=1:length(a.array)
-    r.array[i]=Gridap.Arrays.evaluate!(rc.array[i],evaluate,a.array[i],x.array[i])
+  for i=1:length(x)
+    r.array[i]=Gridap.Arrays.evaluate!(rc.array[i],evaluate,a,x.array[i])
   end
   r
 end
@@ -560,6 +603,45 @@ function Gridap.Arrays.evaluate!(
   for i in eachindex(h.array)
     if h.touched[i]
       g.array[i] = Gridap.Arrays.evaluate!(l[i],k,f.array[i],h.array[i])
+    end
+  end
+  g
+end
+
+function Gridap.Arrays.return_value(
+  k::Broadcasting{typeof(∘)},
+  f::Gridap.Fields.Field,
+  h::Gridap.Fields.ArrayBlock{<:Gridap.Fields.Field,N}) where {N}
+  evaluate(k,f,h)
+end
+
+function Gridap.Arrays.return_cache(
+  k::Broadcasting{typeof(∘)},
+  f::Gridap.Fields.Field,
+  h::Gridap.Fields.ArrayBlock{<:Gridap.Fields.Field,N}) where {N}
+  hi = Gridap.Arrays.testitem(h)
+  li = Gridap.Arrays.return_cache(k,f,hi)
+  fix = Gridap.Arrays.evaluate!(li,k,f,hi)
+  l = Array{typeof(li),N}(undef,size(h.array))
+  g = Array{typeof(fix),N}(undef,size(h.array))
+  for i in eachindex(h.array)
+    if h.touched[i]
+      l[i] = Gridap.Arrays.return_cache(k,f,h.array[i])
+    end
+  end
+  Gridap.Fields.ArrayBlock(g,h.touched),l
+end
+
+function Gridap.Arrays.evaluate!(
+  cache,
+  k::Broadcasting{typeof(∘)},
+  f::Gridap.Fields.Field,
+  h::Gridap.Fields.ArrayBlock{<:Gridap.Fields.Field,N}) where {N}
+  g,l = cache
+  Gridap.Helpers.@check g.touched == h.touched
+  for i in eachindex(h.array)
+    if h.touched[i]
+      g.array[i] = Gridap.Arrays.evaluate!(l[i],k,f,h.array[i])
     end
   end
   g

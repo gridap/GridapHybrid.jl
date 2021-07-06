@@ -39,28 +39,24 @@ module CellBoundaryTests
 
    @time vh_∂Topt   = restrict_to_cell_boundary(∂Topt,vh)
    @time vh_∂Topt_x = lazy_map(evaluate,vh_∂Topt,xopt)
-
    @time vh_∂T   = restrict_to_cell_boundary(∂T,vh)
    @time vh_∂T_x = lazy_map(evaluate,vh_∂T,x)
    @test all(vh_∂Topt_x == vh_∂T_x)
 
    @time uh_∂Topt   = restrict_to_cell_boundary(∂Topt,uh)
    @time uh_∂Topt_x = lazy_map(evaluate,uh_∂Topt,xopt)
-
    @time uh_∂T   = restrict_to_cell_boundary(∂T,uh)
    @time uh_∂T_x = lazy_map(evaluate,uh_∂T,x)
    @test all(uh_∂Topt_x == uh_∂T_x)
 
    @time mh_∂Topt   = restrict_to_cell_boundary(∂Topt,mh)
    @time mh_∂Topt_x = lazy_map(evaluate,mh_∂Topt,x)
-
    @time mh_∂T   = restrict_to_cell_boundary(∂T,mh)
    @time mh_∂T_x = lazy_map(evaluate,mh_∂T,x)
    @test all(mh_∂Topt_x == mh_∂T_x)
 
    @time lh_∂Topt   = restrict_to_cell_boundary(∂Topt,lh)
    @time lh_∂Topt_x = lazy_map(evaluate,lh_∂Topt,x)
-
    @time lh_∂T   = restrict_to_cell_boundary(∂T,lh)
    @time lh_∂T_x = lazy_map(evaluate,lh_∂T,x)
    @test all(lh_∂Topt_x == lh_∂T_x)
@@ -69,11 +65,15 @@ module CellBoundaryTests
    # dΓ=Measure(∂Topt.btrian,2)
    # nfx=lazy_map(evaluate,nf,Gridap.CellData.get_data(get_cell_points(dΓ.quad)))
 
+   @time nopt=get_cell_normal_vector(∂Topt)
+   @time noptx=lazy_map(evaluate,nopt,xopt)
    @time n=get_cell_normal_vector(∂T)
    @time nx=lazy_map(evaluate,n,x)
-
-   @time nopt=get_cell_normal_vector(∂Topt)
-   @time noptx=lazy_map(evaluate,n,xopt)
-
    @test all(nx == noptx)
+
+   @time mapopt=get_cell_map(∂Topt)
+   @time mapoptx=lazy_map(evaluate,mapopt,xopt)
+   @time map=get_cell_map(∂T)
+   @time mapx=lazy_map(evaluate,map,x)
+   @test all(mapoptx == mapx)
 end
