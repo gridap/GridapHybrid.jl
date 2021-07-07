@@ -227,21 +227,21 @@ function _expand_facet_lid_fields_to_num_facets_blocks(::Gridap.FESpaces.TestBas
                       lazy_map(x->x[findfirst(x.touched)], fe_basis_restricted_to_lfacet_cell_wise)))
 end
 
-function _get_num_facets(cb::CellBoundary)
+function _get_num_facets(cb)
   model = cb.model
   p = lazy_map(Gridap.ReferenceFEs.get_polytope,get_reffes(model))
   Gridap.Helpers.@check length(p) == 1
   num_facets(p[1])
 end
 
-function _get_cell_wise_facets(cb::CellBoundary)
+function _get_cell_wise_facets(cb)
   model = cb.model
   gtopo = get_grid_topology(model)
   D     = num_cell_dims(model)
   Gridap.Geometry.get_faces(gtopo, D, D-1)
 end
 
-function _get_cells_around_facets(cb::CellBoundary)
+function _get_cells_around_facets(cb)
   model = cb.model
   gtopo = get_grid_topology(model)
   D     = num_cell_dims(model)
@@ -328,9 +328,9 @@ end
 #    the array is already restricted to each block in the a.args member variable.
 
 #∫( mh*(uh⋅n) )*dK
-function integrate_mh_mult_uh_cdot_n_low_level(cb::CellBoundary,
+function integrate_mh_mult_uh_cdot_n_low_level(cb,
   mh,
-  uh::Gridap.Arrays.LazyArray{<:Fill{<:Gridap.Fields.BlockMap}},
+  uh,
   x::AbstractArray{<:Gridap.Fields.ArrayBlock{<:AbstractArray{<:Point}}},
   w::AbstractArray{<:Gridap.Fields.ArrayBlock{<:AbstractVector}})
 
@@ -365,9 +365,9 @@ end
 
 #∫( (vh⋅n)*lh )*dK
 function integrate_vh_cdot_n_mult_lh_low_level(
-  cb::CellBoundary,
-  vh::Gridap.Arrays.LazyArray{<:Fill{<:Gridap.Fields.BlockMap}},
-  lh::Gridap.Arrays.LazyArray{<:Fill{<:Gridap.Fields.BlockMap}},
+  cb,
+  vh,
+  lh,
   x::AbstractArray{<:Gridap.Fields.ArrayBlock{<:AbstractArray{<:Point}}},
   w::AbstractArray{<:Gridap.Fields.ArrayBlock{<:AbstractVector}})
 
@@ -505,7 +505,7 @@ function _set_up_integrate_block(intq,w,jq,block)
            _restrict_cell_array_block_to_block(jq,block))
 end
 
-function restrict_facet_dof_ids_to_cell_boundary(cb::CellBoundary,facet_dof_ids)
+function restrict_facet_dof_ids_to_cell_boundary(cb,facet_dof_ids)
   cell_wise_facets = _get_cell_wise_facets(cb)
   num_cell_facets = _get_num_facets(cb)
 
@@ -523,7 +523,7 @@ function restrict_facet_dof_ids_to_cell_boundary(cb::CellBoundary,facet_dof_ids)
 end
 
 
-function _generate_glue_among_facet_and_cell_wise_dofs_arrays(cb::CellBoundary,facet_dof_ids)
+function _generate_glue_among_facet_and_cell_wise_dofs_arrays(cb,facet_dof_ids)
   cells_around_facets=_get_cells_around_facets(cb)
   c1=array_cache(cells_around_facets)
   cell_wise_facets=_get_cell_wise_facets(cb)
@@ -575,7 +575,7 @@ end
 
 
 function convert_cell_wise_dofs_array_to_facet_dofs_array(
-       cb::CellBoundary,
+       cb,
        cell_dofs_array::AbstractVector{<:AbstractVector},
        facet_dof_ids)
   glue = _generate_glue_among_facet_and_cell_wise_dofs_arrays(cb,facet_dof_ids)

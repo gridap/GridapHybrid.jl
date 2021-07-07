@@ -5,8 +5,8 @@
 
 # TO-THINK: is this reasonable from an efficiency point of view?
 function _restrict_cell_array_block_to_block(x,block)
-  @assert false
-  #lazy_map(i->i[block],x)
+  #@assert false
+  lazy_map(i->i[block],x)
 end
 
 function _restrict_cell_array_block_to_block(

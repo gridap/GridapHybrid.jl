@@ -7,17 +7,21 @@ struct CellBoundaryCompressedVector{T,G<:Gridap.Geometry.FaceToCellGlue} <: Abst
   glue::G
 end
 
+function _compressed_vector_from_glue(::Type{T}, glue) where T
+  ctype_to_vector_block=
+    Vector{Gridap.Fields.VectorBlock{T}}(undef,length(glue.ctype_to_lface_to_ftype))
+  for ctype=1:length(glue.ctype_to_lface_to_ftype)
+     num_facets=length(glue.ctype_to_lface_to_ftype[ctype])
+     v=Vector{T}(undef,num_facets)
+     t=Vector{Bool}(undef,num_facets)
+     t.=true
+     ctype_to_vector_block[ctype]=Gridap.Fields.ArrayBlock(v,t)
+  end
+  Gridap.Arrays.CompressedArray(ctype_to_vector_block, glue.cell_to_ctype)
+end
+
 function Gridap.Arrays.array_cache(a::CellBoundaryCompressedVector{T}) where {T}
-   ctype_to_vector_block=
-     Vector{Gridap.Fields.VectorBlock{T}}(undef,length(a.glue.ctype_to_lface_to_ftype))
-   for ctype=1:length(a.glue.ctype_to_lface_to_ftype)
-      num_facets=length(a.glue.ctype_to_lface_to_ftype[ctype])
-      v=Vector{T}(undef,num_facets)
-      t=Vector{Bool}(undef,num_facets)
-      t.=true
-      ctype_to_vector_block[ctype]=Gridap.Fields.ArrayBlock(v,t)
-   end
-   Gridap.Arrays.CompressedArray(ctype_to_vector_block,a.glue.cell_to_ctype)
+   _compressed_vector_from_glue(T,a.glue)
 end
 
 function Base.getindex(a::CellBoundaryCompressedVector,cell::Integer)
@@ -39,6 +43,46 @@ end
 Base.size(a::CellBoundaryCompressedVector) = (length(a.glue.cell_to_ctype),)
 
 Base.IndexStyle(::Type{<:CellBoundaryCompressedVector}) = IndexLinear()
+
+struct CellBoundaryVectorFromFacetVector{T} <: AbstractVector{Gridap.Fields.VectorBlock{T}}
+  glue
+  cell_wise_facets_ids
+  facet_vector::AbstractVector{T}
+end
+
+Base.size(a::CellBoundaryVectorFromFacetVector) = (length(a.glue.cell_to_ctype),)
+
+Base.IndexStyle(::Type{<:CellBoundaryVectorFromFacetVector}) = IndexLinear()
+
+function Gridap.Arrays.array_cache(a::CellBoundaryVectorFromFacetVector{T}) where T
+   fvc=array_cache(a.facet_vector)
+   cwfc=array_cache(a.cell_wise_facets_ids)
+   vbc=_compressed_vector_from_glue(T,a.glue)
+   fvc=_compressed_vector_from_glue(typeof(fvc),a.glue)
+   for ctype=1:length(a.glue.ctype_to_lface_to_ftype)
+    num_facets=length(a.glue.ctype_to_lface_to_ftype[ctype])
+    for lface=1:num_facets
+      fvc.values[ctype][lface]=array_cache(a.facet_vector)
+    end
+  end
+   fvc,cwfc,vbc
+end
+
+function Gridap.Arrays.getindex!(cache,a::CellBoundaryVectorFromFacetVector,cell::Integer)
+  fvc,cwfc,vbc=cache
+  vb=vbc[cell]
+  cwf=getindex!(cwfc,a.cell_wise_facets_ids,cell)
+  for (lfacet,gfacet) in enumerate(cwf)
+    fv=getindex!(fvc[cell][lfacet],a.facet_vector,gfacet)
+    vb.array[lfacet]=fv
+  end
+  vb
+end
+
+function Base.getindex(a::CellBoundaryVectorFromFacetVector,cell::Integer)
+  c=array_cache(a)
+  Gridap.Arrays.getindex!(c,a,cell)
+end
 
 struct CellBoundaryOpt{M<:DiscreteModel,TBT<:Triangulation}
   model::M
@@ -88,9 +132,13 @@ function get_cell_normal_vector(cb::CellBoundaryOpt)
 end
 
 function Gridap.Geometry.get_cell_map(cb::CellBoundaryOpt)
-  cell_map=get_cell_map(cb.btrian.cell_trian)
-  cell_lface_ref_map=get_cell_ref_map(cb)
-  r=lazy_map(Broadcasting(∘),cell_map,cell_lface_ref_map)
+  facet_map=get_cell_map(cb.btrian)
+  CellBoundaryVectorFromFacetVector(cb.btrian.glue,
+                                    _get_cell_wise_facets(cb),
+                                    facet_map)
+  # cell_map=get_cell_map(cb.btrian.cell_trian)
+  # cell_lface_ref_map=get_cell_ref_map(cb)
+  # r=lazy_map(Broadcasting(∘),cell_map,cell_lface_ref_map)
 end
 
 function _get_cell_wise_facets(cb::CellBoundaryOpt)
@@ -149,7 +197,6 @@ function transform_face_to_cell_lface_expanded_array(
     v[i]=evaluate(transpose,face_array.args[1].values[i])
   end
   face_array_compressed=Gridap.Arrays.CompressedArray(v,face_array.args[1].ptrs)
-  #face_array_fill = Fill(evaluate(transpose,face_array.args[1].value),length(face_array))
   transform_face_to_cell_lface_expanded_array(glue,face_array_compressed)
 end
 
@@ -313,7 +360,7 @@ function Gridap.Arrays.lazy_map(
   k::typeof(Gridap.Arrays.evaluate),
   ::Type{T},
   a::Fill,
-  b::CellBoundaryCompressedVector) where T
+  b::CellBoundaryCompressedVector{<:AbstractArray{<:Point}}) where T
   ET=eltype(T)
   Gridap.Helpers.@check length(a) == length(b)
   ctype_lface_pindex_to_r = Vector{Vector{Vector{ET}}}(undef,length(b.ctype_lface_pindex_to_value))
@@ -414,6 +461,54 @@ end
 #   CellBoundaryCompressedVector(ctype_lface_pindex_to_r,b.glue)
 # end
 
+function Gridap.Arrays.lazy_map(
+  k::typeof(evaluate),
+  ::Type{T},
+  b::CellBoundaryVectorFromFacetVector,
+  a::Gridap.Arrays.CompressedArray{<:Gridap.Fields.VectorBlock}) where T
+  Gridap.Helpers.@check length(a) == length(b)
+  af=_cell_lfacet_vector_to_facet_vector(b.glue,a)
+  bf=b.facet_vector
+  bfx=lazy_map(evaluate,bf,af)
+  CellBoundaryVectorFromFacetVector(b.glue,b.cell_wise_facets_ids,bfx)
+end
+
+function _cell_lfacet_vector_to_facet_vector(
+      glue,
+      cell_lface::Gridap.Arrays.CompressedArray{<:Gridap.Fields.VectorBlock{T}}) where T
+  nftypes=_count_ftypes(glue,cell_lface)
+  values=Vector{T}(undef,nftypes)
+  for ctype in eachindex(cell_lface.values)
+    for lface=1:length(cell_lface.values[ctype])
+      ftype = glue.ctype_to_lface_to_ftype[ctype][lface]
+      values[ftype]=cell_lface.values[ctype][lface]
+    end
+  end
+  Gridap.Arrays.CompressedArray(values,glue.face_to_ftype)
+end
+
+function _count_ftypes(glue,cell_lface::Gridap.Arrays.CompressedArray)
+  touched=Dict{Int,Bool}()
+  c=0
+  for ctype in eachindex(cell_lface.values)
+      for lface=1:length(cell_lface.values[ctype])
+        ftype = glue.ctype_to_lface_to_ftype[ctype][lface]
+        if ! haskey(touched,ftype)
+            touched[ftype]=true
+            c=c+1
+         end
+      end
+  end
+  c
+end
+
+function Gridap.Arrays.lazy_map(
+  ::typeof(∇),
+  b::CellBoundaryVectorFromFacetVector)
+  ∇bf=lazy_map(∇,b.facet_vector)
+  CellBoundaryVectorFromFacetVector(b.glue,b.cell_wise_facets_ids,∇bf)
+end
+
 function quadrature_points_and_weights(cb::CellBoundaryOpt, degree::Integer)
   model = cb.model
   D = num_cell_dims(model)
@@ -454,44 +549,44 @@ function Gridap.Arrays.lazy_map(
   lazy_map(Gridap.Fields.LinearCombinationMap(:),i_to_values,i_to_basis_x)
 end
 
-# function Gridap.Arrays.return_cache(
-#   ::typeof(evaluate),
-#   a::Gridap.Fields.VectorBlock,
-#   x::Gridap.Fields.VectorBlock)
+function Gridap.Arrays.return_cache(
+  #::typeof(evaluate),
+  a::Gridap.Fields.VectorBlock,
+  x::Gridap.Fields.VectorBlock)
 
-#    Gridap.Helpers.@check length(a.array) == length(x.array)
-#    Gridap.Helpers.@check a.touched == x.touched
-#    Gridap.Helpers.@check all(a.touched)
-#    T=Gridap.Arrays.return_type(evaluate,a.array[1],x.array[1])
-#    Tc=typeof(Gridap.Arrays.return_cache(evaluate,a.array[1],x.array[1]))
-#    r=Vector{T}(undef,length(a.array))
-#    rc=Vector{Tc}(undef,length(a.array))
-#    rc[1]=Gridap.Arrays.return_cache(evaluate,a.array[1],x.array[1])
-#    for i=2:length(a.array)
-#       if a.array[i] === a.array[1]
-#         rc[i]=rc[1]
-#       else
-#         rc[i]=Gridap.Arrays.return_cache(evaluate,a.array[i],x.array[i])
-#       end
-#    end
-#    (Gridap.Fields.ArrayBlock(r,a.touched),Gridap.Fields.ArrayBlock(rc,a.touched))
-# end
+   Gridap.Helpers.@check length(a.array) == length(x.array)
+   Gridap.Helpers.@check a.touched == x.touched
+   Gridap.Helpers.@check all(a.touched)
+   T=Gridap.Arrays.return_type(evaluate,a.array[1],x.array[1])
+   Tc=typeof(Gridap.Arrays.return_cache(evaluate,a.array[1],x.array[1]))
+   r=Vector{T}(undef,length(a.array))
+   rc=Vector{Tc}(undef,length(a.array))
+   rc[1]=Gridap.Arrays.return_cache(evaluate,a.array[1],x.array[1])
+   for i=2:length(a.array)
+      if a.array[i] === a.array[1]
+        rc[i]=rc[1]
+      else
+        rc[i]=Gridap.Arrays.return_cache(evaluate,a.array[i],x.array[i])
+      end
+   end
+   (Gridap.Fields.ArrayBlock(r,a.touched),Gridap.Fields.ArrayBlock(rc,a.touched))
+end
 
-# function Gridap.Arrays.evaluate!(
-#   cache,
-#   ::typeof(evaluate),
-#   a::Gridap.Fields.VectorBlock,
-#   x::Gridap.Fields.VectorBlock)
-#   Gridap.Helpers.@check length(a.array) == length(x.array)
-#   Gridap.Helpers.@check a.touched == x.touched
-#   Gridap.Helpers.@check all(a.touched)
-#   (r,rc)=cache
-#   Gridap.Helpers.@check length(r.array) == length(a.array)
-#   for i=1:length(a.array)
-#     r.array[i]=Gridap.Arrays.evaluate!(rc.array[i],evaluate,a.array[i],x.array[i])
-#   end
-#   r
-# end
+function Gridap.Arrays.evaluate!(
+  cache,
+  #::typeof(evaluate),
+  a::Gridap.Fields.VectorBlock,
+  x::Gridap.Fields.VectorBlock)
+  Gridap.Helpers.@check length(a.array) == length(x.array)
+  Gridap.Helpers.@check a.touched == x.touched
+  Gridap.Helpers.@check all(a.touched)
+  (r,rc)=cache
+  Gridap.Helpers.@check length(r.array) == length(a.array)
+  for i=1:length(a.array)
+    r.array[i]=Gridap.Arrays.evaluate!(rc.array[i],evaluate,a.array[i],x.array[i])
+  end
+  r
+end
 
 
 function Gridap.Arrays.return_cache(
