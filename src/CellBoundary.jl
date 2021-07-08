@@ -348,11 +348,11 @@ function integrate_mh_mult_uh_cdot_n_low_level(cb,
   j=lazy_map(∇,get_cell_map(cb))
   jx=lazy_map(evaluate,j,x)
 
-  sum_facets=_sum_facets(cb,mhx_mult_uhx_cdot_nx,jx,w)
+  sum_facets=_sum_facets(cb,mhx_mult_uhx_cdot_nx,w,jx)
   lazy_map(DensifyInnerMostBlockLevelMap(),sum_facets)
 end
 
-function _sum_facets(cb,vx,jx,w)
+function _sum_facets(cb::CellBoundary,vx,w,jx)
  result=lazy_map(Broadcasting(+),
                  _set_up_integrate_block(vx,w,jx,1),
                  _set_up_integrate_block(vx,w,jx,2))
@@ -385,7 +385,7 @@ function integrate_vh_cdot_n_mult_lh_low_level(
   j=lazy_map(∇,get_cell_map(cb))
   jx=lazy_map(evaluate,j,x)
 
-  lazy_map(DensifyInnerMostBlockLevelMap(),_sum_facets(cb,vhx_cdot_nx_mult_lhx,jx,w))
+  lazy_map(DensifyInnerMostBlockLevelMap(),_sum_facets(cb,vhx_cdot_nx_mult_lhx,w,jx))
 end
 
 # ∫(qh*(uh⋅n+τ*(ph-lh)*n⋅no))*d∂K
@@ -433,11 +433,11 @@ function integrate_qh_mult_uh_cdot_n_plus_stab_low_level(
   jx=lazy_map(evaluate,j,x)
 
   arg1=lazy_map(Broadcasting(+),
-                _sum_facets(cb,qhx_mult_uhx_cdot_nx,jx,w),
-                _sum_facets(cb,qhx_mult_τx_mult_phx_mult_n_cdot_no,jx,w))
+                _sum_facets(cb,qhx_mult_uhx_cdot_nx,w,jx),
+                _sum_facets(cb,qhx_mult_τx_mult_phx_mult_n_cdot_no,w,jx))
 
   arg2=lazy_map(DensifyInnerMostBlockLevelMap(),
-                _sum_facets(cb,qhx_mult_τx_mult_lhx_mult_n_cdot_no,jx,w))
+                _sum_facets(cb,qhx_mult_τx_mult_lhx_mult_n_cdot_no,w,jx))
 
   lazy_map(Broadcasting(-),arg1,arg2)
 end
@@ -488,11 +488,11 @@ function integrate_mh_mult_uh_cdot_n_plus_stab_low_level(
   jx=lazy_map(evaluate,j,x)
 
   arg1=lazy_map(DensifyInnerMostBlockLevelMap(),
-               _sum_facets(cb,mhx_mult_uhx_cdot_nx,jx,w))
+               _sum_facets(cb,mhx_mult_uhx_cdot_nx,w,jx))
   arg2=lazy_map(DensifyInnerMostBlockLevelMap(),
-               _sum_facets(cb,mhx_mult_τx_mult_phx_mult_n_cdot_no,jx,w))
+               _sum_facets(cb,mhx_mult_τx_mult_phx_mult_n_cdot_no,w,jx))
   arg3=lazy_map(DensifyInnerMostBlockLevelMap(),
-               _sum_facets(cb,mhx_mult_τx_mult_lhx_mult_n_cdot_no,jx,w))
+               _sum_facets(cb,mhx_mult_τx_mult_lhx_mult_n_cdot_no,w,jx))
 
   result=lazy_map(Broadcasting(+),arg1,arg2)
   result=lazy_map(Broadcasting(-),result,arg3)

@@ -265,30 +265,31 @@ domain = (0,1,0,1)
 partition = (2,2)
 order = 0
 model = CartesianDiscreteModel(domain,partition)
-# ∂T = CellBoundary(model)
-# print("solve_darcy_rt_hdiv ")
+print("solve_darcy_rt_hdiv ")
 @time sol_conforming=solve_darcy_rt_hdiv(model,order)
-# print("solve_darcy_hybrid_rt 1")
-# @time sol_nonconforming=solve_darcy_hybrid_rt(model,∂T,order)
-# print("solve_darcy_hybrid_rt 2")
-# @time sol_nonconforming=solve_darcy_hybrid_rt(model,∂T,order)
-# print("solve_darcy_hybrid_rt 3")
-# @time sol_nonconforming=solve_darcy_hybrid_rt(model,∂T,order)
 
 ∂Topt = CellBoundaryOpt(model)
 print("solve_darcy_hybrid_rt_opt 1")
+@time sol_nonconforming=solve_darcy_hybrid_rt(model,∂Topt,order)
+print("solve_darcy_hybrid_rt_opt 2")
+@time sol_nonconforming=solve_darcy_hybrid_rt(model,∂Topt,order)
+print("solve_darcy_hybrid_rt_opt 3")
 @time sol_nonconforming=solve_darcy_hybrid_rt(model,∂Topt,order)
 
 trian = Triangulation(model)
 degree = 2*(order+1)
 dΩ = Measure(trian,degree)
-uhc,_=sol_conforming
-uhnc,_,_=sol_nonconforming
-@test sqrt(sum(∫((uhc-uhnc)⋅(uhc-uhnc))dΩ)) < 1.0e-12
 
 ∂T = CellBoundary(model)
 print("solve_darcy_hybrid_rt 1")
 @time sol_nonconforming=solve_darcy_hybrid_rt(model,∂T,order)
+print("solve_darcy_hybrid_rt 2")
+@time sol_nonconforming=solve_darcy_hybrid_rt(model,∂T,order)
+print("solve_darcy_hybrid_rt 3")
+@time sol_nonconforming=solve_darcy_hybrid_rt(model,∂T,order)
 
+uhc,_=sol_conforming
+uhnc,_,_=sol_nonconforming
+@test sqrt(sum(∫((uhc-uhnc)⋅(uhc-uhnc))dΩ)) < 1.0e-12
 
 end # module

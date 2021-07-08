@@ -1,4 +1,4 @@
-#module CellBoundaryTests
+module CellBoundaryTests
    using Test
    using Gridap
    using ExploringGridapHybridization
@@ -94,8 +94,26 @@
 
    @test all(opt_mhx_mult_uhx_cdot_nx == mhx_mult_uhx_cdot_nx)
 
-   @time ExploringGridapHybridization._sum_facets(∂T,mhx_mult_uhx_cdot_nx,mapgradx,w)
-   @time ExploringGridapHybridization._sum_facets(∂Topt,opt_mhx_mult_uhx_cdot_nx,mapoptgradx,wopt)
+   @time oldsum=ExploringGridapHybridization._sum_facets(
+     ∂T,
+     mhx_mult_uhx_cdot_nx,
+     w,
+     mapgradx)
+   @time oldsum_opt=ExploringGridapHybridization._sum_facets(
+     ∂Topt,
+     opt_mhx_mult_uhx_cdot_nx,
+     wopt,
+     mapoptgradx)
+
+   @test all(oldsum == oldsum_opt)
+
+   @time newsum_opt=ExploringGridapHybridization._sum_facets_opt(
+     ∂Topt,
+     opt_mhx_mult_uhx_cdot_nx,
+     wopt,
+     mapoptgradx)
+
+   @test all(oldsum == newsum_opt)
 
 
    #print_op_tree(mapopt)
@@ -106,4 +124,4 @@
    #print_op_tree(lazy_map(∇,fmapf))
    #print_op_tree(lazy_map(∇,fmapf))
    #x=lazy_map(Broadcasting(∇),mapopt)
-#end
+end

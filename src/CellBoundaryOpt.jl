@@ -796,3 +796,90 @@ function Base.:(∘)(a::Gridap.Fields.VectorBlock{<:Gridap.Fields.Field},
   end
   Gridap.Fields.ArrayBlock(v,a.touched)
 end
+
+function Gridap.Arrays.return_cache(
+  k::Gridap.Fields.IntegrationMap,
+  aq::Gridap.Fields.VectorBlock{A},
+  w::Gridap.Fields.VectorBlock{B},
+  jq::Gridap.Fields.VectorBlock{C}) where{A,B,C}
+  Gridap.Helpers.@check length(aq)==length(w)
+  Gridap.Helpers.@check length(w)==length(jq)
+  Gridap.Helpers.@check all(aq.touched)
+  Gridap.Helpers.@check all(w.touched)
+  Gridap.Helpers.@check all(jq.touched)
+  aqi = Gridap.Arrays.testvalue(A)
+  wi  = Gridap.Arrays.testvalue(B)
+  jqi = Gridap.Arrays.testvalue(C)
+  ci = Gridap.Arrays.return_cache(k,aqi,wi,jqi)
+  hi = Gridap.Arrays.evaluate!(ci,k,aqi,wi,jqi)
+  a = Vector{typeof(hi)}(undef,size(aq.array))
+  b = Vector{typeof(ci)}(undef,size(aq.array))
+  for i in eachindex(aq.array)
+    b[i] = Gridap.Arrays.return_cache(k,
+                        aq.array[i],
+                        w.array[i],
+                        jq.array[i])
+  end
+  Gridap.Fields.ArrayBlock(a,aq.touched), b
+end
+
+function Gridap.Arrays.evaluate!(
+  cache,
+  k::Gridap.Fields.IntegrationMap,
+  aq::Gridap.Fields.VectorBlock,
+  w::Gridap.Fields.VectorBlock,
+  jq::Gridap.Fields.VectorBlock)
+  Gridap.Helpers.@check length(aq)==length(w)
+  Gridap.Helpers.@check length(w)==length(jq)
+  Gridap.Helpers.@check all(aq.touched)
+  Gridap.Helpers.@check all(w.touched)
+  Gridap.Helpers.@check all(jq.touched)
+  a,b = cache
+  # TO-DO: variable number of faces per cell boundary
+  Gridap.Helpers.@check length(a)==length(aq)
+  for i in eachindex(aq.array)
+    a.array[i] = evaluate!(b[i],
+                           k,
+                           aq.array[i],
+                           w.array[i],
+                           jq.array[i])
+  end
+  a
+end
+
+struct SumFacetsMap <: Gridap.Fields.Map end
+
+function _sum_facets(cb::CellBoundaryOpt,vx,w,jx)
+   int=lazy_map(Gridap.Fields.IntegrationMap(),vx,w,jx)
+   lazy_map(SumFacetsMap(),int)
+end
+
+function Gridap.Arrays.return_cache(
+  k::SumFacetsMap,
+  a::Gridap.Fields.VectorBlock)
+  Gridap.Helpers.@check all(a.touched)
+  v=Vector{Any}(undef,length(a.array)-1)
+  m=Gridap.Fields.BroadcastingFieldOpMap(+)
+  v[1]=Gridap.Arrays.return_cache(m,
+                               a.array[1],
+                               a.array[2])
+  res=Gridap.Arrays.evaluate!(v[1],m,a.array[1],a.array[2])
+  for i=3:length(a.array)
+    v[i-1]=Gridap.Arrays.return_cache(m,res,a.array[i])
+    res=Gridap.Arrays.evaluate!(v[i-1],m,res,a.array[i])
+  end
+  v
+end
+
+function Gridap.Arrays.evaluate!(
+  cache,
+  k::SumFacetsMap,
+  a::Gridap.Fields.VectorBlock{A}) where{A}
+  m=Gridap.Fields.BroadcastingFieldOpMap(+)
+  Gridap.Helpers.@check all(a.touched)
+  res=Gridap.Arrays.evaluate!(cache[1],m,a.array[1],a.array[2])
+  for i=3:length(a.array)
+    res=Gridap.Arrays.evaluate!(cache[i-1],m,res,a.array[i])
+  end
+  res
+end
