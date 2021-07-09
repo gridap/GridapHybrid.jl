@@ -1,4 +1,4 @@
-module CellBoundaryTests
+#module CellBoundaryTests
    using Test
    using Gridap
    using ExploringGridapHybridization
@@ -63,9 +63,17 @@ module CellBoundaryTests
 
    @time nopt=get_cell_normal_vector(∂Topt)
    @time noptx=lazy_map(evaluate,nopt,xopt)
+
    @time n=get_cell_normal_vector(∂T)
    @time nx=lazy_map(evaluate,n,x)
    @test all(nx == noptx)
+
+   println("normal owner")
+   @time nownopt=get_cell_owner_normal_vector(∂Topt)
+   @time nownoptx=lazy_map(evaluate,nownopt,xopt)
+   @time nown=get_cell_owner_normal_vector(∂T)
+   @time nownx=lazy_map(evaluate,nown,x)
+   @test all(nownx == nownoptx)
 
    @time mapopt=get_cell_map(∂Topt)
    @time mapoptx=lazy_map(evaluate,mapopt,xopt)
@@ -107,7 +115,7 @@ module CellBoundaryTests
 
    @test all(oldsum == oldsum_opt)
 
-   @time newsum_opt=ExploringGridapHybridization._sum_facets_opt(
+   @time newsum_opt=ExploringGridapHybridization._sum_facets(
      ∂Topt,
      opt_mhx_mult_uhx_cdot_nx,
      wopt,
@@ -124,4 +132,4 @@ module CellBoundaryTests
    #print_op_tree(lazy_map(∇,fmapf))
    #print_op_tree(lazy_map(∇,fmapf))
    #x=lazy_map(Broadcasting(∇),mapopt)
-end
+# end

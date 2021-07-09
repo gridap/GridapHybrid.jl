@@ -2,6 +2,7 @@ using Gridap
 using FillArrays
 using Gridap.Geometry
 
+
 struct CellBoundaryCompressedVector{T,G<:Gridap.Geometry.FaceToCellGlue} <: AbstractVector{Gridap.Fields.VectorBlock{T}}
   ctype_lface_pindex_to_value::Vector{Vector{Vector{T}}}
   glue::G
@@ -87,21 +88,57 @@ end
 struct CellBoundaryOpt{M<:DiscreteModel,TBT<:Triangulation}
   model::M
   btrian::TBT
+  sign_flip
   function CellBoundaryOpt(model::M) where M<:DiscreteModel
     face_to_bgface = collect(1:num_facets(model))
     btrian=BoundaryTriangulation(model,
                               face_to_bgface,
                               Fill(Int8(1),num_facets(model)))
     TBT=typeof(btrian)
-    new{M,TBT}(model,btrian)
+    # TO-DO: here I am reusing the machinery for global RT FE spaces.
+    #        Sure there is a way to decouple this from global RT FE spaces.
+    function _get_sign_flip(model)
+      basis,reffe_args,reffe_kwargs = ReferenceFE(raviart_thomas,Float64,0)
+      cell_reffe = ReferenceFE(model,basis,reffe_args...;reffe_kwargs...)
+      Gridap.FESpaces.get_sign_flip(model,cell_reffe)
+    end
+    new{M,TBT}(model,btrian,_get_sign_flip(model))
   end
 end
 
-function get_cell_normal_vector(cb::CellBoundaryOpt)
 
+struct CellBoundaryOwnerNref{T,G} <: AbstractVector{Gridap.Fields.VectorBlock{T}}
+    cell_boundary_nref::CellBoundaryCompressedVector{T,G}
+    sign_flip
+end
+
+function Gridap.Arrays.array_cache(a::CellBoundaryOwnerNref{T}) where {T}
+  array_cache(a.cell_boundary_nref),array_cache(a.sign_flip)
+end
+
+function Base.getindex(a::CellBoundaryOwnerNref,cell::Integer)
+ c=array_cache(a)
+ Gridap.Arrays.getindex!(c,a,cell)
+end
+
+function Gridap.Arrays.getindex!(cache,a::CellBoundaryOwnerNref,cell::Integer)
+  cnref,csf=cache
+  nref=getindex!(cnref,a.cell_boundary_nref,cell)
+  sf=getindex!(csf,a.sign_flip,cell)
+  for i in eachindex(nref.array)
+    if sf[i]
+      nref.array[i]=-nref.array[i]
+    end
+  end
+  nref
+end
+
+Base.size(a::CellBoundaryOwnerNref) = size(a.cell_boundary_nref)
+Base.IndexStyle(::Type{<:CellBoundaryOwnerNref}) = IndexLinear()
+
+function _cell_lface_to_nref(cb::CellBoundaryOpt)
   glue = cb.btrian.glue
   cell_trian = cb.btrian.cell_trian
-
   ## Reference normal
   function f(r)
     p = Gridap.ReferenceFEs.get_polytope(r)
@@ -112,7 +149,27 @@ function get_cell_normal_vector(cb::CellBoundaryOpt)
     lface_pindex_to_n
   end
   ctype_lface_pindex_to_nref = map(f, get_reffes(cell_trian))
-  cell_lface_to_nref = CellBoundaryCompressedVector(ctype_lface_pindex_to_nref,glue)
+  CellBoundaryCompressedVector(ctype_lface_pindex_to_nref,glue)
+end
+
+function _cell_lface_to_owner_nref(cb::CellBoundaryOpt)
+  cell_lface_to_nref=_cell_lface_to_nref(cb)
+  CellBoundaryOwnerNref(cell_lface_to_nref,cb.sign_flip)
+end
+
+function get_cell_normal_vector(cb::CellBoundaryOpt)
+  _get_cell_normal_vector(cb,_cell_lface_to_nref)
+end
+
+function get_cell_owner_normal_vector(cb::CellBoundaryOpt)
+  _get_cell_normal_vector(cb,_cell_lface_to_owner_nref)
+end
+
+function _get_cell_normal_vector(cb::CellBoundaryOpt,cell_lface_to_nref::Function)
+  glue = cb.btrian.glue
+  cell_trian = cb.btrian.cell_trian
+
+  cell_lface_to_nref = cell_lface_to_nref(cb)
   cell_lface_s_nref = lazy_map(Gridap.Fields.constant_field,cell_lface_to_nref)
 
   # Inverse of the Jacobian transpose
@@ -622,7 +679,7 @@ function Gridap.Arrays.evaluate!(
 end
 
 function restrict_to_cell_boundary(cb::CellBoundaryOpt,
-                                   fe_basis::Gridap.FESpaces.FEBasis)
+                                   fe_basis::Union{Gridap.FESpaces.FEBasis,Gridap.CellData.CellField})
   model = cb.model
   D = num_cell_dims(model)
   trian = get_triangulation(fe_basis)

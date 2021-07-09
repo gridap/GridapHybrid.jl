@@ -47,7 +47,7 @@ function solve_darcy_rt_hdiv(model,order)
   xh = solve(op)
 end
 
-function solve_darcy_hdg(model,order)
+function solve_darcy_hdg(model,∂T,order)
 
   # Geometry part
   D=2
@@ -133,7 +133,6 @@ function solve_darcy_hdg(model,order)
   data_mΩ=Gridap.CellData.get_contribution(dcmΩ,dΩ.quad.trian)
   data_vΩ=Gridap.CellData.get_contribution(dcvΩ,dΩ.quad.trian)
 
-  ∂T     = CellBoundary(model)
   x,w    = quadrature_points_and_weights(∂T,2)
 
   τvals      = Fill(1, num_cells(trian))# rand(num_cells(trian))
@@ -285,14 +284,36 @@ domain = (0,1,0,1)
 partition = (2,2)
 model = CartesianDiscreteModel(domain,partition)
 order = 1
+
+∂T = CellBoundary(model)
 print("solve_darcy_rt_hdiv ")
 @time sol_conforming=solve_darcy_rt_hdiv(model,order)
+
+∂Topt = CellBoundaryOpt(model)
+
+print("solve_darcy_hdg opt 1")
+@time sol_nonconforming=solve_darcy_hdg(model,∂Topt,order)
+
+print("solve_darcy_hdg opt 2")
+@time sol_nonconforming=solve_darcy_hdg(model,∂Topt,order)
+
+print("solve_darcy_hdg opt 3")
+@time sol_nonconforming=solve_darcy_hdg(model,∂Topt,order)
+
+trian = Triangulation(model)
+degree = 2*(order+1)
+dΩ = Measure(trian,degree)
+uhc,_=sol_conforming
+uhnc,_,_=sol_nonconforming
+@test sqrt(sum(∫((uhc-uhnc)⋅(uhc-uhnc))dΩ)) < 1.0e-12
+
 print("solve_darcy_hdg 1")
-@time sol_nonconforming=solve_darcy_hdg(model,order)
+@time sol_nonconforming=solve_darcy_hdg(model,∂T,order)
 print("solve_darcy_hdg 2")
-@time sol_nonconforming=solve_darcy_hdg(model,order)
+@time sol_nonconforming=solve_darcy_hdg(model,∂T,order)
 print("solve_darcy_hdg 3")
-@time sol_nonconforming=solve_darcy_hdg(model,order)
+@time sol_nonconforming=solve_darcy_hdg(model,∂T,order)
+
 trian = Triangulation(model)
 degree = 2*(order+1)
 dΩ = Measure(trian,degree)

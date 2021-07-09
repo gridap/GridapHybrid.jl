@@ -390,12 +390,12 @@ end
 
 # ∫(qh*(uh⋅n+τ*(ph-lh)*n⋅no))*d∂K
 function integrate_qh_mult_uh_cdot_n_plus_stab_low_level(
-  cb::CellBoundary,
-  qh::Gridap.Arrays.LazyArray{<:Fill{<:Gridap.Fields.BlockMap}},
-  uh::Gridap.Arrays.LazyArray{<:Fill{<:Gridap.Fields.BlockMap}},
-  τ ::Gridap.Arrays.LazyArray{<:Fill{<:Gridap.Fields.BlockMap}},
-  ph::Gridap.Arrays.LazyArray{<:Fill{<:Gridap.Fields.BlockMap}},
-  lh::Gridap.Arrays.LazyArray{<:Fill{<:Gridap.Fields.BlockMap}},
+  cb,
+  qh,
+  uh,
+  τ ,
+  ph,
+  lh,
   x::AbstractArray{<:Gridap.Fields.ArrayBlock{<:AbstractArray{<:Point}}},
   w::AbstractArray{<:Gridap.Fields.ArrayBlock{<:AbstractVector}})
 
@@ -444,12 +444,12 @@ end
 
 # ∫(mh*(uh⋅n+τ*(ph-lh)*n⋅no))*d∂K
 function integrate_mh_mult_uh_cdot_n_plus_stab_low_level(
-  cb::CellBoundary,
+  cb,
   mh,
-  uh::Gridap.Arrays.LazyArray{<:Fill{<:Gridap.Fields.BlockMap}},
-  τ::Gridap.Arrays.LazyArray{<:Fill{<:Gridap.Fields.BlockMap}},
-  ph::Gridap.Arrays.LazyArray{<:Fill{<:Gridap.Fields.BlockMap}},
-  lh::Gridap.Arrays.LazyArray{<:Fill{<:Gridap.Fields.BlockMap}},
+  uh,
+  τ,
+  ph,
+  lh,
   x::AbstractArray{<:Gridap.Fields.ArrayBlock{<:AbstractArray{<:Point}}},
   w::AbstractArray{<:Gridap.Fields.ArrayBlock{<:AbstractVector}})
 
