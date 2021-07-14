@@ -6,27 +6,55 @@ using FillArrays
 using Gridap.Geometry
 using ExploringGridapHybridization
 
-u(x) = VectorValue(1+x[1],1+x[2])
-Gridap.divergence(::typeof(u)) = (x) -> 2
+#2D problem
+u2(x) = VectorValue(1+x[1],1+x[2])
+Gridap.divergence(::typeof(u2)) = (x) -> 2
 p(x) = -3.14
-∇p(x) = VectorValue(0,0)
+∇p(x) = zero(x)
 Gridap.∇(::typeof(p)) = ∇p
-f(x) = u(x) + ∇p(x)
+f2(x) = u2(x) + ∇p(x)
 # Normal component of u(x) on Neumann boundary
-function g(x)
+function g2(x)
   tol=1.0e-14
   if (abs(x[2])<tol)
-    return -x[2] #-x[1]-x[2]
+    return -x[2]
   elseif (abs(x[2]-1.0)<tol)
-    return x[2] # x[1]+x[2]
+    return x[2]
   end
   Gridap.Helpers.@check false
 end
 
+#3D problem
+u3(x) = VectorValue(1+x[1],1+x[2],1+x[3])
+Gridap.divergence(::typeof(u3)) = (x) -> 3
+f3(x) = u3(x) + ∇p(x)
+function g3(x) # Normal component of u(x) on Neumann boundary
+  @assert false
+end
+
+function ufg(D::Int)
+   if (D==2)
+    u2,f2,g2
+   elseif (D==3)
+    u3,f3,g3
+   end
+end
+
+function dirichlet_tags(D::Int)
+  if (D==2)
+    collect(5:8)
+  elseif (D==3)
+    collect(21:26)
+  end
+end
+
 function pre_assembly_stage_rt_hdiv(model,order)
+  D=num_cell_dims(model)
+  dtags=dirichlet_tags(D)
+  u,f,_ = ufg(D)
   V = FESpace(model,
-  ReferenceFE(raviart_thomas,Float64,order),
-  conformity=:Hdiv)#,dirichlet_tags=[5,6,7,8])
+              ReferenceFE(raviart_thomas,Float64,order),
+              conformity=:Hdiv)#,dirichlet_tags=[5,6,7,8])
   Q = FESpace(model,ReferenceFE(lagrangian,Float64,order); conformity=:L2)
   U = TrialFESpace(V,u)
   P = TrialFESpace(Q)
@@ -35,8 +63,7 @@ function pre_assembly_stage_rt_hdiv(model,order)
   trian = Triangulation(model)
   degree = 2*(order+1)
   dΩ = Measure(trian,degree)
-  neumanntags = [5,6,7,8]
-  btrian = BoundaryTriangulation(model,tags=neumanntags)
+  btrian = BoundaryTriangulation(model,tags=dtags)
   dΓ = Measure(btrian,degree)
   nb = get_normal_vector(btrian)
   a((u, p),(v, q)) = ∫( u⋅v - (∇⋅v)*p + q*(∇⋅u) )*dΩ
@@ -69,8 +96,9 @@ end
 
 function preassembly_stage_darcy_hybrid_rt(model,∂T,order)
   # Geometry part
-  D=2
+  D=num_cell_dims(model)
   model_Γ = BoundaryDiscreteModel(Polytope{D-1},model,collect(1:num_facets(model)))
+  u,f,_ = ufg(D)
 
   # Functional part
   # To investigate what is needed to have an inf-sup stable triplet
@@ -80,10 +108,13 @@ function preassembly_stage_darcy_hybrid_rt(model,∂T,order)
   reffeₗ = ReferenceFE(lagrangian,Float64,order)
 
   # Compute the Dof values of Dirichlet DoFs (L2 projection)
-  M = TestFESpace(model_Γ, reffeₗ; conformity=:L2, dirichlet_tags=[9])
+  M = TestFESpace(model_Γ,
+                  reffeₗ;
+                  conformity=:L2,
+                  dirichlet_tags=num_faces(get_polytopes(model)[1]))
   L = TrialFESpace(M)
-  dirichlettags=[5,6,7,8]
-  dirichlettrian=BoundaryTriangulation(model,tags=dirichlettags)
+  dtags=dirichlet_tags(D)
+  dirichlettrian=BoundaryTriangulation(model,tags=dtags)
   degree = 2*(order+1)
   dΓd = Measure(dirichlettrian,degree)
   mh = get_fe_basis(M)
@@ -98,8 +129,10 @@ function preassembly_stage_darcy_hybrid_rt(model,∂T,order)
                                       ([data_a],[fdofsd],[fdofsd]),
                                       ([data_b],[fdofsd])))
   dirichlet_dofs=A\b
-
-  M = TestFESpace(model_Γ, reffeₗ; conformity=:L2,dirichlet_tags=[5,6,7,8])
+  M = TestFESpace(model_Γ,
+                  reffeₗ;
+                  conformity=:L2,
+                  dirichlet_tags=dtags)
   fdofsd_new=get_cell_dof_ids(M,dirichlettrian)
   L = TrialFESpace(dirichlet_dofs[-vcat(fdofsd_new...)],M)
 
@@ -247,9 +280,7 @@ function back_substitution_stage_darcy_hybrid_rt(∂T,model,model_Γ,X,Y,M,L,x,c
   uhph_dofs=get_cell_dof_ids(X,Triangulation(model))
   uhph_dofs = lazy_map(Gridap.Fields.BlockMap(2,[1,2]),uhph_dofs.args[1],uhph_dofs.args[2])
 
-  @mytime uh=lazy_map(x->x[1],uhphlhₖ) "uh=lazy_map(x->x[1],uhphlhₖ)" false
-  @mytime ph=lazy_map(x->x[2],uhphlhₖ) "ph=lazy_map(x->x[2],uhphlhₖ)" false
-  @mytime uhphₖ=lazy_map(Gridap.Fields.BlockMap(2,[1,2]),uh,ph) "uhphₖ=lazy_map(Gridap.Fields.BlockMap(2,[1,2]),uh,ph)" false
+  @mytime uhphₖ=lazy_map(RestrictArrayBlockMap([1,2]),uhphlhₖ) "uhphₖ=lazy_map(RestrictArrayBlockMap([1,2]),uhphlhₖ)" false
 
   @mytime free_dof_values=assemble_vector(assem,([lhₑ,uhphₖ],[lhₑ_dofs,uhph_dofs])) "free_dof_values=assemble_vector(assem,([lhₑ,uhphₖ],[lhₑ_dofs,uhph_dofs]))" false
   xh=FEFunction(X,free_dof_values)
@@ -270,38 +301,19 @@ function solve_darcy_hybrid_rt(model,∂T,order)
   back_substitution_stage_darcy_hybrid_rt(∂T,model,model_Γ,X,Y,M,L,x,cmat,cvec,fdofscb)
 end
 
-# domain = (0,1,0,1)
-# partition = (2,2)
-# order = 0
-# model = CartesianDiscreteModel(domain,partition)
-# print("solve_darcy_rt_hdiv ")
-# @time sol_conforming=solve_darcy_rt_hdiv(model,order)
+domain = (0,1,0,1)
+partition = (2,2)
+order = 0
+model = CartesianDiscreteModel(domain,partition)
 
-# ∂Topt = CellBoundaryOpt(model)
-# print("solve_darcy_hybrid_rt_opt 1")
-# @time sol_nonconforming=solve_darcy_hybrid_rt(model,∂Topt,order)
-# print("solve_darcy_hybrid_rt_opt 2")
-# @time sol_nonconforming=solve_darcy_hybrid_rt(model,∂Topt,order)
-# print("solve_darcy_hybrid_rt_opt 3")
-# @time sol_nonconforming=solve_darcy_hybrid_rt(model,∂Topt,order)
-
-# trian = Triangulation(model)
-# degree = 2*(order+1)
-# dΩ = Measure(trian,degree)
-# uhc,_=sol_conforming
-# uhnc,_,_=sol_nonconforming
-# @test sqrt(sum(∫((uhc-uhnc)⋅(uhc-uhnc))dΩ)) < 1.0e-12
-
-# ∂T = CellBoundary(model)
-# print("solve_darcy_hybrid_rt 1")
-# @time sol_nonconforming=solve_darcy_hybrid_rt(model,∂T,order)
-# print("solve_darcy_hybrid_rt 2")
-# @time sol_nonconforming=solve_darcy_hybrid_rt(model,∂T,order)
-# print("solve_darcy_hybrid_rt 3")
-# @time sol_nonconforming=solve_darcy_hybrid_rt(model,∂T,order)
-
-# uhc,_=sol_conforming
-# uhnc,_,_=sol_nonconforming
-# @test sqrt(sum(∫((uhc-uhnc)⋅(uhc-uhnc))dΩ)) < 1.0e-12
+sol_conforming=solve_darcy_rt_hdiv(model,order)
+∂Topt = CellBoundaryOpt(model)
+sol_nonconforming=solve_darcy_hybrid_rt(model,∂Topt,order)
+trian = Triangulation(model)
+degree = 2*(order+1)
+dΩ = Measure(trian,degree)
+uhc,_=sol_conforming
+uhnc,_,_=sol_nonconforming
+@test sqrt(sum(∫((uhc-uhnc)⋅(uhc-uhnc))dΩ)) < 1.0e-12
 
 end # module

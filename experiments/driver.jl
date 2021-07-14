@@ -75,19 +75,19 @@ function solve_darcy_rt(n,k,d)
      op=DarcyRTHTests.assembly_stage_rt_hdiv(X,Y,a,b)
   end
   outputs["Solve RT [s]"] = @elapsed begin
-     sol_nonconforming=DarcyRTHTests.solve_stage_rt_hdiv(op)
+     sol_conforming=DarcyRTHTests.solve_stage_rt_hdiv(op)
   end
   outputs["Total RT [s]"]=outputs["Preassembly RT [s]"]+
                           outputs["Assembly RT [s]"]+
                           outputs["Solve RT [s]"]
 
-  sol_conforming=DarcyRTHTests.solve_darcy_rt_hdiv(model,k)
   trian = Triangulation(model)
   degree = 2*(k+1)
   dΩ = Measure(trian,degree)
   uhc,_=sol_conforming
-  uhnc,_=sol_nonconforming
-  err_norm=sqrt(sum(∫((uhc-uhnc)⋅(uhc-uhnc))dΩ))
+  D=num_cell_dims(trian)
+  u,_,_=DarcyRTHTests.ufg(D)
+  err_norm=sqrt(sum(∫((uhc-u)⋅(uhc-u))dΩ))
 
   outputs["num_cells"] = num_cells(model)
   outputs["l2_err_norm"] = err_norm

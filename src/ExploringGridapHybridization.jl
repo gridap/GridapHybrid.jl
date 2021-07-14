@@ -9,11 +9,13 @@ include("CellBoundaryOpt.jl")
 include("DensifyInnerMostBlockLevel.jl")
 include("StaticCondensationMap.jl")
 include("BackwardStaticCondensationMap.jl")
-
+include("RestrictArrayBlockMap.jl")
 
 export DensifyInnerMostBlockLevelMap
 export StaticCondensationMap
 export BackwardStaticCondensationMap
+export RestrictArrayBlockMap
+
 
 export CellBoundary
 export CellBoundaryOpt

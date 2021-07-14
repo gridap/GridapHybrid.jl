@@ -4,9 +4,10 @@ nruns = 10
 params_solve_darcy_rth = []
 
 push!(params_solve_darcy_rth,Dict(
- :n => [10,20,30,40,50,60,70,80,90,100],
+ #:n => [10,20,30,40,50,60,70,80,90,100],
+ :n => [5,10,15,20,25,30],
  :k => [0,],
- :d => [2,],
+ :d => [3,],
  :run => collect(1:nruns)
 ))
 
