@@ -45,9 +45,9 @@ Base.size(a::CellBoundaryCompressedVector) = (length(a.glue.cell_to_ctype),)
 
 Base.IndexStyle(::Type{<:CellBoundaryCompressedVector}) = IndexLinear()
 
-struct CellBoundaryVectorFromFacetVector{T} <: AbstractVector{Gridap.Fields.VectorBlock{T}}
-  glue
-  cell_wise_facets_ids
+struct CellBoundaryVectorFromFacetVector{T,G,C} <: AbstractVector{Gridap.Fields.VectorBlock{T}}
+  glue::G
+  cell_wise_facets_ids::C
   facet_vector::AbstractVector{T}
 end
 
@@ -85,10 +85,10 @@ function Base.getindex(a::CellBoundaryVectorFromFacetVector,cell::Integer)
   Gridap.Arrays.getindex!(c,a,cell)
 end
 
-struct CellBoundaryOpt{M<:DiscreteModel,TBT<:Triangulation}
+struct CellBoundaryOpt{M<:DiscreteModel,TBT<:Triangulation,SF}
   model::M
   btrian::TBT
-  sign_flip
+  sign_flip::SF
   function CellBoundaryOpt(model::M) where M<:DiscreteModel
     face_to_bgface = collect(1:num_facets(model))
     btrian=BoundaryTriangulation(model,
@@ -102,14 +102,16 @@ struct CellBoundaryOpt{M<:DiscreteModel,TBT<:Triangulation}
       cell_reffe = ReferenceFE(model,basis,reffe_args...;reffe_kwargs...)
       Gridap.FESpaces.get_sign_flip(model,cell_reffe)
     end
-    new{M,TBT}(model,btrian,_get_sign_flip(model))
+    sign_flip=_get_sign_flip(model)
+    SF=typeof(sign_flip)
+    new{M,TBT,SF}(model,btrian,sign_flip)
   end
 end
 
 
-struct CellBoundaryOwnerNref{T,G} <: AbstractVector{Gridap.Fields.VectorBlock{T}}
+struct CellBoundaryOwnerNref{T,G,SF} <: AbstractVector{Gridap.Fields.VectorBlock{T}}
     cell_boundary_nref::CellBoundaryCompressedVector{T,G}
-    sign_flip
+    sign_flip::SF
 end
 
 function Gridap.Arrays.array_cache(a::CellBoundaryOwnerNref{T}) where {T}
@@ -915,11 +917,10 @@ function Gridap.Arrays.return_cache(
   k::SumFacetsMap,
   a::Gridap.Fields.VectorBlock)
   Gridap.Helpers.@check all(a.touched)
-  v=Vector{Any}(undef,length(a.array)-1)
   m=Gridap.Fields.BroadcastingFieldOpMap(+)
-  v[1]=Gridap.Arrays.return_cache(m,
-                               a.array[1],
-                               a.array[2])
+  c=Gridap.Arrays.return_cache(m,a.array[1],a.array[2])
+  v=Vector{typeof(c)}(undef,length(a.array)-1)
+  v[1]=c
   res=Gridap.Arrays.evaluate!(v[1],m,a.array[1],a.array[2])
   for i=3:length(a.array)
     v[i-1]=Gridap.Arrays.return_cache(m,res,a.array[i])
@@ -942,8 +943,8 @@ function Gridap.Arrays.evaluate!(
 end
 
 
-struct RestrictFacetDoFsToCellBoundary <: Gridap.Fields.Map
-  facet_dofs
+struct RestrictFacetDoFsToCellBoundary{F} <: Gridap.Fields.Map
+  facet_dofs::F
 end
 
 function Gridap.Arrays.return_cache(
