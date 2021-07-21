@@ -940,3 +940,51 @@ function Gridap.Arrays.evaluate!(
   end
   res
 end
+
+
+struct RestrictFacetDoFsToCellBoundary <: Gridap.Fields.Map
+  facet_dofs
+end
+
+function Gridap.Arrays.return_cache(
+  k::RestrictFacetDoFsToCellBoundary,
+  cell_facets::AbstractArray{<:Integer})
+  array_cache(k.facet_dofs), Gridap.Arrays.CachedVector(eltype(cell_facets))
+end
+
+function Gridap.Arrays.evaluate!(
+  cache,
+  k::RestrictFacetDoFsToCellBoundary,
+  cell_facets::AbstractArray{<:Integer})
+  fdc,c=cache
+  Gridap.Arrays.setsize!(c,(_count_dofs_cell(cell_facets,k.facet_dofs,fdc),))
+  _fill_dofs_cell!(c.array,cell_facets,k.facet_dofs,fdc)
+  c.array
+end
+
+function _count_dofs_cell(cell_facets,facet_dofs,facet_dofs_cache)
+  count=0
+  for facet_id in cell_facets
+      current_facet_dofs=getindex!(facet_dofs_cache,facet_dofs,facet_id)
+      count=count+length(current_facet_dofs)
+  end
+  count
+end
+
+function _fill_dofs_cell!(cell_dofs,cell_facets,facet_dofs,facet_dofs_cache)
+  current=1
+  for facet_id in cell_facets
+      current_facet_dofs=getindex!(facet_dofs_cache,facet_dofs,facet_id)
+      for i in current_facet_dofs
+        cell_dofs[current]=i
+        current=current+1
+      end
+  end
+  current
+end
+
+function restrict_facet_dof_ids_to_cell_boundary(cb::CellBoundaryOpt,facet_dof_ids)
+  cell_wise_facets = _get_cell_wise_facets(cb)
+  m=RestrictFacetDoFsToCellBoundary(facet_dof_ids)
+  lazy_map(m,cell_wise_facets)
+end
