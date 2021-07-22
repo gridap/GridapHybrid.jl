@@ -6,7 +6,7 @@ using LinearAlgebra
 include("GridapOverloads.jl")
 include("CellBoundary.jl")
 include("CellBoundaryOpt.jl")
-include("DensifyInnerMostBlockLevel.jl")
+include("DensifyInnerMostBlockLevelMap.jl")
 include("StaticCondensationMap.jl")
 include("BackwardStaticCondensationMap.jl")
 include("RestrictArrayBlockMap.jl")
