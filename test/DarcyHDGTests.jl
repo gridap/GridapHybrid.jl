@@ -285,7 +285,6 @@ partition = (2,2)
 model = CartesianDiscreteModel(domain,partition)
 order = 1
 
-∂T = CellBoundary(model)
 print("solve_darcy_rt_hdiv ")
 @time sol_conforming=solve_darcy_rt_hdiv(model,order)
 
@@ -305,21 +304,6 @@ degree = 2*(order+1)
 dΩ = Measure(trian,degree)
 uhc,_=sol_conforming
 uhnc,_,_=sol_nonconforming
-@test sqrt(sum(∫((uhc-uhnc)⋅(uhc-uhnc))dΩ)) < 1.0e-12
-
-print("solve_darcy_hdg 1")
-@time sol_nonconforming=solve_darcy_hdg(model,∂T,order)
-print("solve_darcy_hdg 2")
-@time sol_nonconforming=solve_darcy_hdg(model,∂T,order)
-print("solve_darcy_hdg 3")
-@time sol_nonconforming=solve_darcy_hdg(model,∂T,order)
-
-trian = Triangulation(model)
-degree = 2*(order+1)
-dΩ = Measure(trian,degree)
-uhc,_=sol_conforming
-uhnc,_,_=sol_nonconforming
-
 @test sqrt(sum(∫((uhc-uhnc)⋅(uhc-uhnc))dΩ)) < 1.0e-12
 
 end # module

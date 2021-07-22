@@ -166,10 +166,18 @@ function _cell_lface_to_owner_nref(cb::CellBoundaryOpt)
   CellBoundaryOwnerNref(cell_lface_to_nref,cb.sign_flip)
 end
 
+"""
+Returns a cell-wise array which, for each cell, and each facet within the cell,
+returns the unit outward normal to the boundary of the cell.
+"""
 function get_cell_normal_vector(cb::CellBoundaryOpt)
   _get_cell_normal_vector(cb,_cell_lface_to_nref)
 end
 
+"""
+Returns a cell-wise array which, for each cell, and each facet within the cell,
+returns the unit outward normal to the boundary of the cell owner of the facet.
+"""
 function get_cell_owner_normal_vector(cb::CellBoundaryOpt)
   _get_cell_normal_vector(cb,_cell_lface_to_owner_nref)
 end
