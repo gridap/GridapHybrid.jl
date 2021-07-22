@@ -4,7 +4,7 @@ using Gridap
 using FillArrays
 using LinearAlgebra
 include("GridapOverloads.jl")
-include("CellBoundaryOpt.jl")
+include("CellBoundary.jl")
 include("DensifyInnerMostBlockLevelMap.jl")
 include("StaticCondensationMap.jl")
 include("BackwardStaticCondensationMap.jl")
