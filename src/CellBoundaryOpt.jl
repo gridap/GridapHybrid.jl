@@ -45,10 +45,18 @@ Base.size(a::CellBoundaryCompressedVector) = (length(a.glue.cell_to_ctype),)
 
 Base.IndexStyle(::Type{<:CellBoundaryCompressedVector}) = IndexLinear()
 
-struct CellBoundaryVectorFromFacetVector{T,G,C} <: AbstractVector{Gridap.Fields.VectorBlock{T}}
+struct CellBoundaryVectorFromFacetVector{T,G,C,V} <: AbstractVector{Gridap.Fields.VectorBlock{T}}
+  eltype::Type{T}
   glue::G
   cell_wise_facets_ids::C
-  facet_vector::AbstractVector{T}
+  facet_vector::V
+  function CellBoundaryVectorFromFacetVector(glue,cell_wise_facets_ids,facet_vector)
+    G=typeof(glue)
+    C=typeof(cell_wise_facets_ids)
+    V=typeof(facet_vector)
+    T=eltype(V)
+    new{T,G,C,V}(T,glue,cell_wise_facets_ids,facet_vector)
+  end
 end
 
 Base.size(a::CellBoundaryVectorFromFacetVector) = (length(a.glue.cell_to_ctype),)
