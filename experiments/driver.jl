@@ -14,15 +14,15 @@ function solve_darcy_rth(n,k,d)
     domain=(0,1,0,1,0,1); partition = (n,n,n)
   end
   model = CartesianDiscreteModel(domain,partition)
-  ∂Topt = CellBoundaryOpt(model)
+  ∂T = CellBoundary(model)
 
   outputs["Preassembly RTH [s]"] = @elapsed begin
      model_Γ,X,Y,M,L,cmat,cvec,cmat_cvec_condensed=
-     DarcyRTHTests.preassembly_stage_darcy_hybrid_rt(model,∂Topt,k)
+     DarcyRTHTests.preassembly_stage_darcy_hybrid_rt(model,∂T,k)
   end
 
   outputs["Trace assembly RTH [s]"] = @elapsed begin
-    A,b,fdofscb=DarcyRTHTests.assembly_stage_darcy_hybrid_rt(model,∂Topt,M,L,cmat_cvec_condensed)
+    A,b,fdofscb=DarcyRTHTests.assembly_stage_darcy_hybrid_rt(model,∂T,M,L,cmat_cvec_condensed)
   end
 
   outputs["Trace solve RTH [s]"] = @elapsed begin
@@ -31,7 +31,7 @@ function solve_darcy_rth(n,k,d)
 
   outputs["Back substitution RTH [s]"] = @elapsed begin
     sol_nonconforming=
-       DarcyRTHTests.back_substitution_stage_darcy_hybrid_rt(∂Topt,
+       DarcyRTHTests.back_substitution_stage_darcy_hybrid_rt(∂T,
                      model,model_Γ,X,Y,M,L,x,cmat,cvec,fdofscb)
   end
 

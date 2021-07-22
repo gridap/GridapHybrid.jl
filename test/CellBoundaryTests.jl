@@ -1,4 +1,4 @@
-#module CellBoundaryTests
+module CellBoundaryTests
    using Test
    using Gridap
    using ExploringGridapHybridization
@@ -7,10 +7,10 @@
    model = CartesianDiscreteModel(domain,partition)
    D=2
    model_Γ = Gridap.Geometry.BoundaryDiscreteModel(Polytope{D-1},model,collect(1:num_facets(model)))
-   ∂Topt=CellBoundaryOpt(model)
-   m=Gridap.Geometry.get_cell_ref_map(∂Topt)
-   xopt,wopt=quadrature_points_and_weights(∂Topt,2)
-   mx=lazy_map(evaluate,m,xopt)
+   ∂T=CellBoundary(model)
+   m=Gridap.Geometry.get_cell_ref_map(∂T)
+   x,w=quadrature_points_and_weights(∂T,2)
+   mx=lazy_map(evaluate,m,x)
 
    # Define test FESpaces
    order=0
@@ -37,99 +37,37 @@
    ∂T=CellBoundary(model)
    x,w=quadrature_points_and_weights(∂T,2)
 
-   @time vh_∂Topt   = restrict_to_cell_boundary(∂Topt,vh)
-   @time vh_∂Topt_x = lazy_map(evaluate,vh_∂Topt,xopt)
    @time vh_∂T   = restrict_to_cell_boundary(∂T,vh)
    @time vh_∂T_x = lazy_map(evaluate,vh_∂T,x)
-   @test all(vh_∂Topt_x == vh_∂T_x)
 
-   @time uh_∂Topt   = restrict_to_cell_boundary(∂Topt,uh)
-   @time uh_∂Topt_x = lazy_map(evaluate,uh_∂Topt,xopt)
    @time uh_∂T   = restrict_to_cell_boundary(∂T,uh)
    @time uh_∂T_x = lazy_map(evaluate,uh_∂T,x)
-   @test all(uh_∂Topt_x == uh_∂T_x)
 
-   @time mh_∂Topt   = restrict_to_cell_boundary(∂Topt,mh)
-   @time mh_∂Topt_x = lazy_map(evaluate,mh_∂Topt,x)
    @time mh_∂T   = restrict_to_cell_boundary(∂T,mh)
    @time mh_∂T_x = lazy_map(evaluate,mh_∂T,x)
-   @test all(mh_∂Topt_x == mh_∂T_x)
 
-   @time lh_∂Topt   = restrict_to_cell_boundary(∂Topt,lh)
-   @time lh_∂Topt_x = lazy_map(evaluate,lh_∂Topt,x)
    @time lh_∂T   = restrict_to_cell_boundary(∂T,lh)
    @time lh_∂T_x = lazy_map(evaluate,lh_∂T,x)
-   @test all(lh_∂Topt_x == lh_∂T_x)
-
-   @time nopt=get_cell_normal_vector(∂Topt)
-   @time noptx=lazy_map(evaluate,nopt,xopt)
 
    @time n=get_cell_normal_vector(∂T)
    @time nx=lazy_map(evaluate,n,x)
-   @test all(nx == noptx)
 
-   println("normal owner")
-   @time nownopt=get_cell_owner_normal_vector(∂Topt)
-   @time nownoptx=lazy_map(evaluate,nownopt,xopt)
    @time nown=get_cell_owner_normal_vector(∂T)
    @time nownx=lazy_map(evaluate,nown,x)
-   @test all(nownx == nownoptx)
 
-   @time mapopt=get_cell_map(∂Topt)
-   @time mapoptx=lazy_map(evaluate,mapopt,xopt)
    @time map=get_cell_map(∂T)
    @time mapx=lazy_map(evaluate,map,x)
-   @test all(mapoptx == mapx)
 
-   @time mapoptgrad=lazy_map(∇,mapopt)
-   @time mapoptgradx=lazy_map(evaluate,mapoptgrad,xopt)
    @time mapgrad=lazy_map(∇,map)
    @time mapgradx=lazy_map(evaluate,mapgrad,x)
-   @test all(mapoptgradx == mapgradx)
-
-   # (uh⋅n)
-   @time opt_uhx_cdot_nx=lazy_map(Gridap.Fields.BroadcastingFieldOpMap(⋅), uh_∂Topt_x, noptx)
-   @time uhx_cdot_nx=lazy_map(Gridap.Fields.BroadcastingFieldOpMap(⋅), uh_∂T_x, nx)
-   @test all(opt_uhx_cdot_nx == uhx_cdot_nx)
-
-   # mh*(uh⋅n)
-   #mhx=lazy_map(evaluate,mh,x)
-   @time opt_mhx_mult_uhx_cdot_nx = lazy_map(Gridap.Fields.BroadcastingFieldOpMap(*),
-                                   mh_∂Topt_x, opt_uhx_cdot_nx )
-
-   @time mhx_mult_uhx_cdot_nx = lazy_map(Gridap.Fields.BroadcastingFieldOpMap(*),
-                                   mh_∂T_x, uhx_cdot_nx )
-
-   @test all(opt_mhx_mult_uhx_cdot_nx == mhx_mult_uhx_cdot_nx)
-
-   @time oldsum=ExploringGridapHybridization._sum_facets(
-     ∂T,
-     mhx_mult_uhx_cdot_nx,
-     w,
-     mapgradx)
-   @time oldsum_opt=ExploringGridapHybridization._sum_facets(
-     ∂Topt,
-     opt_mhx_mult_uhx_cdot_nx,
-     wopt,
-     mapoptgradx)
-
-   @test all(oldsum == oldsum_opt)
-
-   @time newsum_opt=ExploringGridapHybridization._sum_facets(
-     ∂Topt,
-     opt_mhx_mult_uhx_cdot_nx,
-     wopt,
-     mapoptgradx)
-
-   @test all(oldsum == newsum_opt)
 
 
-   #print_op_tree(mapopt)
-   #mapf  = get_cell_map(∂Topt.btrian)
-   #fmapf = Gridap.Geometry.get_cell_ref_map(∂Topt.btrian)
+   #print_op_tree(map)
+   #mapf  = get_cell_map(∂T.btrian)
+   #fmapf = Gridap.Geometry.get_cell_ref_map(∂T.btrian)
    #print_op_tree(fmapf)
    #print_op_tree(lazy_map(Broadcasting(∇),fmapf))
    #print_op_tree(lazy_map(∇,fmapf))
    #print_op_tree(lazy_map(∇,fmapf))
-   #x=lazy_map(Broadcasting(∇),mapopt)
-# end
+   #x=lazy_map(Broadcasting(∇),map)
+end

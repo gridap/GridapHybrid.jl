@@ -288,16 +288,16 @@ order = 1
 print("solve_darcy_rt_hdiv ")
 @time sol_conforming=solve_darcy_rt_hdiv(model,order)
 
-∂Topt = CellBoundaryOpt(model)
+∂T = CellBoundary(model)
 
-print("solve_darcy_hdg opt 1")
-@time sol_nonconforming=solve_darcy_hdg(model,∂Topt,order)
+print("solve_darcy_hdg  1")
+@time sol_nonconforming=solve_darcy_hdg(model,∂T,order)
 
-print("solve_darcy_hdg opt 2")
-@time sol_nonconforming=solve_darcy_hdg(model,∂Topt,order)
+print("solve_darcy_hdg  2")
+@time sol_nonconforming=solve_darcy_hdg(model,∂T,order)
 
-print("solve_darcy_hdg opt 3")
-@time sol_nonconforming=solve_darcy_hdg(model,∂Topt,order)
+print("solve_darcy_hdg  3")
+@time sol_nonconforming=solve_darcy_hdg(model,∂T,order)
 
 trian = Triangulation(model)
 degree = 2*(order+1)

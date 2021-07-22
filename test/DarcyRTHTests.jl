@@ -307,8 +307,8 @@ order = 0
 model = CartesianDiscreteModel(domain,partition)
 
 sol_conforming=solve_darcy_rt_hdiv(model,order)
-∂Topt = CellBoundaryOpt(model)
-sol_nonconforming=solve_darcy_hybrid_rt(model,∂Topt,order)
+∂T = CellBoundary(model)
+sol_nonconforming=solve_darcy_hybrid_rt(model,∂T,order)
 trian = Triangulation(model)
 degree = 2*(order+1)
 dΩ = Measure(trian,degree)

@@ -4,7 +4,6 @@ using Gridap
 using FillArrays
 using LinearAlgebra
 include("GridapOverloads.jl")
-include("CellBoundary.jl")
 include("CellBoundaryOpt.jl")
 include("DensifyInnerMostBlockLevelMap.jl")
 include("StaticCondensationMap.jl")
@@ -18,7 +17,6 @@ export RestrictArrayBlockMap
 
 
 export CellBoundary
-export CellBoundaryOpt
 export get_cell_owner_normal_vector
 export get_cell_normal_vector
 export quadrature_points_and_weights

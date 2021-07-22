@@ -110,7 +110,7 @@ function Gridap.Arrays.lazy_map(::typeof(∇),
   _block_arrays(map(a->lazy_map(∇,a), a.args)...)
 end
 
-# I cannot implement this optimization. We end up summing MatrixBlocks of different types!!!
+# I cannot implement this imization. We end up summing MatrixBlocks of different types!!!
 # function Gridap.Arrays.lazy_map(k::Gridap.Fields.Broadcasting,
 #                                 a::Gridap.Arrays.LazyArray{<:Fill{<:DensifyInnerMostBlockLevelMap}},
 #                                 b::Gridap.Arrays.LazyArray{<:Fill{<:DensifyInnerMostBlockLevelMap}})

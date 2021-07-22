@@ -2,7 +2,7 @@ struct ReblockInteriorDofsMap <: Gridap.Fields.Map
 end
 
 
-# TO-DO: add optional keyword args to control the kind of linear system/factorization
+# TO-DO: add ional keyword args to control the kind of linear system/factorization
 # (i.e., symmetric and positive definite, symmetric indefinite, general unsymmetric, etc.)
 struct BackwardStaticCondensationMap{IFT <: AbstractVector{<:Int},
                                      BFT <: Union{AbstractVector{<:Integer},
