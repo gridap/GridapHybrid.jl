@@ -147,7 +147,9 @@ Base.IndexStyle(::Type{<:CellBoundaryOwnerNref}) = IndexLinear()
 
 function _cell_lface_to_nref(cb::CellBoundary)
   glue = cb.btrian.glue
-  cell_trian = cb.btrian.cell_trian
+  #  cell_trian = cb.btrian.trian
+  cell_trian = Triangulation(get_background_model(cb.btrian))
+
   ## Reference normal
   function f(r)
     p = Gridap.ReferenceFEs.get_polytope(r)
@@ -184,7 +186,8 @@ end
 
 function _get_cell_normal_vector(cb::CellBoundary,cell_lface_to_nref::Function)
   glue = cb.btrian.glue
-  cell_trian = cb.btrian.cell_trian
+  #  cell_trian = cb.btrian.trian
+  cell_trian = Triangulation(get_background_model(cb.btrian))
 
   cell_lface_to_nref = cell_lface_to_nref(cb)
   cell_lface_s_nref = lazy_map(Gridap.Fields.constant_field,cell_lface_to_nref)
@@ -222,7 +225,7 @@ function _get_cell_wise_facets(cb::CellBoundary)
   Gridap.Geometry.get_faces(gtopo, D, D-1)
 end
 
-function Gridap.Geometry.get_cell_ref_map(cb::CellBoundary)
+function get_cell_ref_map(cb::CellBoundary)
   cell_lface_to_q_vertex_coords = _compute_cell_lface_to_q_vertex_coords(cb)
   f(p) = Gridap.ReferenceFEs.get_shapefuns(Gridap.ReferenceFEs.LagrangianRefFE(Float64,Gridap.ReferenceFEs.get_polytope(p),1))
   ftype_to_shapefuns = map( f, Gridap.Geometry.get_reffes(cb.btrian) )
