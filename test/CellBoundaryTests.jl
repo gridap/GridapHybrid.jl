@@ -6,7 +6,7 @@ module CellBoundaryTests
    partition = (2,2)
    model = CartesianDiscreteModel(domain,partition)
    D=2
-#   model_Γ = Gridap.Geometry.BoundaryDiscreteModel(Polytope{D-1},model,collect(1:num_facets(model)))
+
    ∂T=CellBoundary(model)
    model_Γ = ∂T.btrian
 

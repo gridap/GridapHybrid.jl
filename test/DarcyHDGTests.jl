@@ -51,9 +51,8 @@ function solve_darcy_hdg(model,∂T,order)
 
   # Geometry part
   D=2
-  # model_Γ = BoundaryDiscreteModel(Polytope{D-1},model,collect(1:num_facets(model)))
-  cb = CellBoundary(model)
-  model_Γ = cb.btrian
+
+  model_Γ = ∂T.btrian
 
   # Functional part
   pol = first(get_polytopes(model))

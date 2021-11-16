@@ -97,9 +97,8 @@ end
 function preassembly_stage_darcy_hybrid_rt(model,∂T,order)
   # Geometry part
   D=num_cell_dims(model)
-  #  model_Γ = BoundaryDiscreteModel(Polytope{D-1},model,collect(1:num_facets(model)))
-  cb = CellBoundary(model)
-  model_Γ = cb.btrian
+
+  model_Γ = ∂T.btrian
   u,f,_ = ufg(D)
 
   # Functional part
