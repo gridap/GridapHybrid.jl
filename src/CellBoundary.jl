@@ -147,7 +147,8 @@ Base.IndexStyle(::Type{<:CellBoundaryOwnerNref}) = IndexLinear()
 
 function _cell_lface_to_nref(cb::CellBoundary)
   glue = cb.btrian.glue
-  cell_trian = cb.btrian.cell_trian
+  cell_grid = get_grid(get_background_model(cb.btrian))
+
   ## Reference normal
   function f(r)
     p = Gridap.ReferenceFEs.get_polytope(r)
@@ -157,7 +158,7 @@ function _cell_lface_to_nref(cb::CellBoundary)
     lface_pindex_to_n = [ fill(lface_to_n[lface],length(lface_to_pindex_to_perm[lface])) for lface in 1:nlfaces ]
     lface_pindex_to_n
   end
-  ctype_lface_pindex_to_nref = map(f, get_reffes(cell_trian))
+  ctype_lface_pindex_to_nref = map(f, get_reffes(cell_grid))
   CellBoundaryCompressedVector(ctype_lface_pindex_to_nref,glue)
 end
 
@@ -184,13 +185,13 @@ end
 
 function _get_cell_normal_vector(cb::CellBoundary,cell_lface_to_nref::Function)
   glue = cb.btrian.glue
-  cell_trian = cb.btrian.cell_trian
+  cell_grid = get_grid(get_background_model(cb.btrian))
 
   cell_lface_to_nref = cell_lface_to_nref(cb)
   cell_lface_s_nref = lazy_map(Gridap.Fields.constant_field,cell_lface_to_nref)
 
   # Inverse of the Jacobian transpose
-  cell_q_x = get_cell_map(cell_trian)
+  cell_q_x = get_cell_map(cell_grid)
   cell_q_Jt = lazy_map(∇,cell_q_x)
   cell_q_invJt = lazy_map(Operation(Gridap.Fields.pinvJt),cell_q_Jt)
   cell_lface_q_invJt = transform_cell_to_cell_lface_array(glue, cell_q_invJt)
@@ -222,7 +223,7 @@ function _get_cell_wise_facets(cb::CellBoundary)
   Gridap.Geometry.get_faces(gtopo, D, D-1)
 end
 
-function Gridap.Geometry.get_cell_ref_map(cb::CellBoundary)
+function get_cell_ref_map(cb::CellBoundary)
   cell_lface_to_q_vertex_coords = _compute_cell_lface_to_q_vertex_coords(cb)
   f(p) = Gridap.ReferenceFEs.get_shapefuns(Gridap.ReferenceFEs.LagrangianRefFE(Float64,Gridap.ReferenceFEs.get_polytope(p),1))
   ftype_to_shapefuns = map( f, Gridap.Geometry.get_reffes(cb.btrian) )
