@@ -47,24 +47,25 @@ function solve_darcy_rt_hdiv(model,order)
   xh = solve(op)
 end
 
-function solve_darcy_hdg(model,∂T,order)
+function solve_darcy_hdg(∂T,order)
 
   # Geometry part
   D=2
 
-  model_Γ = ∂T.btrian
+  Γ = ∂T.btrian
+  Ω = Triangulation(∂T.model)
 
   # Functional part
-  pol = first(get_polytopes(model))
+  pol = first(get_polytopes(∂T.model))
   reffeᵤ = Gridap.ReferenceFEs.LagrangianRefFE(VectorValue{D,Float64},pol,order;space=:P)
   reffeₚ = Gridap.ReferenceFEs.LagrangianRefFE(Float64,pol,order-1;space=:P)
   reffeₗ = ReferenceFE(lagrangian,Float64,order)
 
   # Compute the Dof values of Dirichlet DoFs (L2 projection)
-  M = TestFESpace(model_Γ, reffeₗ; conformity=:L2, dirichlet_tags=[9])
+  M = TestFESpace(Γ, reffeₗ; conformity=:L2, dirichlet_tags=[9])
   L = TrialFESpace(M)
   dirichlettags=[5,6,7,8]
-  dirichlettrian=BoundaryTriangulation(model,tags=dirichlettags)
+  dirichlettrian=BoundaryTriangulation(∂T.model,tags=dirichlettags)
   degree = 2*(order+1)
   dΓd = Measure(dirichlettrian,degree)
   mh = get_fe_basis(M)
@@ -80,7 +81,7 @@ function solve_darcy_hdg(model,∂T,order)
                                       ([data_b],[fdofsd])))
   dirichlet_dofs=A\b
 
-  M = TestFESpace(model_Γ, reffeₗ; conformity=:L2,dirichlet_tags=[5,6,7,8])
+  M = TestFESpace(Γ, reffeₗ; conformity=:L2,dirichlet_tags=[5,6,7,8])
   fdofsd_new=get_cell_dof_ids(M,dirichlettrian)
   L = TrialFESpace(dirichlet_dofs[-vcat(fdofsd_new...)],M)
 
@@ -103,8 +104,8 @@ function solve_darcy_hdg(model,∂T,order)
   # L=TrialFESpace(dirichlet_dof_values,M)
 
   # Define test FESpaces
-  V = TestFESpace(model  , reffeᵤ; conformity=:L2)
-  Q = TestFESpace(model  , reffeₚ; conformity=:L2)
+  V = TestFESpace(Ω  , reffeᵤ; conformity=:L2)
+  Q = TestFESpace(Ω  , reffeₚ; conformity=:L2)
   Y = MultiFieldFESpace([V,Q,M])
 
   # Create trial spaces
@@ -118,9 +119,8 @@ function solve_darcy_hdg(model,∂T,order)
   xh = get_trial_fe_basis(X)
   uh,ph,lh = xh
 
-  trian = Triangulation(model)
   degree = 2*(order+1)
-  dΩ = Measure(trian,degree)
+  dΩ = Measure(Ω,degree)
 
 #   # neumanntags  = [5,6]
 #   # # TO-DO: neumanntrian = Triangulation(model_Γ,tags=neumanntags) this causes
@@ -136,9 +136,9 @@ function solve_darcy_hdg(model,∂T,order)
 
   x,w    = quadrature_points_and_weights(∂T,2)
 
-  τvals      = Fill(1, num_cells(trian))# rand(num_cells(trian))
+  τvals      = Fill(1, num_cells(Ω))# rand(num_cells(trian))
   τfield     = lazy_map(Broadcasting(Gridap.Fields.ConstantField),τvals)
-  τcfield    = Gridap.CellData.GenericCellField(τfield,trian,ReferenceDomain())
+  τcfield    = Gridap.CellData.GenericCellField(τfield,Ω,ReferenceDomain())
 
   #∫( (vh⋅n)*lh )*d∂K
   print("restrict_to_cell_boundary(∂T,vh)")
@@ -255,9 +255,9 @@ function solve_darcy_hdg(model,∂T,order)
       lhₖ,get_cell_dof_ids(M)))
 
   assem = SparseMatrixAssembler(Y,X)
-  lhₑ_dofs=get_cell_dof_ids(X,Triangulation(model_Γ))
+  lhₑ_dofs=get_cell_dof_ids(X,Γ)
 
-  uhph_dofs=get_cell_dof_ids(X,Triangulation(model))
+  uhph_dofs=get_cell_dof_ids(X,Ω)
   uhph_dofs = lazy_map(Gridap.Fields.BlockMap(2,[1,2]),uhph_dofs.args[1],uhph_dofs.args[2])
 
   print("uh=lazy_map(x->x[1],uhphlhₖ)")
@@ -292,13 +292,13 @@ print("solve_darcy_rt_hdiv ")
 ∂T = CellBoundary(model)
 
 print("solve_darcy_hdg  1")
-@time sol_nonconforming=solve_darcy_hdg(model,∂T,order)
+@time sol_nonconforming=solve_darcy_hdg(∂T,order)
 
 print("solve_darcy_hdg  2")
-@time sol_nonconforming=solve_darcy_hdg(model,∂T,order)
+@time sol_nonconforming=solve_darcy_hdg(∂T,order)
 
 print("solve_darcy_hdg  3")
-@time sol_nonconforming=solve_darcy_hdg(model,∂T,order)
+@time sol_nonconforming=solve_darcy_hdg(∂T,order)
 
 trian = Triangulation(model)
 degree = 2*(order+1)

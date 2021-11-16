@@ -94,12 +94,14 @@ macro mytime(expr,concept,activate)
   end
 end
 
-function preassembly_stage_darcy_hybrid_rt(model,∂T,order)
+function preassembly_stage_darcy_hybrid_rt(∂T,order)
   # Geometry part
-  D=num_cell_dims(model)
+  D=num_cell_dims(∂T.model)
 
-  model_Γ = ∂T.btrian
+  Γ = ∂T.btrian
   u,f,_ = ufg(D)
+
+  Ω = Triangulation(∂T.model)
 
   # Functional part
   # To investigate what is needed to have an inf-sup stable triplet
@@ -109,13 +111,13 @@ function preassembly_stage_darcy_hybrid_rt(model,∂T,order)
   reffeₗ = ReferenceFE(lagrangian,Float64,order)
 
   # Compute the Dof values of Dirichlet DoFs (L2 projection)
-  M = TestFESpace(model_Γ,
+  M = TestFESpace(Γ,
                   reffeₗ;
                   conformity=:L2,
-                  dirichlet_tags=num_faces(get_polytopes(model)[1]))
+                  dirichlet_tags=num_faces(get_polytopes(∂T.model)[1]))
   L = TrialFESpace(M)
   dtags=dirichlet_tags(D)
-  dirichlettrian=BoundaryTriangulation(model,tags=dtags)
+  dirichlettrian=BoundaryTriangulation(∂T.model,tags=dtags)
   degree = 2*(order+1)
   dΓd = Measure(dirichlettrian,degree)
   mh = get_fe_basis(M)
@@ -130,7 +132,7 @@ function preassembly_stage_darcy_hybrid_rt(model,∂T,order)
                                       ([data_a],[fdofsd],[fdofsd]),
                                       ([data_b],[fdofsd])))
   dirichlet_dofs=A\b
-  M = TestFESpace(model_Γ,
+  M = TestFESpace(Γ,
                   reffeₗ;
                   conformity=:L2,
                   dirichlet_tags=dtags)
@@ -156,8 +158,8 @@ function preassembly_stage_darcy_hybrid_rt(model,∂T,order)
   # L=TrialFESpace(dirichlet_dof_values,M)
 
   # Define test FESpaces
-  V = TestFESpace(model  , reffeᵤ; conformity=:L2)
-  Q = TestFESpace(model  , reffeₚ; conformity=:L2)
+  V = TestFESpace(Ω  , reffeᵤ; conformity=:L2)
+  Q = TestFESpace(Ω  , reffeₚ; conformity=:L2)
   Y = MultiFieldFESpace([V,Q,M])
 
   # Create trial spaces
@@ -171,9 +173,8 @@ function preassembly_stage_darcy_hybrid_rt(model,∂T,order)
   xh = get_trial_fe_basis(X)
   uh,ph,lh = xh
 
-  trian = Triangulation(model)
   degree = 2*(order+1)
-  dΩ = Measure(trian,degree)
+  dΩ = Measure(Ω,degree)
 
   # neumanntags  = [5,6]
   # # TO-DO: neumanntrian = Triangulation(model_Γ,tags=neumanntags) this causes
@@ -204,10 +205,10 @@ function preassembly_stage_darcy_hybrid_rt(model,∂T,order)
   cvec=data_vΩ
   k=StaticCondensationMap([1,2],[3])
   @mytime cmat_cvec_condensed=lazy_map(k,cmat,cvec) "lazy_map(StaticCondensationMap,cmat,cvec)" false
-  model_Γ,X,Y,M,L,cmat,cvec,cmat_cvec_condensed
+  Γ,X,Y,M,L,cmat,cvec,cmat_cvec_condensed
 end
 
-function assembly_stage_darcy_hybrid_rt(model,∂T,M,L,cmat_cvec_condensed)
+function assembly_stage_darcy_hybrid_rt(∂T,M,L,cmat_cvec_condensed)
   #fdofsn=get_cell_dof_ids(M,neumanntrian)
   #fdofsd=get_cell_dof_ids(M,dirichlettrian)
 
@@ -245,7 +246,10 @@ function solve_stage_darcy_hybrid_rt(A,b)
   x = A\b
 end
 
-function back_substitution_stage_darcy_hybrid_rt(∂T,model,model_Γ,X,Y,M,L,x,cmat,cvec,fdofscb)
+function back_substitution_stage_darcy_hybrid_rt(∂T,X,Y,M,L,x,cmat,cvec,fdofscb)
+  Ω = Triangulation(∂T.model)
+  Γ = ∂T.btrian
+
   lh    = FEFunction(L,x)
 
   k=BackwardStaticCondensationMap([1,2],[3])
@@ -276,9 +280,9 @@ function back_substitution_stage_darcy_hybrid_rt(∂T,model,model_Γ,X,Y,M,L,x,c
       lhₖ,get_cell_dof_ids(M)))
 
   assem = SparseMatrixAssembler(Y,X)
-  lhₑ_dofs=get_cell_dof_ids(X,Triangulation(model_Γ))
+  lhₑ_dofs=get_cell_dof_ids(X,Γ)
 
-  uhph_dofs=get_cell_dof_ids(X,Triangulation(model))
+  uhph_dofs=get_cell_dof_ids(X,Ω)
   uhph_dofs = lazy_map(Gridap.Fields.BlockMap(2,[1,2]),uhph_dofs.args[1],uhph_dofs.args[2])
 
   @mytime uhphₖ=lazy_map(RestrictArrayBlockMap([1,2]),uhphlhₖ) "uhphₖ=lazy_map(RestrictArrayBlockMap([1,2]),uhphlhₖ)" false
@@ -295,11 +299,11 @@ function back_substitution_stage_darcy_hybrid_rt(∂T,model,model_Γ,X,Y,M,L,x,c
   #end
 end
 
-function solve_darcy_hybrid_rt(model,∂T,order)
-  model_Γ,X,Y,M,L,cmat,cvec,cmat_cvec_condensed=preassembly_stage_darcy_hybrid_rt(model,∂T,order)
-  A,b,fdofscb=assembly_stage_darcy_hybrid_rt(model,∂T,M,L,cmat_cvec_condensed)
+function solve_darcy_hybrid_rt(∂T,order)
+  Γ,X,Y,M,L,cmat,cvec,cmat_cvec_condensed=preassembly_stage_darcy_hybrid_rt(∂T,order)
+  A,b,fdofscb=assembly_stage_darcy_hybrid_rt(∂T,M,L,cmat_cvec_condensed)
   x=solve_stage_darcy_hybrid_rt(A,b)
-  back_substitution_stage_darcy_hybrid_rt(∂T,model,model_Γ,X,Y,M,L,x,cmat,cvec,fdofscb)
+  back_substitution_stage_darcy_hybrid_rt(∂T,X,Y,M,L,x,cmat,cvec,fdofscb)
 end
 
 domain = (0,1,0,1)
@@ -309,7 +313,7 @@ model = CartesianDiscreteModel(domain,partition)
 
 sol_conforming=solve_darcy_rt_hdiv(model,order)
 ∂T = CellBoundary(model)
-sol_nonconforming=solve_darcy_hybrid_rt(model,∂T,order)
+sol_nonconforming=solve_darcy_hybrid_rt(∂T,order)
 trian = Triangulation(model)
 degree = 2*(order+1)
 dΩ = Measure(trian,degree)
