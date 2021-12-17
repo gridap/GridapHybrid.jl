@@ -10,7 +10,9 @@ module CellBoundaryTests
    ∂T=CellBoundary(model)
    model_Γ = ∂T.btrian
 
-   m=get_cell_ref_map(∂T)
+   # m=get_cell_ref_map(∂T)
+   glue = get_glue(∂T, Val(D))
+   m=glue.tface_to_mface_map
    x,w=quadrature_points_and_weights(∂T,2)
    mx=lazy_map(evaluate,m,x)
 

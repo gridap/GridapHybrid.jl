@@ -197,7 +197,10 @@ function _get_cell_normal_vector(cb::CellBoundary,cell_lface_to_nref::Function)
   cell_lface_q_invJt = transform_cell_to_cell_lface_array(glue, cell_q_invJt)
 
   # Change of domain
-  cell_lface_s_q = get_cell_ref_map(cb)
+  # cell_lface_s_q = get_cell_ref_map(cb)
+  face_to_face_glue = get_glue(cb,Val(num_cell_dims(cb.model)))
+  cell_lface_s_q = face_to_face_glue.tface_to_mface_map
+
   cell_lface_s_invJt = lazy_map(∘,cell_lface_q_invJt,cell_lface_s_q)
   #face_s_n =
   lazy_map(Broadcasting(Operation(Gridap.Geometry.push_normal)),
@@ -223,7 +226,18 @@ function _get_cell_wise_facets(cb::CellBoundary)
   Gridap.Geometry.get_faces(gtopo, D, D-1)
 end
 
-function get_cell_ref_map(cb::CellBoundary)
+# ---- Extend get_glue() to CellBoundary
+function Gridap.Geometry.get_glue(cb::CellBoundary, ::Val{Dp}) where Dp
+  model = get_background_model(cb.btrian)
+  Dm = num_cell_dims(model)
+  get_glue(cb, Val(Dp), Val(Dm))
+end
+function Gridap.Geometry.get_glue(cb::CellBoundary, ::Val{Dp}, ::Val{Dm}) where {Dp,Dm}
+  nothing
+end
+function Gridap.Geometry.get_glue(cb::CellBoundary, ::Val{D}, ::Val{D}) where D
+  trian = cb.btrian
+  tface_to_mface = trian.glue.face_to_cell
   cell_lface_to_q_vertex_coords = _compute_cell_lface_to_q_vertex_coords(cb)
   f(p) = Gridap.ReferenceFEs.get_shapefuns(Gridap.ReferenceFEs.LagrangianRefFE(Float64,Gridap.ReferenceFEs.get_polytope(p),1))
   ftype_to_shapefuns = map( f, Gridap.Geometry.get_reffes(cb.btrian) )
@@ -232,6 +246,9 @@ function get_cell_ref_map(cb::CellBoundary)
   face_s_q = lazy_map(Gridap.Fields.linear_combination,
                       cell_lface_to_q_vertex_coords,
                       cell_to_lface_to_shapefuns)
+  tface_to_mface_map = face_s_q
+  mface_to_tface = nothing
+  FaceToFaceGlue(tface_to_mface, tface_to_mface_map, mface_to_tface)
 end
 
 function _compute_cell_lface_to_q_vertex_coords(cb::CellBoundary)
@@ -716,7 +733,10 @@ function _restrict_to_cell_boundary_cell_fe_basis(cb::CellBoundary,
   D = num_cell_dims(cb.model)
   Gridap.Helpers.@check isa(get_triangulation(cell_fe_basis),Triangulation{D,D})
   cell_a_q = transform_cell_to_cell_lface_array(cb.btrian.glue,Gridap.CellData.get_data(cell_fe_basis))
-  cell_s2q = get_cell_ref_map(cb)
+  # cell_s2q = get_cell_ref_map(cb)
+  glue = get_glue(cb, Val(D))
+  cell_s2q = glue.tface_to_mface_map
+
   lazy_map(Broadcasting(∘),cell_a_q,cell_s2q)
 end
 
