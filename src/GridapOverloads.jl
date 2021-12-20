@@ -53,18 +53,6 @@ function Gridap.Arrays.lazy_map(::typeof(evaluate),
   lazy_map(k,args...)
 end
 
-function Gridap.Arrays.lazy_map(k::typeof(evaluate),
-                                ::Type{T},
-                                b::Gridap.Arrays.CompressedArray{<:Gridap.Fields.VectorBlock},
-                                c::Fill{<:Gridap.Fields.VectorBlock}) where T
-  Gridap.Helpers.@check length(b) == length(c)
-  values_r = Vector{T}(undef,length(b.values))
-  for i=1:length(b.values)
-    values_r[i]=evaluate(k,b.values[i],c.value)
-  end
-  Gridap.Arrays.CompressedArray(values_r,b.ptrs)
-end
-
 function Gridap.Arrays.return_cache(
   ::typeof(evaluate),
   a::Gridap.Fields.VectorBlock,
