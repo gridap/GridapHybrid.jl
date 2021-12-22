@@ -10,9 +10,7 @@ module CellBoundaryTests
    ∂T=CellBoundary(model)
    model_Γ = ∂T.btrian
 
-   # m=get_cell_ref_map(∂T)
-   glue = get_glue(∂T, Val(D))
-   m=glue.tface_to_mface_map
+   m = ExploringGridapHybridization._setup_tcell_lface_mface_map(D-1,model,model_Γ.glue)
    x,w=quadrature_points_and_weights(∂T,2)
    mx=lazy_map(evaluate,m,x)
 
