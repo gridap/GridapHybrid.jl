@@ -145,10 +145,9 @@ end
 Base.size(a::CellBoundaryOwnerNref) = size(a.cell_boundary_nref)
 Base.IndexStyle(::Type{<:CellBoundaryOwnerNref}) = IndexLinear()
 
-function _cell_lface_to_nref(cb::CellBoundary)
-  glue = cb.btrian.glue
-  cell_grid = get_grid(get_background_model(cb.btrian))
-
+function _cell_lface_to_nref(args...)
+  model,glue = args[1],first(args[2:end])
+  cell_grid = get_grid(model)
   ## Reference normal
   function f(r)
     p = Gridap.ReferenceFEs.get_polytope(r)
@@ -162,9 +161,10 @@ function _cell_lface_to_nref(cb::CellBoundary)
   CellBoundaryCompressedVector(ctype_lface_pindex_to_nref,glue)
 end
 
-function _cell_lface_to_owner_nref(cb::CellBoundary)
-  cell_lface_to_nref=_cell_lface_to_nref(cb)
-  CellBoundaryOwnerNref(cell_lface_to_nref,cb.sign_flip)
+function _cell_lface_to_owner_nref(args...)
+  model,glue,sign_flip = args
+  cell_lface_to_nref=_cell_lface_to_nref(model,glue)
+  CellBoundaryOwnerNref(cell_lface_to_nref,sign_flip)
 end
 
 """
@@ -172,7 +172,7 @@ Returns a cell-wise array which, for each cell, and each facet within the cell,
 returns the unit outward normal to the boundary of the cell.
 """
 function get_cell_normal_vector(cb::CellBoundary)
-  _get_cell_normal_vector(cb,_cell_lface_to_nref)
+  _get_cell_normal_vector(cb.model, cb.btrian.glue, _cell_lface_to_nref)
 end
 
 """
@@ -180,14 +180,13 @@ Returns a cell-wise array which, for each cell, and each facet within the cell,
 returns the unit outward normal to the boundary of the cell owner of the facet.
 """
 function get_cell_owner_normal_vector(cb::CellBoundary)
-  _get_cell_normal_vector(cb,_cell_lface_to_owner_nref)
+  _get_cell_normal_vector(cb.model, cb.btrian.glue, _cell_lface_to_owner_nref, cb.sign_flip)
 end
 
-function _get_cell_normal_vector(cb::CellBoundary,cell_lface_to_nref::Function)
-  glue = cb.btrian.glue
-  cell_grid = get_grid(get_background_model(cb.btrian))
+function _get_cell_normal_vector(model,glue,cell_lface_to_nref::Function,sign_flip=nothing)
+  cell_grid = get_grid(model)
 
-  cell_lface_to_nref = cell_lface_to_nref(cb)
+  cell_lface_to_nref = cell_lface_to_nref(model,glue,sign_flip)
   cell_lface_s_nref = lazy_map(Gridap.Fields.constant_field,cell_lface_to_nref)
 
   # Inverse of the Jacobian transpose
@@ -197,9 +196,7 @@ function _get_cell_normal_vector(cb::CellBoundary,cell_lface_to_nref::Function)
   cell_lface_q_invJt = transform_cell_to_cell_lface_array(glue, cell_q_invJt)
 
   # Change of domain
-  # cell_lface_s_q = get_cell_ref_map(cb)
-  face_to_face_glue = get_glue(cb,Val(num_cell_dims(cb.model)))
-  cell_lface_s_q = face_to_face_glue.tface_to_mface_map
+  cell_lface_s_q = _setup_tcell_lface_mface_map(num_cell_dims(model)-1,model,glue)
 
   cell_lface_s_invJt = lazy_map(∘,cell_lface_q_invJt,cell_lface_s_q)
   #face_s_n =
@@ -207,6 +204,33 @@ function _get_cell_normal_vector(cb::CellBoundary,cell_lface_to_nref::Function)
            cell_lface_s_invJt,
            cell_lface_s_nref)
   #Fields.MemoArray(face_s_n)
+end
+
+function _setup_tcell_lface_mface_map(d,model,glue)
+  ctype_to_lface_to_pindex_to_qcoords=_compute_face_to_q_vertex_coords_body(d,model,glue)
+  cell_lface_to_q_vertex_coords = CellBoundaryCompressedVector(
+                                  ctype_to_lface_to_pindex_to_qcoords.ctype_lface_pindex_to_value,
+                                  glue)
+  f(p) = Gridap.ReferenceFEs.get_shapefuns(
+         Gridap.ReferenceFEs.LagrangianRefFE(Float64,Gridap.ReferenceFEs.get_polytope(p),1))
+
+  ################ TO-IMPROVE
+  cell_grid = get_grid(model)
+  D = num_cell_dims(model)
+  ctype_reffe = get_reffes(cell_grid)
+  Gridap.Helpers.@notimplementedif length(ctype_reffe) != 1
+  reffe = first(ctype_reffe)
+  freffes = get_reffaces(ReferenceFE{D-1},reffe)
+  Gridap.Helpers.@notimplementedif length(freffes) != 1
+  ftrian_reffes= Fill(first(freffes),length(glue.face_to_ftype))
+  ################ TO-IMPROVE
+
+  ftype_to_shapefuns = map( f,  ftrian_reffes)
+  face_to_shapefuns = expand_cell_data(ftype_to_shapefuns,glue.face_to_ftype)
+  cell_to_lface_to_shapefuns = transform_face_to_cell_lface_array(glue,face_to_shapefuns)
+  lazy_map(Gridap.Fields.linear_combination,
+           cell_lface_to_q_vertex_coords,
+           cell_to_lface_to_shapefuns)
 end
 
 function Gridap.Geometry.get_cell_map(cb::CellBoundary)
@@ -226,36 +250,53 @@ function _get_cell_wise_facets(cb::CellBoundary)
   Gridap.Geometry.get_faces(gtopo, D, D-1)
 end
 
-# ---- Extend get_glue() to CellBoundary
-function Gridap.Geometry.get_glue(cb::CellBoundary, ::Val{Dp}) where Dp
-  model = get_background_model(cb.btrian)
-  Dm = num_cell_dims(model)
-  get_glue(cb, Val(Dp), Val(Dm))
-end
-function Gridap.Geometry.get_glue(cb::CellBoundary, ::Val{Dp}, ::Val{Dm}) where {Dp,Dm}
-  nothing
-end
-function Gridap.Geometry.get_glue(cb::CellBoundary, ::Val{D}, ::Val{D}) where D
-  trian = cb.btrian
-  tface_to_mface = trian.glue.face_to_cell
-  cell_lface_to_q_vertex_coords = _compute_cell_lface_to_q_vertex_coords(cb)
-  f(p) = Gridap.ReferenceFEs.get_shapefuns(Gridap.ReferenceFEs.LagrangianRefFE(Float64,Gridap.ReferenceFEs.get_polytope(p),1))
-  ftype_to_shapefuns = map( f, Gridap.Geometry.get_reffes(cb.btrian) )
-  face_to_shapefuns = expand_cell_data(ftype_to_shapefuns,cb.btrian.glue.face_to_ftype)
-  cell_to_lface_to_shapefuns = transform_face_to_cell_lface_array(cb.btrian.glue,face_to_shapefuns)
-  face_s_q = lazy_map(Gridap.Fields.linear_combination,
-                      cell_lface_to_q_vertex_coords,
-                      cell_to_lface_to_shapefuns)
-  tface_to_mface_map = face_s_q
-  mface_to_tface = nothing
-  FaceToFaceGlue(tface_to_mface, tface_to_mface_map, mface_to_tface)
-end
-
 function _compute_cell_lface_to_q_vertex_coords(cb::CellBoundary)
   ctype_to_lface_to_pindex_to_qcoords=Gridap.Geometry._compute_face_to_q_vertex_coords(cb.btrian)
   CellBoundaryCompressedVector(
     ctype_to_lface_to_pindex_to_qcoords.ctype_lface_pindex_to_value,
     cb.btrian.glue)
+end
+
+
+function Gridap.Geometry._compute_face_to_q_vertex_coords(trian::BoundaryTriangulation)
+  d = num_cell_dims(trian)
+  _compute_face_to_q_vertex_coords_body(d,get_background_model(trian.trian),trian.glue)
+end
+
+function _compute_face_to_q_vertex_coords_body(d,model,glue)
+  cell_grid = get_grid(model)
+  polytopes = map(get_polytope, get_reffes(cell_grid))
+  cell_to_ctype = glue.cell_to_ctype
+  ctype_to_lvertex_to_qcoords = map(get_vertex_coordinates, polytopes)
+  ctype_to_lface_to_lvertices = map((p)->get_faces(p,d,0), polytopes)
+  ctype_to_lface_to_pindex_to_perm = map( (p)->get_face_vertex_permutations(p,d), polytopes)
+
+  P = eltype(eltype(ctype_to_lvertex_to_qcoords))
+  D = num_components(P)
+  T = eltype(P)
+  ctype_to_lface_to_pindex_to_qcoords = Vector{Vector{Vector{Point{D,T}}}}[]
+
+  for (ctype, lface_to_pindex_to_perm) in enumerate(ctype_to_lface_to_pindex_to_perm)
+    lvertex_to_qcoods = ctype_to_lvertex_to_qcoords[ctype]
+    lface_to_pindex_to_qcoords = Vector{Vector{Point{D,T}}}[]
+    for (lface, pindex_to_perm) in enumerate(lface_to_pindex_to_perm)
+      cfvertex_to_lvertex = ctype_to_lface_to_lvertices[ctype][lface]
+      nfvertices = length(cfvertex_to_lvertex)
+      pindex_to_qcoords = Vector{Vector{Point{D,T}}}(undef,length(pindex_to_perm))
+      for (pindex, cfvertex_to_ffvertex) in enumerate(pindex_to_perm)
+        ffvertex_to_qcoords = zeros(Point{D,T},nfvertices)
+        for (cfvertex, ffvertex) in enumerate(cfvertex_to_ffvertex)
+          lvertex = cfvertex_to_lvertex[cfvertex]
+          qcoords = lvertex_to_qcoods[lvertex]
+          ffvertex_to_qcoords[ffvertex] = qcoords
+        end
+        pindex_to_qcoords[pindex] = ffvertex_to_qcoords
+      end
+      push!(lface_to_pindex_to_qcoords,pindex_to_qcoords)
+    end
+    push!(ctype_to_lface_to_pindex_to_qcoords,lface_to_pindex_to_qcoords)
+  end
+  Gridap.Geometry.FaceCompressedVector(ctype_to_lface_to_pindex_to_qcoords,glue)
 end
 
 function transform_face_to_cell_lface_array(glue,
@@ -714,43 +755,48 @@ function Gridap.Arrays.evaluate!(
 end
 
 function restrict_to_cell_boundary(cb::CellBoundary,
-                                   fe_basis::Union{Gridap.FESpaces.FEBasis,Gridap.CellData.CellField})
+                                   fe_basis::Gridap.CellData.CellField)
   model = cb.model
   D = num_cell_dims(model)
   trian = get_triangulation(fe_basis)
-  if isa(trian,Triangulation{D-1,D})
-    _restrict_to_cell_boundary_facet_fe_basis(cb,fe_basis)
-  elseif isa(trian,Triangulation{D,D})
-    _restrict_to_cell_boundary_cell_fe_basis(cb,fe_basis)
+  if isa(trian,Triangulation{D,D})
+    tface_to_mface_map = _setup_tcell_lface_mface_map(D-1,model,cb.btrian.glue)
+    _restrict_to_cell_boundary_cell_fe_basis(model,
+                                              cb.btrian.glue,
+                                              tface_to_mface_map,
+                                              fe_basis)
+  elseif isa(trian,Triangulation{D-1,D})
+    _restrict_to_cell_boundary_facet_fe_basis(model,
+                                             cb.btrian.glue,
+                                             fe_basis)
   end
 end
 
-function _restrict_to_cell_boundary_cell_fe_basis(cb::CellBoundary,
-                                                  cell_fe_basis::Union{Gridap.FESpaces.FEBasis,Gridap.CellData.CellField})
+function _restrict_to_cell_boundary_cell_fe_basis(model,
+                                                  glue,
+                                                  tface_to_mface_map,
+                                                  cell_fe_basis::Gridap.CellData.CellField)
   # TO-THINK:
   #     1) How to deal with CellField objects which are NOT FEBasis objects?
   #     2) How to deal with differential operators applied to FEBasis objects?
-  D = num_cell_dims(cb.model)
+  D = num_cell_dims(model)
   Gridap.Helpers.@check isa(get_triangulation(cell_fe_basis),Triangulation{D,D})
-  cell_a_q = transform_cell_to_cell_lface_array(cb.btrian.glue,Gridap.CellData.get_data(cell_fe_basis))
-  # cell_s2q = get_cell_ref_map(cb)
-  glue = get_glue(cb, Val(D))
-  cell_s2q = glue.tface_to_mface_map
-
-  lazy_map(Broadcasting(∘),cell_a_q,cell_s2q)
+  cell_a_q = transform_cell_to_cell_lface_array(glue,Gridap.CellData.get_data(cell_fe_basis))
+  lazy_map(Broadcasting(∘),cell_a_q,tface_to_mface_map)
 end
 
-function _restrict_to_cell_boundary_facet_fe_basis(cb::CellBoundary,
-                                                   facet_fe_basis::Gridap.FESpaces.FEBasis)
+function _restrict_to_cell_boundary_facet_fe_basis(model,
+                                                   glue,
+                                                   facet_fe_basis::Gridap.CellData.CellField)
 
   # TO-THINK:
   #     1) How to deal with CellField objects which are NOT FEBasis objects?
   #     2) How to deal with differential operators applied to FEBasis/CellField objects?
-  D = num_cell_dims(cb.model)
+  D = num_cell_dims(model)
   Gridap.Helpers.@check isa(get_triangulation(facet_fe_basis),Triangulation{D-1,D})
 
   transform_face_to_cell_lface_expanded_array(
-    cb.btrian.glue,
+    glue,
     Gridap.CellData.get_data(facet_fe_basis))
 end
 
