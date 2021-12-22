@@ -75,5 +75,13 @@ function Gridap.Arrays.evaluate!(cache,f::Gridap.Polynomials.QCurlGradMonomialBa
   a
 end
 
-
-
+function Gridap.Arrays.lazy_map(
+  k   :: Gridap.Fields.IntegrationMap,
+      :: Type{T},
+  fx  :: AbstractArray{<:Gridap.Fields.ArrayBlock},
+  w   :: AbstractArray{<:Gridap.Fields.ArrayBlock{<:AbstractVector}},
+  jtx :: AbstractArray{<:Gridap.Fields.ArrayBlock}) where T
+  int=LazyArray(T,Fill(k,length(fx)),fx,w,jtx)
+  sum_facets=lazy_map(SumFacetsMap(),int)
+  lazy_map(DensifyInnerMostBlockLevelMap(),sum_facets)
+end

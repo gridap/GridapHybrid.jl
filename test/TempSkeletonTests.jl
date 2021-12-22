@@ -57,6 +57,8 @@ degree=2
 
 n   = get_cell_normal_vector(∂K)
 d∂K = Measure(∂K,degree)
-(vh⋅n)
 dc=∫((vh⋅n)*lh)d∂K
-dc_array=Gridap.CellData.get_contribution(dc,∂K)
+dc_array_vh_n_lh=Gridap.CellData.get_contribution(dc,∂K)
+
+dc=∫(mh*(uh⋅n))d∂K
+dc_array_mh_uh_n=Gridap.CellData.get_contribution(dc,∂K)
