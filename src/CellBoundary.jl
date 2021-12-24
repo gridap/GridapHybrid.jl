@@ -245,6 +245,10 @@ end
 
 function _get_cell_wise_facets(cb::CellBoundary)
   model = cb.model
+  _get_cell_wise_facets(model)
+end
+
+function _get_cell_wise_facets(model::DiscreteModel)
   gtopo = get_grid_topology(model)
   D     = num_cell_dims(model)
   Gridap.Geometry.get_faces(gtopo, D, D-1)
@@ -1032,7 +1036,14 @@ end
 function Gridap.Arrays.return_cache(
   k::RestrictFacetDoFsToCellBoundary,
   cell_facets::AbstractArray{<:Integer})
-  array_cache(k.facet_dofs), Gridap.Arrays.CachedVector(eltype(cell_facets))
+  if (isa(k.facet_dofs,AbstractVector{<:Number}))
+    T=eltype(k.facet_dofs)
+  elseif (isa(k.facet_dofs,AbstractVector{<:AbstractVector{<:Number}}))
+    T=eltype(eltype(k.facet_dofs))
+  else
+    @assert false
+  end
+  array_cache(k.facet_dofs), Gridap.Arrays.CachedVector(T)
 end
 
 function Gridap.Arrays.evaluate!(
@@ -1066,8 +1077,7 @@ function _fill_dofs_cell!(cell_dofs,cell_facets,facet_dofs,facet_dofs_cache)
   current
 end
 
-function restrict_facet_dof_ids_to_cell_boundary(cb::CellBoundary,facet_dof_ids)
-  cell_wise_facets = _get_cell_wise_facets(cb)
+function restrict_facet_dof_ids_to_cell_boundary(cell_wise_facets,facet_dof_ids)
   m=RestrictFacetDoFsToCellBoundary(facet_dof_ids)
   lazy_map(m,cell_wise_facets)
 end
@@ -1124,8 +1134,7 @@ function integrate_mh_mult_uh_cdot_n_low_level(cb,
   j=lazy_map(∇,get_cell_map(cb))
   jx=lazy_map(evaluate,j,x)
 
-  sum_facets=_sum_facets(cb,mhx_mult_uhx_cdot_nx,w,jx)
-  lazy_map(DensifyInnerMostBlockLevelMap(),sum_facets)
+  lazy_map(IntegrationMap(),mhx_mult_uhx_cdot_nx,w,jx)
 end
 
 
@@ -1151,7 +1160,7 @@ function integrate_vh_cdot_n_mult_lh_low_level(
   j=lazy_map(∇,get_cell_map(cb))
   jx=lazy_map(evaluate,j,x)
 
-  lazy_map(DensifyInnerMostBlockLevelMap(),_sum_facets(cb,vhx_cdot_nx_mult_lhx,w,jx))
+  lazy_map(IntegrationMap(),vhx_cdot_nx_mult_lhx,w,jx)
 end
 
 # ∫(qh*(uh⋅n+τ*(ph-lh)*n⋅no))*d∂K
@@ -1199,11 +1208,10 @@ function integrate_qh_mult_uh_cdot_n_plus_stab_low_level(
   jx=lazy_map(evaluate,j,x)
 
   arg1=lazy_map(Broadcasting(+),
-                _sum_facets(cb,qhx_mult_uhx_cdot_nx,w,jx),
-                _sum_facets(cb,qhx_mult_τx_mult_phx_mult_n_cdot_no,w,jx))
+                lazy_map(IntegrationMap(),qhx_mult_uhx_cdot_nx,w,jx),
+                lazy_map(IntegrationMap(),qhx_mult_τx_mult_phx_mult_n_cdot_no,w,jx))
 
-  arg2=lazy_map(DensifyInnerMostBlockLevelMap(),
-                _sum_facets(cb,qhx_mult_τx_mult_lhx_mult_n_cdot_no,w,jx))
+  arg2=lazy_map(IntegrationMap(),qhx_mult_τx_mult_lhx_mult_n_cdot_no,w,jx)
 
   lazy_map(Broadcasting(-),arg1,arg2)
 end
@@ -1253,12 +1261,9 @@ function integrate_mh_mult_uh_cdot_n_plus_stab_low_level(
   j=lazy_map(∇,get_cell_map(cb))
   jx=lazy_map(evaluate,j,x)
 
-  arg1=lazy_map(DensifyInnerMostBlockLevelMap(),
-               _sum_facets(cb,mhx_mult_uhx_cdot_nx,w,jx))
-  arg2=lazy_map(DensifyInnerMostBlockLevelMap(),
-               _sum_facets(cb,mhx_mult_τx_mult_phx_mult_n_cdot_no,w,jx))
-  arg3=lazy_map(DensifyInnerMostBlockLevelMap(),
-               _sum_facets(cb,mhx_mult_τx_mult_lhx_mult_n_cdot_no,w,jx))
+  arg1=lazy_map(IntegrationMap(),mhx_mult_uhx_cdot_nx,w,jx)
+  arg2=lazy_map(IntegrationMap(),mhx_mult_τx_mult_phx_mult_n_cdot_no,w,jx)
+  arg3=lazy_map(IntegrationMap(),mhx_mult_τx_mult_lhx_mult_n_cdot_no,w,jx)
 
   result=lazy_map(Broadcasting(+),arg1,arg2)
   result=lazy_map(Broadcasting(-),result,arg3)

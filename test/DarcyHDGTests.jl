@@ -193,8 +193,8 @@ function solve_darcy_hdg(∂T,order)
 
   #fdofsn=get_cell_dof_ids(M,neumanntrian)
   #fdofsd=get_cell_dof_ids(M,dirichlettrian)
-
-  fdofscb=restrict_facet_dof_ids_to_cell_boundary(∂T,get_cell_dof_ids(M))
+  cell_wise_facets=_get_cell_wise_facets(∂T)
+  fdofscb=restrict_facet_dof_ids_to_cell_boundary(cell_wise_facets,get_cell_dof_ids(M))
   assem = SparseMatrixAssembler(M,L)
 
   # This array is stored as a member variable of UnconstrainedFESpace in Gridap

@@ -84,6 +84,11 @@ function Gridap.Arrays.return_type(k::Reindex,i::VectorBlock{<:Vector{<:Integer}
   TR=eltype(k.values)
   VectorBlock{Vector{TR}}
 end
+# Default return_values fails because one(::VectorBlock{<:Vector{<:Integer}}) is NOT defined
+# This justifies why I had to define the following function
+function Gridap.Arrays.return_value(k::Reindex,i::VectorBlock{<:Vector{<:Integer}})
+  evaluate(k,i)
+end
 
 Geometry.get_node_coordinates(a::TempSkeletonGrid) = a.node_coord
 Geometry.get_cell_node_ids(a::TempSkeletonGrid) = a.cell_lface_nodes
@@ -130,6 +135,7 @@ Geometry.get_background_model(a::TempSkeletonTriangulation) = a.model
 Geometry.get_grid(a::TempSkeletonTriangulation) = a.grid
 
 struct TempSkeletonGlue{A,B}
+  trian::TempSkeletonTriangulation
   tcell_lface_mface::A
   tcell_lface_mface_map::B
 end
@@ -150,7 +156,7 @@ function Geometry.get_glue(trian::TempSkeletonTriangulation{D},::Val{D}) where D
   end
   cell_ctype = get_cell_type(pgrid)
   cell_lface_map = expand_cell_data(ctype_lface_map,cell_ctype)
-  TempSkeletonGlue(cell_lface_face,cell_lface_map)
+  TempSkeletonGlue(trian,cell_lface_face,cell_lface_map)
 end
 
 function Geometry.get_glue(trian::TempSkeletonTriangulation{d},::Val{D}) where {d,D}
@@ -172,7 +178,7 @@ function Geometry.get_glue(trian::TempSkeletonTriangulation{d},::Val{D}) where {
     fill(cell,nlfaces)
   end
   tcell_lface_mface_map = _setup_tcell_lface_mface_map(d,trian.model,trian.glue)
-  TempSkeletonGlue(tcell_lface_mface,tcell_lface_mface_map)
+  TempSkeletonGlue(trian,tcell_lface_mface,tcell_lface_mface_map)
 end
 
 function CellData.change_domain_ref_ref(

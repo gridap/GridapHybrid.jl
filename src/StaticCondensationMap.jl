@@ -40,6 +40,11 @@ function _check_preconditions(interior_fields::AbstractVector{<:Integer},
 end
 
 function Gridap.Arrays.return_cache(k::StaticCondensationMap{IFT,BFT},
+  Ab::Tuple{<:Gridap.Fields.MatrixBlock{<:Matrix{T}},<:Gridap.Fields.VectorBlock{<:Vector{T}}}) where {IFT<:AbstractVector{<:Integer}, BFT <: AbstractVector{<:Integer}, T}
+  Gridap.Arrays.return_cache(k,Ab[1],Ab[2])
+end
+
+function Gridap.Arrays.return_cache(k::StaticCondensationMap{IFT,BFT},
                                     A::Gridap.Fields.MatrixBlock{<:Matrix{T}},
                                     b::Gridap.Fields.VectorBlock{<:Vector{T}}) where {IFT<:AbstractVector{<:Integer}, BFT <: AbstractVector{<:Integer}, T}
 
@@ -142,6 +147,12 @@ function _set_vecblk!(a::Gridap.Fields.VectorBlock{<:Vector{T}},
       a.array[I]=b.array[BI]
     end
   end
+end
+
+function Gridap.Arrays.evaluate!(cache,
+  k::StaticCondensationMap{IFT,BFT},
+  Ab::Tuple{<:Gridap.Fields.MatrixBlock{<:Matrix{T}},<:Gridap.Fields.VectorBlock{<:Vector{T}}}) where {IFT<:AbstractVector{<:Integer}, BFT <: AbstractVector{<:Integer}, T}
+  Gridap.Arrays.evaluate!(cache,k,Ab[1],Ab[2])
 end
 
 function Gridap.Arrays.evaluate!(cache,
