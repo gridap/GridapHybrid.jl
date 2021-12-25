@@ -84,4 +84,4 @@ l((vh,qh,mh)) = ∫( vh⋅f + qh*(∇⋅u))*dΩ
 
 op=HybridAffineFEOperator((u,v)->(a(u,v),l(v)), X, Y, [1,2], [3])
 
-solve(op)
+x=solve(op)

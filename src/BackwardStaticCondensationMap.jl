@@ -23,6 +23,12 @@ struct BackwardStaticCondensationMap{IFT <: AbstractVector{<:Int},
 end
 
 function Gridap.Arrays.return_cache(k::BackwardStaticCondensationMap{IFT,BFT},
+  Ab::Tuple{<:Gridap.Fields.MatrixBlock{<:Matrix{T}},<:Gridap.Fields.VectorBlock{<:Vector{T}}},
+  x::AbstractVector{T}) where {IFT<:AbstractVector{<:Integer}, BFT <: AbstractVector{<:Integer}, T}
+  Gridap.Arrays.return_cache(k,Ab[1],Ab[2],x)
+end
+
+function Gridap.Arrays.return_cache(k::BackwardStaticCondensationMap{IFT,BFT},
                                     A::Gridap.Fields.MatrixBlock{<:Matrix{T}},
                                     b::Gridap.Fields.VectorBlock{<:Vector{T}},
                                     x::AbstractVector{T}) where {IFT<:AbstractVector{<:Integer}, BFT <: AbstractVector{<:Integer}, T}
@@ -35,6 +41,14 @@ function Gridap.Arrays.return_cache(k::BackwardStaticCondensationMap{IFT,BFT},
                                       x)
     (cache1,cache2)
 end
+
+function Gridap.Arrays.evaluate!(cache,
+  k::BackwardStaticCondensationMap{IFT,BFT},
+  Ab::Tuple{<:Gridap.Fields.MatrixBlock{<:Matrix{T}},<:Gridap.Fields.VectorBlock{<:Vector{T}}},
+  x::AbstractVector{T}) where {IFT<:AbstractVector{<:Integer}, BFT <: AbstractVector{<:Integer}, T}
+  Gridap.Arrays.evaluate!(cache,k,Ab[1],Ab[2],x)
+end
+
 
 function Gridap.Arrays.evaluate!(cache,
   k::BackwardStaticCondensationMap{IFT,BFT},

@@ -1,8 +1,9 @@
-struct HybridAffineFEOperator <: FEOperator
+struct HybridAffineFEOperator{TB,TS} <: FEOperator
+  weakform::Function
   trial::MultiFieldFESpace
   test::MultiFieldFESpace
-  bulk_fields::Vector{<:Int}
-  skeleton_fields::Vector{<:Int}
+  bulk_fields::TB
+  skeleton_fields::TS
   condensed_op::AffineFEOperator
 end
 
@@ -10,8 +11,8 @@ function HybridAffineFEOperator(
   weakform::Function,
   trial :: MultiFieldFESpace,
   test :: MultiFieldFESpace,
-  bulk_fields :: Vector{<:Int},
-  skeleton_fields :: Vector{<:Int})
+  bulk_fields :: TB,
+  skeleton_fields :: TS) where {TB<:Vector{<:Integer},TS<:Vector{<:Integer}}
 
   # TO-DO: get rid of this temporary limitation
   @assert length(skeleton_fields)==1
@@ -47,7 +48,7 @@ function HybridAffineFEOperator(
   A,b = assemble_matrix_and_vector(assem,data)
 
   condensed_op=AffineFEOperator(M,L,A,b)
-  HybridAffineFEOperator(trial,test,bulk_fields,skeleton_fields,condensed_op)
+  HybridAffineFEOperator(weakform,trial,test,bulk_fields,skeleton_fields,condensed_op)
 end
 
 Gridap.FESpaces.get_test(feop::HybridAffineFEOperator) = feop.test
@@ -56,9 +57,42 @@ function Gridap.FESpaces.solve(op::HybridAffineFEOperator)
   solver = LinearFESolver()
   solve(solver,op)
 end
+
 function Gridap.FESpaces.solve!(uh,solver::LinearFESolver,op::HybridAffineFEOperator, cache)
+  # Solve linear system defined on the skeleton
   lh = solve(op.condensed_op)
-  lh,nothing
+
+  # Convert dof-wise dof values of lh into cell-wise dof values lhₖ
+  L=Gridap.FESpaces.get_fe_space(lh)
+  trian=get_triangulation(L)
+  model=get_background_model(trian)
+  cell_wise_facets=_get_cell_wise_facets(model)
+  fdofscb=restrict_facet_dof_ids_to_cell_boundary(cell_wise_facets,get_cell_dof_ids(L))
+  m=Broadcasting(Gridap.Fields.PosNegReindex(
+                 Gridap.FESpaces.get_free_dof_values(lh),
+                 lh.dirichlet_values))
+  lhₖ= lazy_map(m,fdofscb)
+
+  # Compute cell-wise dof values of bulk fields out of lhₖ
+
+  # Invoke weak form of the hybridizable system
+  u = get_trial_fe_basis(op.trial)
+  v = get_fe_basis(op.test)
+  biform, liform  = op.weakform(u,v)
+
+  # Transform DomainContribution objects of the hybridizable system into a
+  # suitable form for assembling the linear system defined on the skeleton
+  # (i.e., the hybrid system)
+  obiform, oliform = _hybridrizable_to_hybrid_contributions(biform,liform)
+
+  # Pair LHS and RHS terms associated to TempSkeletonTriangulation
+  matvec,_,_=Gridap.FESpaces._pair_contribution_when_possible(obiform,oliform)
+
+  trian=first(keys(matvec.dict))
+  @assert isa(trian,TempSkeletonTriangulation)
+  t = matvec.dict[trian]
+  m=BackwardStaticCondensationMap(op.bulk_fields,op.skeleton_fields)
+  uhphlhₖ=lazy_map(m,t,lhₖ)
 end
 
 # TO-THINK:
