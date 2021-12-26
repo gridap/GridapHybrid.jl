@@ -1,10 +1,16 @@
-module DarcyRTHTests
+#module DarcyRTHTests
 
 using Test
 using Gridap
 using FillArrays
 using Gridap.Geometry
 using ExploringGridapHybridization
+
+function Gridap.CellData.get_triangulation(f::Gridap.MultiField.MultiFieldCellField)
+  s1 = first(f.single_fields)
+  trian = get_triangulation(s1)
+  trian
+end
 
 #2D problem
 u2(x) = VectorValue(1+x[1],1+x[2])
@@ -276,8 +282,14 @@ function back_substitution_stage_darcy_hybrid_rt(∂T,X,Y,M,L,x,cmat,cvec,fdofsc
   # bm=vcat(cvec[1][1],cvec[1][2],data_vΓd...)
   # Am\bm
 
-  lhₑ=lazy_map(Gridap.Fields.BlockMap(3,3),ExploringGridapHybridization.convert_cell_wise_dofs_array_to_facet_dofs_array(∂T,
-      lhₖ,get_cell_dof_ids(M)))
+  cell_wise_facets=ExploringGridapHybridization._get_cell_wise_facets(∂T)
+  cells_around_facets=ExploringGridapHybridization._get_cells_around_facets(∂T)
+
+  lhₑ=lazy_map(Gridap.Fields.BlockMap(3,3),ExploringGridapHybridization.convert_cell_wise_dofs_array_to_facet_dofs_array(
+      cells_around_facets,
+      cell_wise_facets,
+      lhₖ,
+      get_cell_dof_ids(M)))
 
   assem = SparseMatrixAssembler(Y,X)
   lhₑ_dofs=get_cell_dof_ids(X,Γ)
@@ -321,4 +333,4 @@ uhc,_=sol_conforming
 uhnc,_,_=sol_nonconforming
 @test sqrt(sum(∫((uhc-uhnc)⋅(uhc-uhnc))dΩ)) < 1.0e-12
 
-end # module
+# end # module

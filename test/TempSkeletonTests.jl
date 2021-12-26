@@ -1,5 +1,6 @@
 using Gridap
 using ExploringGridapHybridization
+using Test
 
 #2D problem
 u(x) = VectorValue(1+x[1],1+x[2])
@@ -84,4 +85,8 @@ l((vh,qh,mh)) = ∫( vh⋅f + qh*(∇⋅u))*dΩ
 
 op=HybridAffineFEOperator((u,v)->(a(u,v),l(v)), X, Y, [1,2], [3])
 
-x=solve(op)
+xh=solve(op)
+
+uh,_=xh
+e = u -uh
+@test sqrt(sum(∫(e⋅e)dΩ)) < 1.0e-12

@@ -254,6 +254,17 @@ function _get_cell_wise_facets(model::DiscreteModel)
   Gridap.Geometry.get_faces(gtopo, D, D-1)
 end
 
+function _get_cells_around_facets(cb)
+  model = cb.model
+  _get_cells_around_facets(model)
+end
+
+function _get_cells_around_facets(model::DiscreteModel)
+  gtopo = get_grid_topology(model)
+  D     = num_cell_dims(model)
+  Gridap.Geometry.get_faces(gtopo, D-1, D)
+end
+
 function _compute_cell_lface_to_q_vertex_coords(cb::CellBoundary)
   ctype_to_lface_to_pindex_to_qcoords=Gridap.Geometry._compute_face_to_q_vertex_coords(cb.btrian)
   CellBoundaryCompressedVector(
@@ -1090,21 +1101,6 @@ function _get_block_layout(fields_array::AbstractArray{<:Gridap.Fields.ArrayBloc
   lazy_map(x->((size(x),findall(x.touched))),fields_array)
 end
 
-
-function _get_cell_wise_facets(cb)
-  model = cb.model
-  gtopo = get_grid_topology(model)
-  D     = num_cell_dims(model)
-  Gridap.Geometry.get_faces(gtopo, D, D-1)
-end
-
-function _get_cells_around_facets(cb)
-  model = cb.model
-  gtopo = get_grid_topology(model)
-  D     = num_cell_dims(model)
-  Gridap.Geometry.get_faces(gtopo, D-1, D)
-end
-
 # This function will eventually play the role of its counterpart in Gridap
 # function integrate(f::CellField,quad::CellQuadrature)
 # TO-THINK: mh,uh currently as LazyArray{...}
@@ -1269,10 +1265,12 @@ function integrate_mh_mult_uh_cdot_n_plus_stab_low_level(
   result=lazy_map(Broadcasting(-),result,arg3)
 end
 
-function _generate_glue_among_facet_and_cell_wise_dofs_arrays(cb,facet_dof_ids)
-  cells_around_facets=_get_cells_around_facets(cb)
+function _generate_glue_among_facet_and_cell_wise_dofs_arrays(
+  cells_around_facets,
+  cell_wise_facets,
+  facet_dof_ids)
+
   c1=array_cache(cells_around_facets)
-  cell_wise_facets=_get_cell_wise_facets(cb)
   c2=array_cache(cell_wise_facets)
   c3=array_cache(facet_dof_ids)
 
@@ -1321,10 +1319,12 @@ end
 
 
 function convert_cell_wise_dofs_array_to_facet_dofs_array(
-       cb,
+       cells_around_facets,
+       cell_wise_facets,
        cell_dofs_array::AbstractVector{<:AbstractVector},
        facet_dof_ids)
-  glue = _generate_glue_among_facet_and_cell_wise_dofs_arrays(cb,facet_dof_ids)
+  glue = _generate_glue_among_facet_and_cell_wise_dofs_arrays(
+    cells_around_facets, cell_wise_facets, facet_dof_ids)
   k=ExtractFacetDofsFromCellDofs(cell_dofs_array)
   lazy_map(k,glue)
 end

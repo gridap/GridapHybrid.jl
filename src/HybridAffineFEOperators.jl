@@ -64,8 +64,8 @@ function Gridap.FESpaces.solve!(uh,solver::LinearFESolver,op::HybridAffineFEOper
 
   # Convert dof-wise dof values of lh into cell-wise dof values lhₖ
   L=Gridap.FESpaces.get_fe_space(lh)
-  trian=get_triangulation(L)
-  model=get_background_model(trian)
+  Γ=get_triangulation(L)
+  model=get_background_model(Γ)
   cell_wise_facets=_get_cell_wise_facets(model)
   fdofscb=restrict_facet_dof_ids_to_cell_boundary(cell_wise_facets,get_cell_dof_ids(L))
   m=Broadcasting(Gridap.Fields.PosNegReindex(
@@ -88,11 +88,38 @@ function Gridap.FESpaces.solve!(uh,solver::LinearFESolver,op::HybridAffineFEOper
   # Pair LHS and RHS terms associated to TempSkeletonTriangulation
   matvec,_,_=Gridap.FESpaces._pair_contribution_when_possible(obiform,oliform)
 
-  trian=first(keys(matvec.dict))
-  @assert isa(trian,TempSkeletonTriangulation)
-  t = matvec.dict[trian]
+  Γ=first(keys(matvec.dict))
+  @assert isa(Γ,TempSkeletonTriangulation)
+  t = matvec.dict[Γ]
   m=BackwardStaticCondensationMap(op.bulk_fields,op.skeleton_fields)
   uhphlhₖ=lazy_map(m,t,lhₖ)
+
+  cell_wise_facets=_get_cell_wise_facets(model)
+  cells_around_facets=_get_cells_around_facets(model)
+
+  nfields=length(op.bulk_fields)+length(op.skeleton_fields)
+  ### To consider first(op.skeleton_fields)
+  lhₑ=lazy_map(Gridap.Fields.BlockMap(nfields,first(op.skeleton_fields)),ExploringGridapHybridization.convert_cell_wise_dofs_array_to_facet_dofs_array(
+      cells_around_facets,
+      cell_wise_facets,
+      lhₖ,
+      get_cell_dof_ids(L)))
+
+  assem = SparseMatrixAssembler(op.trial,op.test)
+  lhₑ_dofs=get_cell_dof_ids(op.trial,get_triangulation(L))
+
+  Ω = op.trial[first(op.bulk_fields)]
+  Ω = get_triangulation(Ω)
+
+  m=Gridap.Fields.BlockMap(length(op.bulk_fields),op.bulk_fields)
+  uhph_dofs=get_cell_dof_ids(op.trial,Ω)
+  uhph_dofs=lazy_map(m,uhph_dofs.args[op.bulk_fields]...)
+
+  uhphₖ=lazy_map(RestrictArrayBlockMap(op.bulk_fields),uhphlhₖ)
+
+  cache = nothing
+  free_dof_values=assemble_vector(assem,([lhₑ,uhphₖ],[lhₑ_dofs,uhph_dofs]))
+  FEFunction(op.test,free_dof_values), cache
 end
 
 # TO-THINK:
