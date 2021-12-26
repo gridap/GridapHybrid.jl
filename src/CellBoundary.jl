@@ -207,7 +207,7 @@ function _get_cell_normal_vector(model,glue,cell_lface_to_nref::Function,sign_fl
 end
 
 function _setup_tcell_lface_mface_map(d,model,glue)
-  ctype_to_lface_to_pindex_to_qcoords=_compute_face_to_q_vertex_coords_body(d,model,glue)
+  ctype_to_lface_to_pindex_to_qcoords=Gridap.Geometry._compute_face_to_q_vertex_coords_body(d,model,glue)
   cell_lface_to_q_vertex_coords = CellBoundaryCompressedVector(
                                   ctype_to_lface_to_pindex_to_qcoords.ctype_lface_pindex_to_value,
                                   glue)
@@ -270,48 +270,6 @@ function _compute_cell_lface_to_q_vertex_coords(cb::CellBoundary)
   CellBoundaryCompressedVector(
     ctype_to_lface_to_pindex_to_qcoords.ctype_lface_pindex_to_value,
     cb.btrian.glue)
-end
-
-
-function Gridap.Geometry._compute_face_to_q_vertex_coords(trian::BoundaryTriangulation)
-  d = num_cell_dims(trian)
-  _compute_face_to_q_vertex_coords_body(d,get_background_model(trian.trian),trian.glue)
-end
-
-function _compute_face_to_q_vertex_coords_body(d,model,glue)
-  cell_grid = get_grid(model)
-  polytopes = map(get_polytope, get_reffes(cell_grid))
-  cell_to_ctype = glue.cell_to_ctype
-  ctype_to_lvertex_to_qcoords = map(get_vertex_coordinates, polytopes)
-  ctype_to_lface_to_lvertices = map((p)->get_faces(p,d,0), polytopes)
-  ctype_to_lface_to_pindex_to_perm = map( (p)->get_face_vertex_permutations(p,d), polytopes)
-
-  P = eltype(eltype(ctype_to_lvertex_to_qcoords))
-  D = num_components(P)
-  T = eltype(P)
-  ctype_to_lface_to_pindex_to_qcoords = Vector{Vector{Vector{Point{D,T}}}}[]
-
-  for (ctype, lface_to_pindex_to_perm) in enumerate(ctype_to_lface_to_pindex_to_perm)
-    lvertex_to_qcoods = ctype_to_lvertex_to_qcoords[ctype]
-    lface_to_pindex_to_qcoords = Vector{Vector{Point{D,T}}}[]
-    for (lface, pindex_to_perm) in enumerate(lface_to_pindex_to_perm)
-      cfvertex_to_lvertex = ctype_to_lface_to_lvertices[ctype][lface]
-      nfvertices = length(cfvertex_to_lvertex)
-      pindex_to_qcoords = Vector{Vector{Point{D,T}}}(undef,length(pindex_to_perm))
-      for (pindex, cfvertex_to_ffvertex) in enumerate(pindex_to_perm)
-        ffvertex_to_qcoords = zeros(Point{D,T},nfvertices)
-        for (cfvertex, ffvertex) in enumerate(cfvertex_to_ffvertex)
-          lvertex = cfvertex_to_lvertex[cfvertex]
-          qcoords = lvertex_to_qcoods[lvertex]
-          ffvertex_to_qcoords[ffvertex] = qcoords
-        end
-        pindex_to_qcoords[pindex] = ffvertex_to_qcoords
-      end
-      push!(lface_to_pindex_to_qcoords,pindex_to_qcoords)
-    end
-    push!(ctype_to_lface_to_pindex_to_qcoords,lface_to_pindex_to_qcoords)
-  end
-  Gridap.Geometry.FaceCompressedVector(ctype_to_lface_to_pindex_to_qcoords,glue)
 end
 
 function transform_face_to_cell_lface_array(glue,
