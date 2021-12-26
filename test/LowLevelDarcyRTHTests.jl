@@ -1,4 +1,4 @@
-#module DarcyRTHTests
+module LowLevelDarcyRTHTests
 
 using Test
 using Gridap
@@ -333,4 +333,4 @@ uhc,_=sol_conforming
 uhnc,_,_=sol_nonconforming
 @test sqrt(sum(∫((uhc-uhnc)⋅(uhc-uhnc))dΩ)) < 1.0e-12
 
-# end # module
+end # module
