@@ -10,12 +10,14 @@ using Gridap.Fields
 include("StaticCondensationMap.jl")
 include("BackwardStaticCondensationMap.jl")
 include("RestrictArrayBlockMap.jl")
+include("AddNaiveInnerMostBlockLevelMap.jl")
+include("SumFacetsMap.jl")
 
-export DensifyInnerMostBlockLevelMap
 export StaticCondensationMap
 export BackwardStaticCondensationMap
 export RestrictArrayBlockMap
-
+export SumFacetsMap
+export AddNaiveInnerMostBlockLevelMap
 
 export CellBoundary
 export get_cell_owner_normal_vector

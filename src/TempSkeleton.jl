@@ -109,9 +109,10 @@ function Geometry.get_cell_map(trian::TempSkeletonGrid)
   lazy_map(linear_combination,cell_to_coords,cell_to_shapefuns)
 end
 
-struct TempSkeletonTriangulation{Dc,Dp,A,B} <: Triangulation{Dc,Dp}
+struct TempSkeletonTriangulation{Dc,Dp,A,B,C} <: Triangulation{Dc,Dp}
   model::A
   grid::B
+  sign_flip::C
   glue::Gridap.Geometry.FaceToCellGlue
   function TempSkeletonTriangulation(model::DiscreteModel)
     A     = typeof(model)
@@ -125,7 +126,19 @@ struct TempSkeletonTriangulation{Dc,Dp,A,B} <: Triangulation{Dc,Dp}
                                            Fill(Int8(1),num_facets(model)))
     sgrid = TempSkeletonGrid(mgrid)
     B = typeof(sgrid)
-    new{D-1,D,A,B}(model,sgrid,glue)
+
+    # Generate sign_flip
+    # TO-DO: here I am reusing the machinery for global RT FE spaces.
+    #        Sure there is a way to decouple this from global RT FE spaces.
+    function _get_sign_flip(model)
+      basis,reffe_args,reffe_kwargs = ReferenceFE(raviart_thomas,Float64,0)
+      cell_reffe = ReferenceFE(model,basis,reffe_args...;reffe_kwargs...)
+      Gridap.FESpaces.get_sign_flip(model,cell_reffe)
+    end
+    sign_flip=_get_sign_flip(model)
+
+    C = typeof(sign_flip)
+    new{D-1,D,A,B,C}(model,sgrid,sign_flip,glue)
   end
 end
 
@@ -301,6 +314,19 @@ returns the unit outward normal to the boundary of the cell.
 function get_cell_normal_vector(s::TempSkeletonTriangulation)
   cell_lface_normal=_get_cell_normal_vector(s.model, s.glue, _cell_lface_to_nref)
   GenericCellField(cell_lface_normal,s,ReferenceDomain())
+end
+
+"""
+Returns a cell-wise array which, for each cell, and each facet within the cell,
+returns the unit outward normal to the boundary of the cell owner of the facet.
+"""
+function get_cell_owner_normal_vector(s::TempSkeletonTriangulation)
+  cell_owner_lface_normal=_get_cell_normal_vector(
+     s.model,
+     s.glue,
+     _cell_lface_to_owner_nref,
+     s.sign_flip)
+  GenericCellField(cell_owner_lface_normal,s,ReferenceDomain())
 end
 
 

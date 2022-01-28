@@ -308,6 +308,25 @@ end
 
 
 function transform_face_to_cell_lface_expanded_array(glue,
+                                                     face_array::Fill)
+  T=typeof(face_array.value)
+  ctype_to_vector_block=
+    Vector{Gridap.Fields.VectorBlock{T}}(undef,length(glue.ctype_to_lface_to_ftype))
+  for ctype=1:length(glue.ctype_to_lface_to_ftype)
+     num_facets=length(glue.ctype_to_lface_to_ftype[ctype])
+     v=Vector{T}(undef,num_facets)
+     t=Vector{Bool}(undef,num_facets)
+     t.=true
+     for lface=1:num_facets
+      ftype=glue.ctype_to_lface_to_ftype[ctype][lface]
+      v[lface]=face_array.value
+     end
+     ctype_to_vector_block[ctype]=Gridap.Fields.ArrayBlock(v,t)
+  end
+  Gridap.Arrays.CompressedArray(ctype_to_vector_block,glue.cell_to_ctype)
+end
+
+function transform_face_to_cell_lface_expanded_array(glue,
                                                      face_array::Gridap.Arrays.CompressedArray)
   ftype_to_block_layout=_get_block_layout(face_array.values)
   T=eltype(face_array.values[1])
@@ -367,14 +386,16 @@ end
 
 
 function transform_cell_to_cell_lface_array(glue,
-                                            cell_array::Fill)
+                                            cell_array::Fill;
+                                            add_naive_innermost_block_level=false)
     d = Gridap.Arrays.CompressedArray([cell_array.value,],Fill(1,length(cell_array)))
-    transform_cell_to_cell_lface_array(glue,d)
+    transform_cell_to_cell_lface_array(glue,d;add_naive_innermost_block_level=add_naive_innermost_block_level)
 end
 
 
 function transform_cell_to_cell_lface_array(glue,
-                                            cell_array::Gridap.Arrays.CompressedArray)
+                                            cell_array::Gridap.Arrays.CompressedArray;
+                                            add_naive_innermost_block_level=false)
   T=typeof(cell_array.values[1])
   ctype_to_vector_block=
     Vector{Gridap.Fields.VectorBlock{T}}(undef,length(glue.ctype_to_lface_to_ftype))
@@ -388,15 +409,19 @@ function transform_cell_to_cell_lface_array(glue,
      end
      ctype_to_vector_block[ctype]=Gridap.Fields.ArrayBlock(v,t)
   end
+  if add_naive_innermost_block_level
+    ctype_to_vector_block=collect(lazy_map(AddNaiveInnerMostBlockLevelMap(),ctype_to_vector_block))
+  end
   Gridap.Arrays.CompressedArray(ctype_to_vector_block,glue.cell_to_ctype)
 end
 
 function transform_cell_to_cell_lface_array(
   glue,
-  cell_array::Gridap.Arrays.LazyArray{<:Fill{typeof(transpose)}})
+  cell_array::Gridap.Arrays.LazyArray{<:Fill{typeof(transpose)}};
+  add_naive_innermost_block_level=false)
   Gridap.Helpers.@check typeof(cell_array.args[1]) <: Fill
   cell_array_fill = Fill(evaluate(transpose,cell_array.args[1].value),length(cell_array))
-  transform_cell_to_cell_lface_array(glue,cell_array_fill)
+  transform_cell_to_cell_lface_array(glue,cell_array_fill; add_naive_innermost_block_level=add_naive_innermost_block_level)
 end
 
 function Gridap.Arrays.lazy_map(k::Gridap.Fields.LinearCombinationMap,
@@ -749,12 +774,11 @@ function _restrict_to_cell_boundary_cell_fe_basis(model,
                                                   glue,
                                                   tface_to_mface_map,
                                                   cell_fe_basis::Gridap.CellData.CellField)
-  # TO-THINK:
-  #     1) How to deal with CellField objects which are NOT FEBasis objects?
-  #     2) How to deal with differential operators applied to FEBasis objects?
   D = num_cell_dims(model)
   Gridap.Helpers.@check isa(get_triangulation(cell_fe_basis),Triangulation{D,D})
-  cell_a_q = transform_cell_to_cell_lface_array(glue,Gridap.CellData.get_data(cell_fe_basis))
+  cell_a_q = transform_cell_to_cell_lface_array(glue,
+         Gridap.CellData.get_data(cell_fe_basis);
+         add_naive_innermost_block_level=true)
   lazy_map(Broadcasting(∘),cell_a_q,tface_to_mface_map)
 end
 
@@ -762,9 +786,6 @@ function _restrict_to_cell_boundary_facet_fe_basis(model,
                                                    glue,
                                                    facet_fe_basis::Gridap.CellData.CellField)
 
-  # TO-THINK:
-  #     1) How to deal with CellField objects which are NOT FEBasis objects?
-  #     2) How to deal with differential operators applied to FEBasis/CellField objects?
   D = num_cell_dims(model)
   Gridap.Helpers.@check isa(get_triangulation(facet_fe_basis),Triangulation{D-1,D})
 
@@ -960,43 +981,6 @@ function Gridap.Arrays.evaluate!(
   end
   a
 end
-
-struct SumFacetsMap <: Gridap.Fields.Map end
-
-function _sum_facets(cb::CellBoundary,vx,w,jx)
-   int=lazy_map(Gridap.Fields.IntegrationMap(),vx,w,jx)
-   lazy_map(SumFacetsMap(),int)
-end
-
-function Gridap.Arrays.return_cache(
-  k::SumFacetsMap,
-  a::Gridap.Fields.VectorBlock)
-  Gridap.Helpers.@check all(a.touched)
-  m=Gridap.Fields.BroadcastingFieldOpMap(+)
-  c=Gridap.Arrays.return_cache(m,a.array[1],a.array[2])
-  v=Vector{typeof(c)}(undef,length(a.array)-1)
-  v[1]=c
-  res=Gridap.Arrays.evaluate!(v[1],m,a.array[1],a.array[2])
-  for i=3:length(a.array)
-    v[i-1]=Gridap.Arrays.return_cache(m,res,a.array[i])
-    res=Gridap.Arrays.evaluate!(v[i-1],m,res,a.array[i])
-  end
-  v
-end
-
-function Gridap.Arrays.evaluate!(
-  cache,
-  k::SumFacetsMap,
-  a::Gridap.Fields.VectorBlock{A}) where{A}
-  m=Gridap.Fields.BroadcastingFieldOpMap(+)
-  Gridap.Helpers.@check all(a.touched)
-  res=Gridap.Arrays.evaluate!(cache[1],m,a.array[1],a.array[2])
-  for i=3:length(a.array)
-    res=Gridap.Arrays.evaluate!(cache[i-1],m,res,a.array[i])
-  end
-  res
-end
-
 
 struct RestrictFacetDoFsToCellBoundary{F} <: Gridap.Fields.Map
   facet_dofs::F
