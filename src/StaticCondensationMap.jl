@@ -1,8 +1,7 @@
-# TO-DO: add ional keyword args to control the kind of linear system/factorization
+# TO-DO: addtional keyword args to control the kind of linear system/factorization
 # (i.e., symmetric and positive definite, symmetric indefinite, general unsymmetric, etc.)
-struct StaticCondensationMap{IFT <: AbstractVector{<:Int},
-                             BFT <: Union{AbstractVector{<:Integer},
-                                          AbstractVector{<:AbstractVector{<:Integer}}}} <: Gridap.Fields.Map
+struct StaticCondensationMap{IFT <: AbstractVector{<:Integer},
+                             BFT <: AbstractVector{<:Integer}} <: Gridap.Fields.Map
   interior_fields :: IFT
   boundary_fields :: BFT
   function StaticCondensationMap(interior_fields::AbstractVector{<:Integer},
@@ -11,11 +10,6 @@ struct StaticCondensationMap{IFT <: AbstractVector{<:Int},
     IFT=typeof(interior_fields)
     BFT=typeof(boundary_fields)
     new{IFT,BFT}(interior_fields,boundary_fields)
-  end
-  function StaticCondensationMap(interior_fields::AbstractVector{<:Integer},
-                              boundary_fields::AbstractVector{<:AbstractVector{<:Integer}})
-    # Implementation of StaticCondensation for multi-field Lagrange multipliers pending
-    Gridap.Helpers.@notimplemented
   end
 end
 
@@ -40,13 +34,13 @@ function _check_preconditions(interior_fields::AbstractVector{<:Integer},
 end
 
 function Gridap.Arrays.return_cache(k::StaticCondensationMap{IFT,BFT},
-  Ab::Tuple{<:Gridap.Fields.MatrixBlock{<:Matrix{T}},<:Gridap.Fields.VectorBlock{<:Vector{T}}}) where {IFT<:AbstractVector{<:Integer}, BFT <: AbstractVector{<:Integer}, T}
+  Ab::Tuple{<:Gridap.Fields.MatrixBlock{<:Matrix{T}},<:Gridap.Fields.VectorBlock{<:Vector{T}}}) where {IFT, BFT, T}
   Gridap.Arrays.return_cache(k,Ab[1],Ab[2])
 end
 
 function Gridap.Arrays.return_cache(k::StaticCondensationMap{IFT,BFT},
                                     A::Gridap.Fields.MatrixBlock{<:Matrix{T}},
-                                    b::Gridap.Fields.VectorBlock{<:Vector{T}}) where {IFT<:AbstractVector{<:Integer}, BFT <: AbstractVector{<:Integer}, T}
+                                    b::Gridap.Fields.VectorBlock{<:Vector{T}}) where {IFT, BFT, T}
 
   A11_matblk = _build_matblk(A,k.interior_fields,k.interior_fields)
   A21_matblk = _build_matblk(A,k.boundary_fields,k.interior_fields)
@@ -151,14 +145,14 @@ end
 
 function Gridap.Arrays.evaluate!(cache,
   k::StaticCondensationMap{IFT,BFT},
-  Ab::Tuple{<:Gridap.Fields.MatrixBlock{<:Matrix{T}},<:Gridap.Fields.VectorBlock{<:Vector{T}}}) where {IFT<:AbstractVector{<:Integer}, BFT <: AbstractVector{<:Integer}, T}
+  Ab::Tuple{<:Gridap.Fields.MatrixBlock{<:Matrix{T}},<:Gridap.Fields.VectorBlock{<:Vector{T}}}) where {IFT, BFT, T}
   Gridap.Arrays.evaluate!(cache,k,Ab[1],Ab[2])
 end
 
 function Gridap.Arrays.evaluate!(cache,
   k::StaticCondensationMap{IFT,BFT},
   A::Gridap.Fields.MatrixBlock{<:Matrix{T}},
-  b::Gridap.Fields.VectorBlock{<:Vector{T}}) where {IFT<:AbstractVector{<:Integer}, BFT <: AbstractVector{<:Integer}, T}
+  b::Gridap.Fields.VectorBlock{<:Vector{T}}) where {IFT, BFT, T}
 
    kdensify,interior_brs,boundary_brs,A11t,A21t,A12t,A22t,b1t,b2t=cache
    A11_matblk,A11_cache=A11t

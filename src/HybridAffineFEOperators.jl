@@ -14,9 +14,6 @@ function HybridAffineFEOperator(
   bulk_fields :: TB,
   skeleton_fields :: TS) where {TB<:Vector{<:Integer},TS<:Vector{<:Integer}}
 
-  # TO-DO: get rid of this temporary limitation
-  @assert length(skeleton_fields)==1
-
   # Invoke weak form of the hybridizable system
   u = get_trial_fe_basis(trial)
   v = get_fe_basis(test)
@@ -33,10 +30,16 @@ function HybridAffineFEOperator(
   # Add StaticCondensationMap to matvec terms
   matvec=_add_static_condensation(matvec,bulk_fields,skeleton_fields)
 
-  M = trial[skeleton_fields[1]]
-  L = test[skeleton_fields[1]]
-  #@assert length(M)==1
-  #@assert length(L)==1
+  if (length(skeleton_fields)==1)
+    # Single-field skeleton system
+    M = trial[skeleton_fields[1]]
+    L = test[skeleton_fields[1]]
+  else
+    # Multi-field skeleton system
+    M = MultiFieldFESpace([trial[i] for i in skeleton_fields])
+    L = MultiFieldFESpace([test[i] for i in skeleton_fields])
+    matvec=_block_skeleton_system_contributions(matvec,L)
+  end
   assem=SparseMatrixAssembler(M,L)
 
   # Attach strong imposition of Dirichlet BCs
@@ -62,19 +65,6 @@ function Gridap.FESpaces.solve!(uh,solver::LinearFESolver,op::HybridAffineFEOper
   # Solve linear system defined on the skeleton
   lh = solve(op.condensed_op)
 
-  # Convert dof-wise dof values of lh into cell-wise dof values lhₖ
-  L=Gridap.FESpaces.get_fe_space(lh)
-  Γ=get_triangulation(L)
-  model=get_background_model(Γ)
-  cell_wise_facets=_get_cell_wise_facets(model)
-  fdofscb=restrict_facet_dof_ids_to_cell_boundary(cell_wise_facets,get_cell_dof_ids(L))
-  m=Broadcasting(Gridap.Fields.PosNegReindex(
-                 Gridap.FESpaces.get_free_dof_values(lh),
-                 lh.dirichlet_values))
-  lhₖ= lazy_map(m,fdofscb)
-
-  # Compute cell-wise dof values of bulk fields out of lhₖ
-
   # Invoke weak form of the hybridizable system
   u = get_trial_fe_basis(op.trial)
   v = get_fe_basis(op.test)
@@ -88,22 +78,29 @@ function Gridap.FESpaces.solve!(uh,solver::LinearFESolver,op::HybridAffineFEOper
   # Pair LHS and RHS terms associated to TempSkeletonTriangulation
   matvec,_,_=Gridap.FESpaces._pair_contribution_when_possible(obiform,oliform)
 
+  # Convert dof-wise dof values of lh into cell-wise dof values lhₖ
   Γ=first(keys(matvec.dict))
-  @assert isa(Γ,TempSkeletonTriangulation)
+  Gridap.Helpers.@check isa(Γ,TempSkeletonTriangulation)
+  lhₖ=get_cell_dof_values(lh,Γ)
+
+  # Compute cell-wise dof values of bulk fields out of lhₖ
   t = matvec.dict[Γ]
   m=BackwardStaticCondensationMap(op.bulk_fields,op.skeleton_fields)
   uhphlhₖ=lazy_map(m,t,lhₖ)
 
+  model=get_background_model(Γ)
   cell_wise_facets=_get_cell_wise_facets(model)
   cells_around_facets=_get_cells_around_facets(model)
 
   nfields=length(op.bulk_fields)+length(op.skeleton_fields)
-  ### To consider first(op.skeleton_fields)
-  lhₑ=lazy_map(Gridap.Fields.BlockMap(nfields,first(op.skeleton_fields)),ExploringGridapHybridization.convert_cell_wise_dofs_array_to_facet_dofs_array(
-      cells_around_facets,
-      cell_wise_facets,
-      lhₖ,
-      get_cell_dof_ids(L)))
+  m=Gridap.Fields.BlockMap(nfields,op.skeleton_fields)
+  L=Gridap.FESpaces.get_fe_space(lh)
+  lhₑ=lazy_map(m,
+                 convert_cell_wise_dofs_array_to_facet_dofs_array(
+                 cells_around_facets,
+                 cell_wise_facets,
+                 lhₖ,
+                 get_cell_dof_ids(L))...)
 
   assem = SparseMatrixAssembler(op.trial,op.test)
   lhₑ_dofs=get_cell_dof_ids(op.trial,get_triangulation(L))
@@ -113,6 +110,8 @@ function Gridap.FESpaces.solve!(uh,solver::LinearFESolver,op::HybridAffineFEOper
 
   m=Gridap.Fields.BlockMap(length(op.bulk_fields),op.bulk_fields)
   uhph_dofs=get_cell_dof_ids(op.trial,Ω)
+  # This last step is needed as get_cell_dof_ids(...) returns as many blocks
+  # as fields in op.trial, regardless of the FEspaces defined on Ω or not
   uhph_dofs=lazy_map(m,uhph_dofs.args[op.bulk_fields]...)
 
   uhphₖ=lazy_map(RestrictArrayBlockMap(op.bulk_fields),uhphlhₖ)
@@ -129,7 +128,7 @@ end
 # 4. May we have a hybridizable weak formulation with triangulations different from TempSkeleton,
 #    bulk and BoundaryTriangulation?
 
-# The currently supported scenarios are explicitly encoded in the @assert's below.
+# The currently supported scenarios are explicitly encoded in the @check's below.
 # These may be modified (along with the code supporting them) as we consider
 # more general scenarios.
 
@@ -138,13 +137,13 @@ function _hybridrizable_to_hybrid_contributions(matcontribs,veccontribs)
    Dli = maximum(map(tr->num_cell_dims(tr), collect(keys(veccontribs.dict))))
    D   = max(Dbi,Dli)
 
-   mskeleton = _find_skeleton(matcontribs); @assert length(mskeleton)==1
-   mbulk     = _find_bulk(D,matcontribs)    ; @assert length(mbulk)==1
-   mboun     = _find_boundary(matcontribs); @assert length(mboun)==0
+   mskeleton = _find_skeleton(matcontribs); Gridap.Helpers.@check length(mskeleton)==1
+   mbulk     = _find_bulk(D,matcontribs)    ; Gridap.Helpers.@check length(mbulk)==1
+   mboun     = _find_boundary(matcontribs); Gridap.Helpers.@check length(mboun)==0
 
-   vskeleton = _find_skeleton(veccontribs); @assert length(vskeleton)==0
-   vbulk     = _find_bulk(D,veccontribs)    ; @assert length(vbulk)<=1
-   vboun     = _find_boundary(veccontribs); @assert length(vboun)<=1
+   vskeleton = _find_skeleton(veccontribs); Gridap.Helpers.@check length(vskeleton)==0
+   vbulk     = _find_bulk(D,veccontribs)    ; Gridap.Helpers.@check length(vbulk)<=1
+   vboun     = _find_boundary(veccontribs); Gridap.Helpers.@check length(vboun)<=1
 
    omatcontribs = DomainContribution()
    oveccontribs = DomainContribution()
@@ -180,11 +179,26 @@ function _find_boundary(dc::DomainContribution)
 end
 
 function _add_static_condensation(matvec,bulk_fields,skeleton_fields)
-  @assert length(keys(matvec.dict))==1
+  Gridap.Helpers.@check length(keys(matvec.dict))==1
   _matvec=DomainContribution()
   for (trian,t) in matvec.dict
-    @assert isa(trian,TempSkeletonTriangulation)
+    Gridap.Helpers.@check isa(trian,TempSkeletonTriangulation)
     _matvec.dict[trian] = lazy_map(StaticCondensationMap(bulk_fields,skeleton_fields),t)
+  end
+  _matvec
+end
+
+function _block_skeleton_system_contributions(matvec,L::MultiFieldFESpace)
+  fdofscw=_get_facet_dofs_cell_wise(L)
+  num_cells=length(fdofscw)
+  a=fdofscw[1].array
+  block_sizes=Fill([length(a[i]) for i=1:length(a)],num_cells)
+  m=Scalar2ArrayBlockMap()
+  Gridap.Helpers.@check length(keys(matvec.dict))==1
+  _matvec=DomainContribution()
+  for (trian,t) in matvec.dict
+    Gridap.Helpers.@check isa(trian,TempSkeletonTriangulation)
+    _matvec.dict[trian] = lazy_map(m,t,block_sizes)
   end
   _matvec
 end
@@ -216,4 +230,26 @@ function _generate_cell_is_dirichlet(cell_dofs)
     cell_is_dirichlet[cell] = any(isdirichlet,dofs)
   end
   cell_is_dirichlet
+end
+
+function _get_facet_dofs_cell_wise(L::Gridap.FESpaces.SingleFieldFESpace)
+  Γ=get_triangulation(L)
+  model=get_background_model(Γ)
+  cell_wise_facets=_get_cell_wise_facets(model)
+  restrict_facet_dof_ids_to_cell_boundary(cell_wise_facets,get_cell_dof_ids(L))
+end
+
+function _get_facet_dofs_cell_wise(L::MultiFieldFESpace)
+  Γ=get_triangulation(L[1])
+  model=get_background_model(Γ)
+  cell_wise_facets=_get_cell_wise_facets(model)
+
+  facet_fields_dofs_cell_wise=[]
+  for S in L
+    push!(facet_fields_dofs_cell_wise,
+          restrict_facet_dof_ids_to_cell_boundary(cell_wise_facets,get_cell_dof_ids(S)))
+  end
+
+  m=BlockMap(num_fields(L),collect(1:num_fields(L)))
+  lazy_map(m,facet_fields_dofs_cell_wise...)
 end

@@ -994,7 +994,7 @@ function Gridap.Arrays.return_cache(
   elseif (isa(k.facet_dofs,AbstractVector{<:AbstractVector{<:Number}}))
     T=eltype(eltype(k.facet_dofs))
   else
-    @assert false
+    Gridap.Helpers.@check false
   end
   array_cache(k.facet_dofs), Gridap.Arrays.CachedVector(T)
 end
@@ -1210,7 +1210,7 @@ end
 function _generate_glue_among_facet_and_cell_wise_dofs_arrays(
   cells_around_facets,
   cell_wise_facets,
-  facet_dof_ids)
+  facet_dof_ids::AbstractVector{<:AbstractVector{<:Integer}})
 
   c1=array_cache(cells_around_facets)
   c2=array_cache(cell_wise_facets)
@@ -1263,10 +1263,25 @@ end
 function convert_cell_wise_dofs_array_to_facet_dofs_array(
        cells_around_facets,
        cell_wise_facets,
-       cell_dofs_array::AbstractVector{<:AbstractVector},
-       facet_dof_ids)
+       cell_dofs::AbstractVector{<:AbstractVector{<:Real}},
+       facet_dofs_ids::AbstractVector{<:AbstractVector{<:Integer}})
   glue = _generate_glue_among_facet_and_cell_wise_dofs_arrays(
-    cells_around_facets, cell_wise_facets, facet_dof_ids)
-  k=ExtractFacetDofsFromCellDofs(cell_dofs_array)
-  lazy_map(k,glue)
+    cells_around_facets, cell_wise_facets, facet_dofs_ids)
+  k=ExtractFacetDofsFromCellDofs(cell_dofs)
+  [lazy_map(k,glue)]
+end
+
+function convert_cell_wise_dofs_array_to_facet_dofs_array(
+  cells_around_facets,
+  cell_wise_facets,
+  cell_dofs::Gridap.Arrays.LazyArray{<:Fill{<:Gridap.Fields.BlockMap}},
+  facet_dofs_ids::Gridap.Arrays.LazyArray{<:Fill{<:Gridap.Fields.BlockMap}})
+  Gridap.Helpers.@check cell_dofs.maps.value.size == facet_dofs_ids.maps.value.size
+
+  [convert_cell_wise_dofs_array_to_facet_dofs_array(
+      cells_around_facets,
+      cell_wise_facets,
+      field_cell_dofs,
+      field_facet_dof_ids)[1] for (field_cell_dofs,field_facet_dof_ids) in
+                                   zip(cell_dofs.args, facet_dofs_ids.args)]
 end
