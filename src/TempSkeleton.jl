@@ -213,6 +213,31 @@ function CellData.change_domain_ref_ref(
   CellData.similar_cell_field(a,b,ttrian,ReferenceDomain())
 end
 
+function _restrict_to_cell_boundary_cell_fe_basis(model,
+                                                  glue,
+                                                  tface_to_mface_map,
+                                                  cell_fe_basis::Gridap.CellData.CellField)
+  D = num_cell_dims(model)
+  Gridap.Helpers.@check isa(get_triangulation(cell_fe_basis),Triangulation{D,D})
+  cell_a_q = transform_cell_to_cell_lface_array(glue,
+         Gridap.CellData.get_data(cell_fe_basis);
+         add_naive_innermost_block_level=true)
+  lazy_map(Broadcasting(∘),cell_a_q,tface_to_mface_map)
+end
+
+function _restrict_to_cell_boundary_facet_fe_basis(model,
+                                                   glue,
+                                                   facet_fe_basis::Gridap.CellData.CellField)
+
+  D = num_cell_dims(model)
+  Gridap.Helpers.@check isa(get_triangulation(facet_fe_basis),Triangulation{D-1,D})
+
+  transform_face_to_cell_lface_expanded_array(
+    glue,
+    Gridap.CellData.get_data(facet_fe_basis))
+end
+
+
 function CellData.change_domain_phys_phys(
   a::CellField,ttrian::TempSkeletonTriangulation,sglue::FaceToFaceGlue,tglue::TempSkeletonGlue)
   sface_to_field = get_data(a)

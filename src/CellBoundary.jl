@@ -92,30 +92,6 @@ function Base.getindex(a::CellBoundaryVectorFromFacetVector,cell::Integer)
   Gridap.Arrays.getindex!(c,a,cell)
 end
 
-struct CellBoundary{M<:DiscreteModel,TBT<:Triangulation,SF}
-  model::M
-  btrian::TBT
-  sign_flip::SF
-  function CellBoundary(model::M) where M<:DiscreteModel
-    face_to_bgface = collect(1:num_facets(model))
-    btrian=BoundaryTriangulation(model,
-                              face_to_bgface,
-                              Fill(Int8(1),num_facets(model)))
-    TBT=typeof(btrian)
-    # TO-DO: here I am reusing the machinery for global RT FE spaces.
-    #        Sure there is a way to decouple this from global RT FE spaces.
-    function _get_sign_flip(model)
-      basis,reffe_args,reffe_kwargs = ReferenceFE(raviart_thomas,Float64,0)
-      cell_reffe = ReferenceFE(model,basis,reffe_args...;reffe_kwargs...)
-      Gridap.FESpaces.get_sign_flip(model,cell_reffe)
-    end
-    sign_flip=_get_sign_flip(model)
-    SF=typeof(sign_flip)
-    new{M,TBT,SF}(model,btrian,sign_flip)
-  end
-end
-
-
 struct CellBoundaryOwnerNref{T,G,SF} <: AbstractVector{Gridap.Fields.VectorBlock{T}}
     cell_boundary_nref::CellBoundaryCompressedVector{T,G}
     sign_flip::SF
@@ -167,21 +143,6 @@ function _cell_lface_to_owner_nref(args...)
   CellBoundaryOwnerNref(cell_lface_to_nref,sign_flip)
 end
 
-"""
-Returns a cell-wise array which, for each cell, and each facet within the cell,
-returns the unit outward normal to the boundary of the cell.
-"""
-function get_cell_normal_vector(cb::CellBoundary)
-  _get_cell_normal_vector(cb.model, cb.btrian.glue, _cell_lface_to_nref)
-end
-
-"""
-Returns a cell-wise array which, for each cell, and each facet within the cell,
-returns the unit outward normal to the boundary of the cell owner of the facet.
-"""
-function get_cell_owner_normal_vector(cb::CellBoundary)
-  _get_cell_normal_vector(cb.model, cb.btrian.glue, _cell_lface_to_owner_nref, cb.sign_flip)
-end
 
 function _get_cell_normal_vector(model,glue,cell_lface_to_nref::Function,sign_flip=nothing)
   cell_grid = get_grid(model)
@@ -233,43 +194,16 @@ function _setup_tcell_lface_mface_map(d,model,glue)
            cell_to_lface_to_shapefuns)
 end
 
-function Gridap.Geometry.get_cell_map(cb::CellBoundary)
-  facet_map=get_cell_map(cb.btrian)
-  CellBoundaryVectorFromFacetVector(cb.btrian.glue,
-                                    _get_cell_wise_facets(cb),
-                                    facet_map)
-  # cell_map=get_cell_map(cb.btrian.cell_trian)
-  # cell_lface_ref_map=get_cell_ref_map(cb)
-  # r=lazy_map(Broadcasting(∘),cell_map,cell_lface_ref_map)
-end
-
-function _get_cell_wise_facets(cb::CellBoundary)
-  model = cb.model
-  _get_cell_wise_facets(model)
-end
-
 function _get_cell_wise_facets(model::DiscreteModel)
   gtopo = get_grid_topology(model)
   D     = num_cell_dims(model)
   Gridap.Geometry.get_faces(gtopo, D, D-1)
 end
 
-function _get_cells_around_facets(cb)
-  model = cb.model
-  _get_cells_around_facets(model)
-end
-
 function _get_cells_around_facets(model::DiscreteModel)
   gtopo = get_grid_topology(model)
   D     = num_cell_dims(model)
   Gridap.Geometry.get_faces(gtopo, D-1, D)
-end
-
-function _compute_cell_lface_to_q_vertex_coords(cb::CellBoundary)
-  ctype_to_lface_to_pindex_to_qcoords=Gridap.Geometry._compute_face_to_q_vertex_coords(cb.btrian)
-  CellBoundaryCompressedVector(
-    ctype_to_lface_to_pindex_to_qcoords.ctype_lface_pindex_to_value,
-    cb.btrian.glue)
 end
 
 function transform_face_to_cell_lface_array(glue,
@@ -640,25 +574,6 @@ function Gridap.Arrays.lazy_map(
   CellBoundaryVectorFromFacetVector(b.glue,b.cell_wise_facets_ids,∇bf)
 end
 
-function quadrature_points_and_weights(cb::CellBoundary, degree::Integer)
-  model = cb.model
-  D = num_cell_dims(model)
-  p = lazy_map(Gridap.ReferenceFEs.get_polytope,get_reffes(model))
-  Gridap.Helpers.@check length(p) == 1
-
-  f(p) = Gridap.ReferenceFEs.Quadrature(Gridap.ReferenceFEs.get_polytope(p),degree)
-  ftype_to_quads = map( f, Gridap.Geometry.get_reffes(cb.btrian) )
-  face_to_quads = expand_cell_data(ftype_to_quads,cb.btrian.glue.face_to_ftype)
-
-  xf_array_block = transform_face_to_cell_lface_array(
-         cb.btrian.glue,face_to_quads,Gridap.ReferenceFEs.get_coordinates)
-
-  wf_array_block = transform_face_to_cell_lface_array(
-    cb.btrian.glue,face_to_quads,Gridap.ReferenceFEs.get_weights)
-
-  (xf_array_block,wf_array_block)
-end
-
 # Optimization for
 #
 #  g = lazy_map( linear_combination, cell_to_i_to_val,cell_to_i_to_f)
@@ -751,49 +666,6 @@ function Gridap.Arrays.evaluate!(
   end
   r
 end
-
-function restrict_to_cell_boundary(cb::CellBoundary,
-                                   fe_basis::Gridap.CellData.CellField)
-  model = cb.model
-  D = num_cell_dims(model)
-  trian = get_triangulation(fe_basis)
-  if isa(trian,Triangulation{D,D})
-    tface_to_mface_map = _setup_tcell_lface_mface_map(D-1,model,cb.btrian.glue)
-    _restrict_to_cell_boundary_cell_fe_basis(model,
-                                              cb.btrian.glue,
-                                              tface_to_mface_map,
-                                              fe_basis)
-  elseif isa(trian,Triangulation{D-1,D})
-    _restrict_to_cell_boundary_facet_fe_basis(model,
-                                             cb.btrian.glue,
-                                             fe_basis)
-  end
-end
-
-function _restrict_to_cell_boundary_cell_fe_basis(model,
-                                                  glue,
-                                                  tface_to_mface_map,
-                                                  cell_fe_basis::Gridap.CellData.CellField)
-  D = num_cell_dims(model)
-  Gridap.Helpers.@check isa(get_triangulation(cell_fe_basis),Triangulation{D,D})
-  cell_a_q = transform_cell_to_cell_lface_array(glue,
-         Gridap.CellData.get_data(cell_fe_basis);
-         add_naive_innermost_block_level=true)
-  lazy_map(Broadcasting(∘),cell_a_q,tface_to_mface_map)
-end
-
-function _restrict_to_cell_boundary_facet_fe_basis(model,
-                                                   glue,
-                                                   facet_fe_basis::Gridap.CellData.CellField)
-
-  D = num_cell_dims(model)
-  Gridap.Helpers.@check isa(get_triangulation(facet_fe_basis),Triangulation{D-1,D})
-
-  transform_face_to_cell_lface_expanded_array(
-    glue,
-    Gridap.CellData.get_data(facet_fe_basis))
-end
-
 
 function Gridap.Arrays.return_value(
   k::Broadcasting{typeof(∘)},
@@ -1043,169 +915,6 @@ function _get_block_layout(fields_array::AbstractArray{<:Gridap.Fields.ArrayBloc
   lazy_map(x->((size(x),findall(x.touched))),fields_array)
 end
 
-# This function will eventually play the role of its counterpart in Gridap
-# function integrate(f::CellField,quad::CellQuadrature)
-# TO-THINK: mh,uh currently as LazyArray{...}
-#    Not sure if we are loosing generality by constraining a to be of type
-#    LazyArray{...}. I need to restrict the cell-wise block array to each
-#    individual block, and with a LazyArray{...} this is very efficient as
-#    the array is already restricted to each block in the a.args member variable.
-
-#∫( mh*(uh⋅n) )*dK
-function integrate_mh_mult_uh_cdot_n_low_level(cb,
-  mh,
-  uh,
-  x::AbstractArray{<:Gridap.Fields.ArrayBlock{<:AbstractArray{<:Point}}},
-  w::AbstractArray{<:Gridap.Fields.ArrayBlock{<:AbstractVector}})
-
-  n=get_cell_normal_vector(cb)
-
-  # (uh⋅n)
-  uhx=lazy_map(evaluate,uh,x)
-  nx=lazy_map(evaluate,n,x)
-  uhx_cdot_nx=lazy_map(Gridap.Fields.BroadcastingFieldOpMap(⋅), uhx, nx)
-
-  # mh*(uh⋅n)
-  mhx=lazy_map(evaluate,mh,x)
-  mhx_mult_uhx_cdot_nx = lazy_map(Gridap.Fields.BroadcastingFieldOpMap(*), mhx, uhx_cdot_nx )
-
-  j=lazy_map(∇,get_cell_map(cb))
-  jx=lazy_map(evaluate,j,x)
-
-  lazy_map(IntegrationMap(),mhx_mult_uhx_cdot_nx,w,jx)
-end
-
-
-#∫( (vh⋅n)*lh )*dK
-function integrate_vh_cdot_n_mult_lh_low_level(
-  cb,
-  vh,
-  lh,
-  x::AbstractArray{<:Gridap.Fields.ArrayBlock{<:AbstractArray{<:Point}}},
-  w::AbstractArray{<:Gridap.Fields.ArrayBlock{<:AbstractVector}})
-
-  n=get_cell_normal_vector(cb)
-
-  # (vh⋅n)
-  vhx=lazy_map(evaluate,vh,x)
-  nx=lazy_map(evaluate,n,x)
-  vhx_cdot_nx=lazy_map(Gridap.Fields.BroadcastingFieldOpMap(⋅), vhx, nx)
-
-  # (vh⋅n)*lh
-  lhx=lazy_map(evaluate,lh,x)
-  vhx_cdot_nx_mult_lhx = lazy_map(Gridap.Fields.BroadcastingFieldOpMap(*), vhx_cdot_nx, lhx)
-
-  j=lazy_map(∇,get_cell_map(cb))
-  jx=lazy_map(evaluate,j,x)
-
-  lazy_map(IntegrationMap(),vhx_cdot_nx_mult_lhx,w,jx)
-end
-
-# ∫(qh*(uh⋅n+τ*(ph-lh)*n⋅no))*d∂K
-function integrate_qh_mult_uh_cdot_n_plus_stab_low_level(
-  cb,
-  qh,
-  uh,
-  τ ,
-  ph,
-  lh,
-  x::AbstractArray{<:Gridap.Fields.ArrayBlock{<:AbstractArray{<:Point}}},
-  w::AbstractArray{<:Gridap.Fields.ArrayBlock{<:AbstractVector}})
-
-  # (n⋅no)
-  n=get_cell_normal_vector(cb)
-  no=get_cell_owner_normal_vector(cb)
-  nx=lazy_map(evaluate,n,x)
-  nox=lazy_map(evaluate,no,x)
-  nx_cdot_nox=lazy_map(Gridap.Fields.BroadcastingFieldOpMap(⋅), nx, nox)
-
-  # ∫(qh*(uh⋅n)d∂K
-  qhx=lazy_map(evaluate,qh,x)
-  uhx=lazy_map(evaluate,uh,x)
-  uhx_cdot_nx=lazy_map(Gridap.Fields.BroadcastingFieldOpMap(⋅), uhx, nx)
-  qhx_mult_uhx_cdot_nx=lazy_map(Gridap.Fields.BroadcastingFieldOpMap(*), qhx, uhx_cdot_nx)
-
-  # ∫(qh*(τ*(ph)*(n⋅no))d∂K
-  phx=lazy_map(evaluate,ph,x)
-  phx_mult_n_cdot_no=lazy_map(Gridap.Fields.BroadcastingFieldOpMap(*), phx, nx_cdot_nox)
-  τx=lazy_map(evaluate,τ,x)
-  τx_mult_phx_mult_n_cdot_no=
-      lazy_map(Gridap.Fields.BroadcastingFieldOpMap(*), τx, phx_mult_n_cdot_no)
-  qhx_mult_τx_mult_phx_mult_n_cdot_no=
-      lazy_map(Gridap.Fields.BroadcastingFieldOpMap(*), qhx, τx_mult_phx_mult_n_cdot_no)
-
-  # -∫(qh*(τ*(lh)*(n⋅no))d∂K
-  lhx=lazy_map(evaluate,lh,x)
-  lhx_mult_n_cdot_no=lazy_map(Gridap.Fields.BroadcastingFieldOpMap(*), lhx, nx_cdot_nox)
-  τx_mult_lhx_mult_n_cdot_no=
-      lazy_map(Gridap.Fields.BroadcastingFieldOpMap(*), τx, lhx_mult_n_cdot_no)
-  qhx_mult_τx_mult_lhx_mult_n_cdot_no=
-      lazy_map(Gridap.Fields.BroadcastingFieldOpMap(*), qhx, τx_mult_lhx_mult_n_cdot_no)
-
-  j=lazy_map(∇,get_cell_map(cb))
-  jx=lazy_map(evaluate,j,x)
-
-  arg1=lazy_map(Broadcasting(+),
-                lazy_map(IntegrationMap(),qhx_mult_uhx_cdot_nx,w,jx),
-                lazy_map(IntegrationMap(),qhx_mult_τx_mult_phx_mult_n_cdot_no,w,jx))
-
-  arg2=lazy_map(IntegrationMap(),qhx_mult_τx_mult_lhx_mult_n_cdot_no,w,jx)
-
-  lazy_map(Broadcasting(-),arg1,arg2)
-end
-
-# ∫(mh*(uh⋅n+τ*(ph-lh)*n⋅no))*d∂K
-function integrate_mh_mult_uh_cdot_n_plus_stab_low_level(
-  cb,
-  mh,
-  uh,
-  τ,
-  ph,
-  lh,
-  x::AbstractArray{<:Gridap.Fields.ArrayBlock{<:AbstractArray{<:Point}}},
-  w::AbstractArray{<:Gridap.Fields.ArrayBlock{<:AbstractVector}})
-
-  # (n⋅no)
-  n=get_cell_normal_vector(cb)
-  no=get_cell_owner_normal_vector(cb)
-  nx=lazy_map(evaluate,n,x)
-  nox=lazy_map(evaluate,no,x)
-  nx_cdot_nox=lazy_map(Gridap.Fields.BroadcastingFieldOpMap(⋅), nx, nox)
-
-  # ∫(mh*(uh⋅n)d∂K
-  mhx=lazy_map(evaluate,mh,x)
-  uhx=lazy_map(evaluate,uh,x)
-  uhx_cdot_nx=lazy_map(Gridap.Fields.BroadcastingFieldOpMap(⋅), uhx, nx)
-  mhx_mult_uhx_cdot_nx=lazy_map(Gridap.Fields.BroadcastingFieldOpMap(*), mhx, uhx_cdot_nx)
-
-  # ∫(mh*(τ*(ph)*(n⋅no))d∂K
-  phx=lazy_map(evaluate,ph,x)
-  phx_mult_n_cdot_no=lazy_map(Gridap.Fields.BroadcastingFieldOpMap(*), phx, nx_cdot_nox)
-  τx=lazy_map(evaluate,τ,x)
-  τx_mult_phx_mult_n_cdot_no=
-      lazy_map(Gridap.Fields.BroadcastingFieldOpMap(*), τx, phx_mult_n_cdot_no)
-  mhx_mult_τx_mult_phx_mult_n_cdot_no=
-      lazy_map(Gridap.Fields.BroadcastingFieldOpMap(*), mhx, τx_mult_phx_mult_n_cdot_no)
-
-  # -∫(mh*(τ*(lh)*(n⋅no))d∂K
-  mhx=lazy_map(evaluate,mh,x)
-  lhx=lazy_map(evaluate,lh,x)
-  lhx_mult_n_cdot_no=lazy_map(Gridap.Fields.BroadcastingFieldOpMap(*), lhx, nx_cdot_nox)
-  τx_mult_lhx_mult_n_cdot_no=
-      lazy_map(Gridap.Fields.BroadcastingFieldOpMap(*), τx, lhx_mult_n_cdot_no)
-  mhx_mult_τx_mult_lhx_mult_n_cdot_no=
-      lazy_map(Gridap.Fields.BroadcastingFieldOpMap(*), mhx, τx_mult_lhx_mult_n_cdot_no)
-
-  j=lazy_map(∇,get_cell_map(cb))
-  jx=lazy_map(evaluate,j,x)
-
-  arg1=lazy_map(IntegrationMap(),mhx_mult_uhx_cdot_nx,w,jx)
-  arg2=lazy_map(IntegrationMap(),mhx_mult_τx_mult_phx_mult_n_cdot_no,w,jx)
-  arg3=lazy_map(IntegrationMap(),mhx_mult_τx_mult_lhx_mult_n_cdot_no,w,jx)
-
-  result=lazy_map(Broadcasting(+),arg1,arg2)
-  result=lazy_map(Broadcasting(-),result,arg3)
-end
 
 function _generate_glue_among_facet_and_cell_wise_dofs_arrays(
   cells_around_facets,

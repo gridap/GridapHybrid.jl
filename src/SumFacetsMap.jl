@@ -1,10 +1,5 @@
 struct SumFacetsMap <: Gridap.Fields.Map end
 
-function _sum_facets(cb::CellBoundary,vx,w,jx)
-   int=lazy_map(Gridap.Fields.IntegrationMap(),vx,w,jx)
-   lazy_map(SumFacetsMap(),int)
-end
-
 function Gridap.Arrays.return_cache(
   k::SumFacetsMap,
   a::Gridap.Fields.VectorBlock)
