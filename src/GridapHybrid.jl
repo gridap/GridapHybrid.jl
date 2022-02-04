@@ -1,4 +1,4 @@
-module ExploringGridapHybridization
+module GridapHybrid
 using Base: _Set, ArithmeticRounds
 using Gridap
 using FillArrays

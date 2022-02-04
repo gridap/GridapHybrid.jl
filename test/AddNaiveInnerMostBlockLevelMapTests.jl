@@ -2,7 +2,7 @@ module AddNaiveInnerMostBlockLevelMapTests
 
   using Gridap
   using Gridap.Fields
-  using ExploringGridapHybridization
+  using GridapHybrid
   using Test
 
   a=rand(2,4)
@@ -22,7 +22,7 @@ module AddNaiveInnerMostBlockLevelMapTests
   vf[4]     = ab
   afb       = ArrayBlock(vf,touchedf) # [f][b]
 
-  afb1 = ExploringGridapHybridization.AddNaiveInnerMostBlockLevelMap()(afb) # [f][b][1]
+  afb1 = GridapHybrid.AddNaiveInnerMostBlockLevelMap()(afb) # [f][b][1]
   @test afb1[3][1][1] == afb[3][1]
 
   vf        = Vector{typeof(a)}(undef,4)
@@ -203,7 +203,7 @@ module AddNaiveInnerMostBlockLevelMapTests
   vf[4]     = ab
   af1b       = ArrayBlock(vf,touchedf) # [f][1,b]
 
-  af1b1 = ExploringGridapHybridization.AddNaiveInnerMostBlockLevelMap()(af1b) # [f][1,b][1]
+  af1b1 = GridapHybrid.AddNaiveInnerMostBlockLevelMap()(af1b) # [f][1,b][1]
   @test af1b1[3][1,1][1] == af1b[3][1,1]
 
   # [f][b][f]*[f][1,b][1] = [f][b,b][f]

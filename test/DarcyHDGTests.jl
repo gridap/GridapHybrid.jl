@@ -4,7 +4,7 @@ using Test
 using Gridap
 using FillArrays
 using Gridap.Geometry
-using ExploringGridapHybridization
+using GridapHybrid
 
 u(x) = VectorValue(1+x[1],1+x[2])
 Gridap.divergence(::typeof(u)) = (x) -> 2
@@ -37,7 +37,7 @@ model = CartesianDiscreteModel(partition,cells)
 D = num_cell_dims(model)
 Ω = Triangulation(ReferenceFE{D},model)
 Γ = Triangulation(ReferenceFE{D-1},model)
-∂K = ExploringGridapHybridization.Skeleton(model)
+∂K = GridapHybrid.Skeleton(model)
 
 # Reference FEs
 order  = 1

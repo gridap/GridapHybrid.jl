@@ -1,7 +1,7 @@
 module Scalar2ArrayBlockMapTests
    using Test
    using Gridap
-   using ExploringGridapHybridization
+   using GridapHybrid
 
    bs = [8,16]
    A = rand(sum(bs),sum(bs))

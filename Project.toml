@@ -1,6 +1,7 @@
-name = "ExploringGridapHybridization"
+name = "GridapHybrid"
 uuid = "94e6dd8f-308f-4a47-89a7-811b3127ae57"
-authors = ["amartin <alberto.martin@monash.edu>"]
+authors = ["S. Badia <santiago.badia@monash.edu>", "A. F. Martin <alberto.martin@monash.edu>", "F. Verdugo <fverdugo@cimne.upc.edu>"]
+
 version = "0.1.0"
 
 [deps]

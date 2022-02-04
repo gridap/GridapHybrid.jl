@@ -1,11 +1,11 @@
 module SumFacetMapTests
    using Test
    using Gridap
-   using ExploringGridapHybridization
+   using GridapHybrid
    using Gridap.Fields
    using Gridap.Arrays
 
-   m=ExploringGridapHybridization.SumFacetsMap()
+   m=GridapHybrid.SumFacetsMap()
 
    a=rand(2,4)
    v          = Vector{typeof(a)}(undef,3)
@@ -101,7 +101,7 @@ module SumFacetMapTests
    vf[4]     = f4b
    abf       = ArrayBlock(vf,touchedf)
 
-   m=ExploringGridapHybridization.SumFacetsMap()
+   m=GridapHybrid.SumFacetsMap()
    c=return_cache(m,abf)
    result=evaluate!(c,m,abf)
    c=return_cache(DensifyInnerMostBlockLevelMap(),result)

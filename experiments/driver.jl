@@ -2,7 +2,7 @@ module Experiments
 
 using DrWatson
 using Gridap
-using ExploringGridapHybridization
+using GridapHybrid
 
 include("../test/DarcyRTHTests.jl")
 

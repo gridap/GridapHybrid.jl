@@ -1,7 +1,7 @@
 module StaticCondensationMapTests
    using Test
    using Gridap
-   using ExploringGridapHybridization
+   using GridapHybrid
 
    x=rand(3,3)
    y=Array{Matrix{Float64}}(undef,(3,3))
