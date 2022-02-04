@@ -1,31 +1,45 @@
 struct ReblockInteriorDofsMap <: Gridap.Fields.Map
 end
 
-
-# TO-DO: add ional keyword args to control the kind of linear system/factorization
+# TO-DO: additional keyword args to control the kind of linear system/factorization
 # (i.e., symmetric and positive definite, symmetric indefinite, general unsymmetric, etc.)
-struct BackwardStaticCondensationMap{IFT <: AbstractVector{<:Int},
-                                     BFT <: Union{AbstractVector{<:Integer},
-                                                  AbstractVector{<:AbstractVector{<:Integer}}}} <: Gridap.Fields.Map
+struct BackwardStaticCondensationMap{IFT <: AbstractVector{<:Integer},
+                                     BFT <: AbstractVector{<:Integer}} <: Gridap.Fields.Map
   static_condensation::StaticCondensationMap{IFT,BFT}
   reblock::ReblockInteriorDofsMap
+
   function BackwardStaticCondensationMap(interior_fields::AbstractVector{<:Integer},
-                              boundary_fields::AbstractVector{<:Integer})
+                                         boundary_fields::AbstractVector{<:Integer})
     IFT=typeof(interior_fields)
     BFT=typeof(boundary_fields)
-    new{IFT,BFT}(StaticCondensationMap(interior_fields,boundary_fields),ReblockInteriorDofsMap())
-  end
-  function BackwardStaticCondensationMap(interior_fields::AbstractVector{<:Integer},
-                              boundary_fields::AbstractVector{<:AbstractVector{<:Integer}})
-    # Implementation of BackwardStaticCondensation for multi-field Lagrange multipliers pending
-    Gridap.Helpers.@notimplemented
+    static_condensation=StaticCondensationMap(interior_fields,boundary_fields)
+    reblock=ReblockInteriorDofsMap()
+    new{IFT,BFT}(static_condensation,reblock)
   end
 end
 
 function Gridap.Arrays.return_cache(k::BackwardStaticCondensationMap{IFT,BFT},
+  Ab::Tuple{<:Gridap.Fields.MatrixBlock{<:Matrix{T}},<:Gridap.Fields.VectorBlock{<:Vector{T}}},
+  x::Union{<:AbstractVector{T},<:Gridap.Fields.VectorBlock{<:AbstractVector{T}}}) where {IFT, BFT, T}
+  Gridap.Arrays.return_cache(k,Ab[1],Ab[2],x)
+end
+
+function Gridap.Arrays.return_cache(k::BackwardStaticCondensationMap{IFT,BFT},
+  A::Gridap.Fields.MatrixBlock{<:Matrix{T}},
+  b::Gridap.Fields.VectorBlock{<:Vector{T}},
+  x::Gridap.Fields.VectorBlock{<:AbstractVector{T}}) where {IFT,BFT,T}
+  m=DensifyInnerMostBlockLevelMap()
+  cm=return_cache(m,x)
+  mx=evaluate!(cm,m,x)
+  ck=return_cache(k,A,b,mx)
+  (m,cm,ck)
+end
+
+
+function Gridap.Arrays.return_cache(k::BackwardStaticCondensationMap{IFT,BFT},
                                     A::Gridap.Fields.MatrixBlock{<:Matrix{T}},
                                     b::Gridap.Fields.VectorBlock{<:Vector{T}},
-                                    x::AbstractVector{T}) where {IFT<:AbstractVector{<:Integer}, BFT <: AbstractVector{<:Integer}, T}
+                                    x::AbstractVector{T}) where {IFT,BFT,T}
     cache1=Gridap.Arrays.return_cache(k.static_condensation,A,b)
     _,interior_brs,boundary_brs,_,_,_,_,_,=cache1
     cache2=Gridap.Arrays.return_cache(k.reblock,
@@ -38,9 +52,17 @@ end
 
 function Gridap.Arrays.evaluate!(cache,
   k::BackwardStaticCondensationMap{IFT,BFT},
+  Ab::Tuple{<:Gridap.Fields.MatrixBlock{<:Matrix{T}},<:Gridap.Fields.VectorBlock{<:Vector{T}}},
+  x::Union{<:AbstractVector{T},<:Gridap.Fields.VectorBlock{<:AbstractVector{T}}}) where {IFT, BFT, T}
+  Gridap.Arrays.evaluate!(cache,k,Ab[1],Ab[2],x)
+end
+
+
+function Gridap.Arrays.evaluate!(cache,
+  k::BackwardStaticCondensationMap{IFT,BFT},
   A::Gridap.Fields.MatrixBlock{<:Matrix{T}},
   b::Gridap.Fields.VectorBlock{<:Vector{T}},
-  x::AbstractVector{T}) where {IFT<:AbstractVector{<:Integer}, BFT <: AbstractVector{<:Integer}, T}
+  x::AbstractVector{T}) where {IFT, BFT, T}
 
    cache1,cache2=cache
    kdensify,interior_brs,boundary_brs,A11t,A21t,A12t,A22t,b1t,b2t=cache1
@@ -79,13 +101,22 @@ function Gridap.Arrays.evaluate!(cache,
    Gridap.Arrays.evaluate!(cache2,k.reblock,interior_brs,boundary_brs,b1,b2)
 end
 
+function Gridap.Arrays.evaluate!(cache,
+  k::BackwardStaticCondensationMap{IFT,BFT},
+  A::Gridap.Fields.MatrixBlock{<:Matrix{T}},
+  b::Gridap.Fields.VectorBlock{<:Vector{T}},
+  x::Gridap.Fields.VectorBlock{<:AbstractVector{T}}) where {IFT, BFT, T}
+  m,cm,ck=cache
+  mx=evaluate!(cm,m,x)
+  Gridap.Arrays.evaluate!(ck,k,A,b,mx)
+end
+
 
 function Gridap.Arrays.return_cache(k::ReblockInteriorDofsMap,
                                     interior_brs::Vector{<:Integer},
                                     boundary_brs::Vector{<:Integer},
                                     vinterior::Vector{T},
                                     vboundary::Vector{T}) where {T}
-  Gridap.Helpers.@check length(boundary_brs) == 1
   nblks=length(interior_brs)+length(boundary_brs)
   array=Vector{Vector{T}}(undef,nblks)
   touched=Vector{Bool}(undef,nblks)
@@ -105,7 +136,6 @@ function Gridap.Arrays.evaluate!(cache,
                                  boundary_brs::Vector{<:Integer},
                                  vinterior::Vector{T},
                                  vboundary::Vector{T}) where {T}
-  Gridap.Helpers.@check length(boundary_brs) == 1
   nblks=length(interior_brs)+length(boundary_brs)
   current=1
   for iblk=1:length(interior_brs)
