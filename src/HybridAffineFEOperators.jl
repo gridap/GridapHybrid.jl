@@ -24,7 +24,7 @@ function HybridAffineFEOperator(
   # (i.e., the hybrid system)
   obiform, oliform = _hybridrizable_to_hybrid_contributions(biform,liform)
 
-  # Pair LHS and RHS terms associated to TempSkeletonTriangulation
+  # Pair LHS and RHS terms associated to SkeletonTriangulation
   matvec,mat,vec=Gridap.FESpaces._pair_contribution_when_possible(obiform,oliform)
 
   # Add StaticCondensationMap to matvec terms
@@ -75,12 +75,12 @@ function Gridap.FESpaces.solve!(uh,solver::LinearFESolver,op::HybridAffineFEOper
   # (i.e., the hybrid system)
   obiform, oliform = _hybridrizable_to_hybrid_contributions(biform,liform)
 
-  # Pair LHS and RHS terms associated to TempSkeletonTriangulation
+  # Pair LHS and RHS terms associated to SkeletonTriangulation
   matvec,_,_=Gridap.FESpaces._pair_contribution_when_possible(obiform,oliform)
 
   # Convert dof-wise dof values of lh into cell-wise dof values lhₖ
   Γ=first(keys(matvec.dict))
-  Gridap.Helpers.@check isa(Γ,TempSkeletonTriangulation)
+  Gridap.Helpers.@check isa(Γ,SkeletonTriangulation)
   lhₖ=get_cell_dof_values(lh,Γ)
 
   # Compute cell-wise dof values of bulk fields out of lhₖ
@@ -121,11 +121,102 @@ function Gridap.FESpaces.solve!(uh,solver::LinearFESolver,op::HybridAffineFEOper
   FEFunction(op.test,free_dof_values), cache
 end
 
+function _get_cell_wise_facets(model::DiscreteModel)
+  gtopo = get_grid_topology(model)
+  D     = num_cell_dims(model)
+  Gridap.Geometry.get_faces(gtopo, D, D-1)
+end
+
+function _get_cells_around_facets(model::DiscreteModel)
+  gtopo = get_grid_topology(model)
+  D     = num_cell_dims(model)
+  Gridap.Geometry.get_faces(gtopo, D-1, D)
+end
+
+struct ExtractFacetDofsFromCellDofsMap{T<:AbstractVector{<:AbstractVector}} <: Gridap.Fields.Map
+  cell_dofs::T
+end
+
+function Gridap.Arrays.return_cache(k::ExtractFacetDofsFromCellDofsMap,
+                                   cellgid_facetlpos_ndofs::NTuple{3})
+ cell_dofs_cache  = Gridap.Arrays.array_cache(k.cell_dofs)
+ T=eltype(eltype(k.cell_dofs))
+ facet_dofs_cache = Gridap.Arrays.CachedArray(zeros(T,cellgid_facetlpos_ndofs[3]))
+ cell_dofs_cache, facet_dofs_cache
+end
+
+function Gridap.Arrays.evaluate!(cache,
+                                k::ExtractFacetDofsFromCellDofsMap,
+                                cellgid_facetlpos_ndofs::NTuple{3})
+ cell_dofs_cache, facet_dofs_cache = cache
+ cellgid,facetlpos,ndofs=cellgid_facetlpos_ndofs
+ Gridap.Arrays.setsize!(facet_dofs_cache,(ndofs,))
+ facet_dofs  = facet_dofs_cache.array
+ cell_dofs   = Gridap.Arrays.getindex!(cell_dofs_cache,k.cell_dofs,cellgid)
+ facet_dofs .= cell_dofs[facetlpos:facetlpos+ndofs-1]
+end
+
+function convert_cell_wise_dofs_array_to_facet_dofs_array(
+      cells_around_facets,
+      cell_wise_facets,
+      cell_dofs::AbstractVector{<:AbstractVector{<:Real}},
+      facet_dofs_ids::AbstractVector{<:AbstractVector{<:Integer}})
+ glue = _generate_glue_among_facet_and_cell_wise_dofs_arrays(
+   cells_around_facets, cell_wise_facets, facet_dofs_ids)
+ k=ExtractFacetDofsFromCellDofsMap(cell_dofs)
+ [lazy_map(k,glue)]
+end
+
+function _generate_glue_among_facet_and_cell_wise_dofs_arrays(
+  cells_around_facets,
+  cell_wise_facets,
+  facet_dof_ids::AbstractVector{<:AbstractVector{<:Integer}})
+
+  c1=array_cache(cells_around_facets)
+  c2=array_cache(cell_wise_facets)
+  c3=array_cache(facet_dof_ids)
+
+  result=Vector{NTuple{3,Int}}(undef,length(facet_dof_ids))
+  current=1
+  ndofs=0
+  for facet_gid=1:length(cells_around_facets)
+    cell_gid=Gridap.Arrays.getindex!(c1,cells_around_facets,facet_gid)[1]
+    current_cell_facets=Gridap.Arrays.getindex!(c2,cell_wise_facets,cell_gid)
+    pos=1
+    for facet_gid_in_cell in current_cell_facets
+      ndofs=length(Gridap.Arrays.getindex!(c3,facet_dof_ids,facet_gid_in_cell))
+      if (facet_gid == facet_gid_in_cell)
+        break
+      else
+        pos=pos+ndofs
+      end
+    end
+    result[facet_gid]=(cell_gid,pos,ndofs)
+  end
+  result
+end
+
+function convert_cell_wise_dofs_array_to_facet_dofs_array(
+ cells_around_facets,
+ cell_wise_facets,
+ cell_dofs::Gridap.Arrays.LazyArray{<:Fill{<:Gridap.Fields.BlockMap}},
+ facet_dofs_ids::Gridap.Arrays.LazyArray{<:Fill{<:Gridap.Fields.BlockMap}})
+ Gridap.Helpers.@check cell_dofs.maps.value.size == facet_dofs_ids.maps.value.size
+
+ [convert_cell_wise_dofs_array_to_facet_dofs_array(
+     cells_around_facets,
+     cell_wise_facets,
+     field_cell_dofs,
+     field_facet_dof_ids)[1] for (field_cell_dofs,field_facet_dof_ids) in
+                                  zip(cell_dofs.args, facet_dofs_ids.args)]
+end
+
+
 # TO-THINK:
-# 1. Can TempSkeleton appear more than once? (e.g., the skeleton of different domains)
-# 2. Can TempSkeleton appear on the linear form?
+# 1. Can Skeleton appear more than once? (e.g., the skeleton of different domains)
+# 2. Can Skeleton appear on the linear form?
 # 3. Can BoundaryTriangulation appear on the bilinear form? (e.g., Nitsche BCs)
-# 4. May we have a hybridizable weak formulation with triangulations different from TempSkeleton,
+# 4. May we have a hybridizable weak formulation with triangulations different from Skeleton,
 #    bulk and BoundaryTriangulation?
 
 # The currently supported scenarios are explicitly encoded in the @check's below.
@@ -165,12 +256,12 @@ function _hybridrizable_to_hybrid_contributions(matcontribs,veccontribs)
 end
 
 function _find_skeleton(dc::DomainContribution)
-  [trian for trian in keys(dc.dict) if isa(trian,TempSkeletonTriangulation)]
+  [trian for trian in keys(dc.dict) if isa(trian,SkeletonTriangulation)]
 end
 
 function _find_bulk(D,dc::DomainContribution)
   [trian for trian in keys(dc.dict)
-     if isa(trian,Triangulation{D,D}) && !(isa(trian,TempSkeletonTriangulation))]
+     if isa(trian,Triangulation{D,D}) && !(isa(trian,SkeletonTriangulation))]
 end
 
 function _find_boundary(dc::DomainContribution)
@@ -182,7 +273,7 @@ function _add_static_condensation(matvec,bulk_fields,skeleton_fields)
   Gridap.Helpers.@check length(keys(matvec.dict))==1
   _matvec=DomainContribution()
   for (trian,t) in matvec.dict
-    Gridap.Helpers.@check isa(trian,TempSkeletonTriangulation)
+    Gridap.Helpers.@check isa(trian,SkeletonTriangulation)
     _matvec.dict[trian] = lazy_map(StaticCondensationMap(bulk_fields,skeleton_fields),t)
   end
   _matvec
@@ -197,7 +288,7 @@ function _block_skeleton_system_contributions(matvec,L::MultiFieldFESpace)
   Gridap.Helpers.@check length(keys(matvec.dict))==1
   _matvec=DomainContribution()
   for (trian,t) in matvec.dict
-    Gridap.Helpers.@check isa(trian,TempSkeletonTriangulation)
+    Gridap.Helpers.@check isa(trian,SkeletonTriangulation)
     _matvec.dict[trian] = lazy_map(m,t,block_sizes)
   end
   _matvec
@@ -207,14 +298,67 @@ function Gridap.FESpaces.get_cell_fe_data(
   fun,
   sface_to_data,
   sglue::FaceToFaceGlue,
-  tglue::TempSkeletonGlue)
+  tglue::SkeletonGlue)
   model=tglue.trian.model
   cell_wise_facets=_get_cell_wise_facets(model)
   restrict_facet_dof_ids_to_cell_boundary(cell_wise_facets,sface_to_data)
 end
 
+struct RestrictFacetDoFsToSkeleton{F} <: Gridap.Fields.Map
+  facet_dofs::F
+end
+
+function Gridap.Arrays.return_cache(
+  k::RestrictFacetDoFsToSkeleton,
+  cell_facets::AbstractArray{<:Integer})
+  if (isa(k.facet_dofs,AbstractVector{<:Number}))
+    T=eltype(k.facet_dofs)
+  elseif (isa(k.facet_dofs,AbstractVector{<:AbstractVector{<:Number}}))
+    T=eltype(eltype(k.facet_dofs))
+  else
+    Gridap.Helpers.@check false
+  end
+  array_cache(k.facet_dofs), Gridap.Arrays.CachedVector(T)
+end
+
+function Gridap.Arrays.evaluate!(
+  cache,
+  k::RestrictFacetDoFsToSkeleton,
+  cell_facets::AbstractArray{<:Integer})
+  fdc,c=cache
+  Gridap.Arrays.setsize!(c,(_count_dofs_cell(cell_facets,k.facet_dofs,fdc),))
+  _fill_dofs_cell!(c.array,cell_facets,k.facet_dofs,fdc)
+  c.array
+end
+
+function _count_dofs_cell(cell_facets,facet_dofs,facet_dofs_cache)
+  count=0
+  for facet_id in cell_facets
+      current_facet_dofs=getindex!(facet_dofs_cache,facet_dofs,facet_id)
+      count=count+length(current_facet_dofs)
+  end
+  count
+end
+
+function _fill_dofs_cell!(cell_dofs,cell_facets,facet_dofs,facet_dofs_cache)
+  current=1
+  for facet_id in cell_facets
+      current_facet_dofs=getindex!(facet_dofs_cache,facet_dofs,facet_id)
+      for i in current_facet_dofs
+        cell_dofs[current]=i
+        current=current+1
+      end
+  end
+  current
+end
+
+function restrict_facet_dof_ids_to_cell_boundary(cell_wise_facets,facet_dof_ids)
+  m=RestrictFacetDoFsToSkeleton(facet_dof_ids)
+  lazy_map(m,cell_wise_facets)
+end
+
 function Gridap.FESpaces.get_cell_fe_data(
-  fun::typeof(Gridap.FESpaces.get_cell_is_dirichlet),sface_to_data,sglue::FaceToFaceGlue,tglue::TempSkeletonGlue)
+  fun::typeof(Gridap.FESpaces.get_cell_is_dirichlet),sface_to_data,sglue::FaceToFaceGlue,tglue::SkeletonGlue)
   model=tglue.trian.model
   cell_wise_facets=_get_cell_wise_facets(model)
   fdofscb=restrict_facet_dof_ids_to_cell_boundary(cell_wise_facets,sface_to_data)

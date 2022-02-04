@@ -37,7 +37,7 @@ model = CartesianDiscreteModel(partition,cells)
 D = num_cell_dims(model)
 Ω = Triangulation(ReferenceFE{D},model)
 Γ = Triangulation(ReferenceFE{D-1},model)
-∂K = TempSkeleton(model)
+∂K = ExploringGridapHybridization.Skeleton(model)
 
 # Reference FEs
 order  = 1

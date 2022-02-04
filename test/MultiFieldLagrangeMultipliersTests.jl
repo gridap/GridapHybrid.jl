@@ -34,7 +34,7 @@ module MultiFieldLagrangeMultipliersTests
   D = num_cell_dims(model)
   Ω = Triangulation(ReferenceFE{D},model)
   Γ = Triangulation(ReferenceFE{D-1},model)
-  ∂K = TempSkeleton(model)
+  ∂K = ExploringGridapHybridization.Skeleton(model)
 
   order=0
   reffeᵤ = ReferenceFE(raviart_thomas,Float64,order)

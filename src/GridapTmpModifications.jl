@@ -1,56 +1,37 @@
 
+# These codes should go eventually to Gridap at the end!!!
+
+
 ##
 
-## Arrays
-function Gridap.Arrays.return_cache(
-  ::typeof(evaluate),
-  a::Gridap.Fields.VectorBlock,
-  x::Gridap.Fields.VectorBlock)
-
-   Gridap.Helpers.@check length(a.array) == length(x.array)
-   Gridap.Helpers.@check a.touched == x.touched
-   Gridap.Helpers.@check all(a.touched)
-   T=Gridap.Arrays.return_type(evaluate,a.array[1],x.array[1])
-   Tc=typeof(Gridap.Arrays.return_cache(evaluate,a.array[1],x.array[1]))
-   r=Vector{T}(undef,length(a.array))
-   rc=Vector{Tc}(undef,length(a.array))
-   rc[1]=Gridap.Arrays.return_cache(evaluate,a.array[1],x.array[1])
-   for i=2:length(a.array)
-      if a.array[i] === a.array[1]
-        rc[i]=rc[1]
-      else
-        rc[i]=Gridap.Arrays.return_cache(evaluate,a.array[i],x.array[i])
-      end
-   end
-   (Gridap.Fields.ArrayBlock(r,a.touched),Gridap.Fields.ArrayBlock(rc,a.touched))
+function Gridap.CellData.CellQuadrature(trian::Triangulation,cell_quad,ids::DomainStyle)
+  ctype_to_quad, cell_to_ctype = compress_cell_data(cell_quad)
+  ctype_to_point = map(get_coordinates,ctype_to_quad)
+  ctype_to_weight = map(get_weights,ctype_to_quad)
+  cell_point = expand_cell_data(ctype_to_point,cell_to_ctype)
+  cell_weight = expand_cell_data(ctype_to_weight,cell_to_ctype)
+  CellQuadrature(cell_quad,cell_point,cell_weight,trian,ReferenceDomain(),ids)
 end
 
-function Gridap.Arrays.evaluate!(
-  cache,
-  ::typeof(evaluate),
-  a::Gridap.Fields.VectorBlock,
-  x::Gridap.Fields.VectorBlock)
-  Gridap.Helpers.@check length(a.array) == length(x.array)
-  Gridap.Helpers.@check a.touched == x.touched
-  Gridap.Helpers.@check all(a.touched)
-  (r,rc)=cache
-  Gridap.Helpers.@check length(r.array) == length(a.array)
-  for i=1:length(a.array)
-    r.array[i]=Gridap.Arrays.evaluate!(rc.array[i],evaluate,a.array[i],x.array[i])
+function _get_f(v::Gridap.Fields.VectorBlock,f::Function)
+  n  = length(v.array)
+  v1 = f(v.array[1])
+  TD = typeof(v1)
+  a  = Vector{TD}(undef,n)
+  t  = v.touched
+  for i=1:n
+    a[i]=f(v.array[i])
   end
-  r
+  Gridap.Fields.ArrayBlock(a,t)
 end
 
-# I cannot implement this optimization. We end up summing MatrixBlocks of different types!!!
-# function Gridap.Arrays.lazy_map(k::Gridap.Fields.Broadcasting,
-#                                 a::Gridap.Arrays.LazyArray{<:Fill{<:DensifyInnerMostBlockLevelMap}},
-#                                 b::Gridap.Arrays.LazyArray{<:Fill{<:DensifyInnerMostBlockLevelMap}})
-#   a_arg=a.args[1]
-#   b_arg=b.args[1]
-#   lazy_map(a.maps.value,lazy_map(k,a_arg,b_arg))
-# end
+function Gridap.Geometry.get_coordinates(v::Gridap.Fields.VectorBlock)
+  _get_f(v,Gridap.Geometry.get_coordinates)
+end
 
-
+function Gridap.Geometry.get_weights(v::Gridap.Fields.VectorBlock)
+  _get_f(v,Gridap.Geometry.get_weights)
+end
 
 ## Polynomials
 
@@ -75,18 +56,6 @@ function Gridap.Arrays.evaluate!(cache,f::Gridap.Polynomials.QCurlGradMonomialBa
   a
 end
 
-function Gridap.Arrays.lazy_map(
-  k   :: Gridap.Fields.IntegrationMap,
-      :: Type{T},
-  fx  :: AbstractArray{<:Gridap.Fields.ArrayBlock},
-  w   :: AbstractArray{<:Gridap.Fields.ArrayBlock{<:AbstractVector}},
-  jtx :: AbstractArray{<:Gridap.Fields.ArrayBlock}) where T
-  int=LazyArray(T,Fill(k,length(fx)),fx,w,jtx)
-  sum_facets=lazy_map(SumFacetsMap(),int)
-  lazy_map(DensifyInnerMostBlockLevelMap(),sum_facets)
-end
-
-# This function should go to Gridap at the end!!!
 function Gridap.Arrays.return_cache(
   k::Gridap.Fields.BroadcastingFieldOpMap,
   f::Gridap.Fields.ArrayBlock{A,1},

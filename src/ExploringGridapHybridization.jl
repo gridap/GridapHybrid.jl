@@ -3,8 +3,9 @@ using Base: _Set, ArithmeticRounds
 using Gridap
 using FillArrays
 using LinearAlgebra
-include("GridapOverloads.jl")
-include("CellBoundary.jl")
+
+include("GridapAPIExtensions.jl")
+include("GridapTmpModifications.jl")
 
 using Gridap.Fields
 include("StaticCondensationMap.jl")
@@ -24,8 +25,9 @@ export SumFacetsMap
 export get_cell_owner_normal_vector
 export get_cell_normal_vector
 
-include("TempSkeleton.jl")
-export TempSkeleton
+include("SkeletonArrays.jl")
+include("Skeleton.jl")
+export Skeleton
 
 include("HybridAffineFEOperators.jl")
 export HybridAffineFEOperator
