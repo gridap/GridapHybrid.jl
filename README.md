@@ -1,4 +1,4 @@
-# GridapHybrid - :construction: :construction::construction: **Work in progress** :construction: :construction::construction:
+# GridapHybrid - :construction: :construction: :construction: **Work in progress** :construction: :construction: :construction:
 
 [![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://gridap.github.io/GridapHybrid.jl/stable)
 [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://gridap.github.io/GridapHybrid.jl/dev)
