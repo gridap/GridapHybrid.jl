@@ -1,7 +1,7 @@
-# ExploringGridapHybridization.jl
+# GridapHybrid
 
-Relevant references:
-
-* Slate: extending Firedrake's domain-specific abstraction to hybridized solvers for geoscience and beyond. Geosci. Model Dev., 13, 735–761, 2020 [[REF]](https://gmd.copernicus.org/articles/13/735/2020/)
-
-* Unified Hybridization of Discontinuous Galerkin, Mixed, and Continuous Galerkin Methods for Second Order Elliptic Problems. SIAM J. Numer. Anal., 47(2), 1319–1365. [[REF]](https://epubs.siam.org/doi/abs/10.1137/070706616?mobileUi=0)
+[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://gridap.github.io/GridapHybrid.jl/stable)
+[![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://gridap.github.io/GridapHybrid.jl/dev)
+[![Build Status](https://travis-ci.com/gridap/GridapHybrid.jl.svg?branch=master)](https://travis-ci.com/gridap/GridapHybrid.jl)
+[![Codecov](https://codecov.io/gh/gridap/GridapHybrid.jl/branch/master/graph/badge.svg)](https://codecov.io/gh/gridap/GridapHybrid.jl)
+[![Coveralls](https://coveralls.io/repos/github/gridap/GridapHybrid.jl/badge.svg?branch=master)](https://coveralls.io/github/gridap/GridapHybrid.jl?branch=master)
