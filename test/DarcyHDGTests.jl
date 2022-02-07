@@ -41,9 +41,8 @@ D = num_cell_dims(model)
 
 # Reference FEs
 order  = 1
-pol    = first(get_polytopes(model))
-reffeᵤ = Gridap.ReferenceFEs.LagrangianRefFE(VectorValue{D,Float64},pol,order;space=:P)
-reffeₚ = Gridap.ReferenceFEs.LagrangianRefFE(Float64,pol,order-1;space=:P)
+reffeᵤ = ReferenceFE(lagrangian,VectorValue{D,Float64},order;space=:P)
+reffeₚ = ReferenceFE(lagrangian,Float64,order-1;space=:P)
 reffeₗ = ReferenceFE(lagrangian,Float64,order;space=:P)
 
 # Define test FESpaces
