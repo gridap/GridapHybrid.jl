@@ -44,7 +44,7 @@ order  = 1
 pol    = first(get_polytopes(model))
 reffeᵤ = Gridap.ReferenceFEs.LagrangianRefFE(VectorValue{D,Float64},pol,order;space=:P)
 reffeₚ = Gridap.ReferenceFEs.LagrangianRefFE(Float64,pol,order-1;space=:P)
-reffeₗ = ReferenceFE(lagrangian,Float64,order)
+reffeₗ = ReferenceFE(lagrangian,Float64,order;space=:P)
 
 # Define test FESpaces
 V = TestFESpace(Ω  , reffeᵤ; conformity=:L2)
