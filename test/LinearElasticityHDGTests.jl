@@ -43,7 +43,7 @@ t=Gridap.TensorValues.SymTensorValue{2, Int64, 3}(1, 2, 3)
 @test t .≈ invA(A(t))
 @test t .≈ A(invA(t))
 
-# u(x) = VectorValue(1+x[1],1+x[2])
+u(x) = VectorValue(1+x[1],1+x[2])
 # Gridap.divergence(::typeof(u)) = (x) -> 2
 # p(x) = -3.14
 # ∇p(x) = VectorValue(0,0)
@@ -90,17 +90,17 @@ reffe_hat_u = ReferenceFE(lagrangian,VectorValue{D,Float64},order;space=:P)
 
 # Define test FESpaces
 V = TestFESpace(Ω  , reffeσ; conformity=:L2)
-Q = TestFESpace(Ω  , reffeu; conformity=:L2)
+W = TestFESpace(Ω  , reffeu; conformity=:L2)
 M = TestFESpace(Γ,
                 reffe_hat_u;
                 conformity=:L2,
                 dirichlet_tags=collect(5:8))
-Y = MultiFieldFESpace([V,Q,M])
+Y = MultiFieldFESpace([V,W,M])
 
 # Define trial FEspaces
 U = TrialFESpace(V)
-P = TrialFESpace(Q)
-L = TrialFESpace(M,p)
+P = TrialFESpace(W)
+L = TrialFESpace(M,u)
 X = MultiFieldFESpace([U, P, L])
 
 # FE formulation params
@@ -115,80 +115,31 @@ d∂K    = Measure(∂K,degree)
 yh = get_fe_basis(Y)
 xh = get_trial_fe_basis(X)
 
-(uh,ph,lh) = xh
-(vh,qh,mh) = yh
+σh,uh,uhΓ = xh
+v,ω,μ = yh
 
-vh_∂K = Gridap.CellData.change_domain(vh,∂K,ReferenceDomain())
-mh_∂K = Gridap.CellData.change_domain(mh,∂K,ReferenceDomain())
-
-# Left-to-right evaluation of ∫(τ*(mh*(ph*(n⋅nₒ))))d∂K
-# TO DO: currently fails in op1*ph !!!
-# op1 = (n⋅nₒ)
-# op1 = τ*mh
-# op2 = op1*ph
-# op3 = op2*op1
-
-# Right-to-left evaluation
-# Works
-op1=ph*(n⋅nₒ)
-mh*op1
-τ*(mh*(ph*(n⋅nₒ)))
-lh*(n⋅nₒ)
-
-# Left-to-right evaluation
-# Works
-τ*mh*lh*(n⋅nₒ)
-
-# Right-to-left evaluation
-# Works
-τ*(mh*(lh*(n⋅nₒ)))
-
-# Evaluation of ∫(qh*(uh⋅n+τ*(ph-lh)*n⋅no))*d∂K
-# qh*(uh⋅n)
-# Works
-qh*(uh⋅n)
-(qh*uh)⋅n
-
-# τ*(qh*(ph*(n⋅nₒ)))
-# Right-to-left
-# Works
-op1=ph*(n⋅nₒ)
-op2=qh*op1
-op3=τ*op2
-
-# Left-to-right
-# τ*qh*ph*(n⋅nₒ)
-# Fails! in op3 TO-DO
-op1=τ*qh
-op2=op1*ph
-#op3=op2*(n⋅nₒ)
-
-# τ*(qh*(lh*(n⋅nₒ)))
-# Right-to-left
-# Works
-op1=lh*(n⋅nₒ)
-op2=qh*op1
-op3=τ*op2
-
-# Left-to-right
-# Fails! in op2 TO-DO
-op1=τ*qh
-#op2=op1*lh
-#op3=op2*(n⋅nₒ)
-
-∫(mh*(uh⋅n))d∂K
-
-a((uh,ph,lh),(vh,qh,mh)) = ∫( vh⋅uh - (∇⋅vh)*ph - ∇(qh)⋅uh )dΩ +
-                           ∫((vh⋅n)*lh)d∂K +
-                           #∫(qh*(uh⋅n+τ*(ph-lh)*n⋅no))*d∂K
-                           ∫(qh*(uh⋅n))d∂K +
-                           ∫(τ*(qh*(ph*(n⋅nₒ))))d∂K - # Force right-to-left evaluation
-                           ∫(τ*(qh*(lh*(n⋅nₒ))))d∂K + # Force right-to-left evaluation
-                           #∫(mh*(uh⋅n+τ*(ph-lh)*n⋅no))*d∂K
-                           ∫(mh*(uh⋅n))d∂K +
-                           ∫(τ*(mh*(ph*(n⋅nₒ))))d∂K - # Force right-to-left evaluation
-                           ∫(τ*mh*lh*(n⋅nₒ))d∂K
-l((vh,qh,mh)) = ∫( vh⋅f + qh*(∇⋅u))*dΩ
+v⊙(A∘σh)
+# (∇⋅v)    # Fails; kills the Julia REPL. To investigate.
+# (∇⋅v)⋅uh # Fails; kills the Julia REPL. To investigate.
+∇(ω)⊙σh
+(v⋅n)⋅uhΓ
+ω⋅(σh⋅n)
+τ*(ω⋅uh)
+# τ*(ω⋅uhΓ) # Fails, issue https://github.com/gridap/GridapHybrid.jl/issues/5
+μ⋅(σh⋅n)
+#τ*μ⋅uh # Fails, issue https://github.com/gridap/GridapHybrid.jl/issues/5
+τ*μ⋅uhΓ
+a((σh,uh,uhΓ),(v,ω,μ)) = ∫( v⊙(A∘σh) + (∇⋅v)⋅uh + ∇(ω)⊙σh )dΩ -
+                           ∫((v⋅n)⋅uhΓ)d∂K -
+                           #-∫(ω*(σh⋅n-τ*(uh-uhΓ)))*d∂K
+                           ∫(ω⋅(σh⋅n))d∂K +
+                           ∫(τ*(ω⋅uh))d∂K -
+                           ∫(τ*(ω⋅uhΓ))d∂K +
+                           #∫(μ*(σh⋅n-τ*(uh-uhΓ)))*d∂K
+                           ∫(μ⋅(σh⋅n))d∂K -
+                           ∫(τ*μ⋅uh)d∂K +
+                           ∫(τ*μ⋅uhΓ)d∂K
+l((v,ω,μ)) = -∫(ω⋅f)*dΩ
 
 op=HybridAffineFEOperator((u,v)->(a(u,v),l(v)), X, Y, [1,2], [3])
 xh=solve(op)
