@@ -104,6 +104,7 @@ function Gridap.FESpaces.solve!(uh,solver::LinearFESolver,op::HybridAffineFEOper
 
   assem = SparseMatrixAssembler(op.trial,op.test)
   lhₑ_dofs=get_cell_dof_ids(op.trial,get_triangulation(L))
+  lhₑ_dofs=lazy_map(m,lhₑ_dofs.args[op.skeleton_fields]...)
 
   Ω = op.trial[first(op.bulk_fields)]
   Ω = get_triangulation(Ω)

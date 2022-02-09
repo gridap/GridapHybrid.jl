@@ -158,6 +158,69 @@ function Geometry.is_change_possible(sglue::FaceToFaceGlue,tglue::SkeletonGlue)
   true
 end
 
+function Geometry.is_change_possible(sglue::SkeletonGlue,tglue::SkeletonGlue)
+  true
+end
+
+function Geometry.is_change_possible(
+     strian::BodyFittedTriangulation{1},
+     ttrian::BodyFittedTriangulation{2})
+  get_background_model(strian) === get_background_model(ttrian)
+end
+
+function Geometry.is_change_possible(
+    strian::BodyFittedTriangulation{2},
+    ttrian::BodyFittedTriangulation{1})
+  get_background_model(strian) === get_background_model(ttrian)
+end
+
+function Geometry.is_change_possible(
+    strian::BodyFittedTriangulation{3},
+    ttrian::BodyFittedTriangulation{2})
+  get_background_model(strian) === get_background_model(ttrian)
+end
+
+function Geometry.is_change_possible(
+    strian::BodyFittedTriangulation{2},
+    ttrian::BodyFittedTriangulation{3})
+  get_background_model(strian) === get_background_model(ttrian)
+end
+
+# In my view this is a little bit dirty. Transforming, e.g., the dof ids
+# from a cell triangulation to a facet triangulation is not a well-defined
+# operation. You loose information along the way, e.g., the interior DoFs.
+# I had to define it because I defined is_change_possible(...) for this combination
+# of triangulations. In turn, I needed to define is_change_possible(...)
+# as I need to perform change_domain on fields defined at different triangulations,
+# as per-required by Hybridizable methods
+function Gridap.FESpaces.get_cell_fe_data(
+  fun,
+  sface_to_data,
+  sglue::FaceToFaceGlue,
+  tglue::Nothing)
+  sface_to_data
+end
+
+function Geometry.best_target(a::BodyFittedTriangulation{Dca},
+                              b::BodyFittedTriangulation{Dcb}) where {Dca,Dcb}
+  @assert Dca==Dcb-1 || Dca-1==Dcb
+  @assert get_background_model(a)===get_background_model(b)
+  Skeleton(get_background_model(a))
+end
+
+# TO-DO: dirty. I cannot check whether a===b, as a and b might be created from scratch
+#               along the process
+function Geometry.best_target(a::SkeletonTriangulation{Dc},
+                              b::SkeletonTriangulation{Dc}) where {Dc}
+  a
+end
+
+function CellData.change_domain_ref_ref(a::CellField,
+                                        ttrian::SkeletonTriangulation,
+                                        sglue::SkeletonGlue,tglue::SkeletonGlue)
+  a
+end
+
 function Geometry.get_glue(trian::SkeletonTriangulation{D},::Val{D}) where D
   model = get_background_model(trian)
   topo = get_grid_topology(model)
