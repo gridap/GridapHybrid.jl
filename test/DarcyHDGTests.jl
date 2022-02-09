@@ -75,15 +75,12 @@ xh = get_trial_fe_basis(X)
 (uh,ph,lh) = xh
 (vh,qh,mh) = yh
 
-vh_∂K = Gridap.CellData.change_domain(vh,∂K,ReferenceDomain())
-mh_∂K = Gridap.CellData.change_domain(mh,∂K,ReferenceDomain())
-
 # Left-to-right evaluation of ∫(τ*(mh*(ph*(n⋅nₒ))))d∂K
-# TO DO: currently fails in op1*ph !!!
-# op1 = (n⋅nₒ)
-# op1 = τ*mh
-# op2 = op1*ph
-# op3 = op2*op1
+# Works
+op1 = (n⋅nₒ)
+op2 = τ*mh
+op3 = ph*op1
+op4 = op2*op3
 
 # Right-to-left evaluation
 # Works
@@ -115,10 +112,9 @@ op3=τ*op2
 
 # Left-to-right
 # τ*qh*ph*(n⋅nₒ)
-# Fails! in op3 TO-DO
 op1=τ*qh
 op2=op1*ph
-#op3=op2*(n⋅nₒ)
+op3=op2*(n⋅nₒ)
 
 # τ*(qh*(lh*(n⋅nₒ)))
 # Right-to-left
@@ -128,10 +124,10 @@ op2=qh*op1
 op3=τ*op2
 
 # Left-to-right
-# Fails! in op2 TO-DO
+# Works
 op1=τ*qh
-#op2=op1*lh
-#op3=op2*(n⋅nₒ)
+op2=op1*lh
+op3=op2*(n⋅nₒ)
 
 ∫(mh*(uh⋅n))d∂K
 
@@ -139,11 +135,11 @@ a((uh,ph,lh),(vh,qh,mh)) = ∫( vh⋅uh - (∇⋅vh)*ph - ∇(qh)⋅uh )dΩ +
                            ∫((vh⋅n)*lh)d∂K +
                            #∫(qh*(uh⋅n+τ*(ph-lh)*n⋅no))*d∂K
                            ∫(qh*(uh⋅n))d∂K +
-                           ∫(τ*(qh*(ph*(n⋅nₒ))))d∂K - # Force right-to-left evaluation
-                           ∫(τ*(qh*(lh*(n⋅nₒ))))d∂K + # Force right-to-left evaluation
+                           ∫(τ*qh*ph*(n⋅nₒ))d∂K -
+                           ∫(τ*qh*lh*(n⋅nₒ))d∂K +
                            #∫(mh*(uh⋅n+τ*(ph-lh)*n⋅no))*d∂K
                            ∫(mh*(uh⋅n))d∂K +
-                           ∫(τ*(mh*(ph*(n⋅nₒ))))d∂K - # Force right-to-left evaluation
+                           ∫(τ*mh*ph*(n⋅nₒ))d∂K -
                            ∫(τ*mh*lh*(n⋅nₒ))d∂K
 l((vh,qh,mh)) = ∫( vh⋅f + qh*(∇⋅u))*dΩ
 
