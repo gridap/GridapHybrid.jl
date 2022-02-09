@@ -80,6 +80,7 @@ D = num_cell_dims(model)
 order           = 1
 num_comp        = D*(D+1)÷2 # Number of components of a symmetric tensor in D-dim space
 sym_tensor_type = Gridap.Fields.SymTensorValue{D,Float64,num_comp}
+tensor_type = Gridap.Fields.TensorValue{D,D,Float64,D*D}
 
 # Stress Tensor Space
 reffeσ      = ReferenceFE(lagrangian,sym_tensor_type,order;space=:P)
@@ -119,15 +120,15 @@ xh = get_trial_fe_basis(X)
 v,ω,μ = yh
 
 v⊙(A∘σh)
-# (∇⋅v)    # Fails; kills the Julia REPL. To investigate.
-# (∇⋅v)⋅uh # Fails; kills the Julia REPL. To investigate.
+(∇⋅v)    # Fails with sym_tensor_type; kills the Julia REPL. To investigate.
+(∇⋅v)⋅uh # Fails sym_tensor_type; kills the Julia REPL. To investigate.
 ∇(ω)⊙σh
 (v⋅n)⋅uhΓ
 ω⋅(σh⋅n)
 τ*(ω⋅uh)
-# τ*(ω⋅uhΓ) # Fails, issue https://github.com/gridap/GridapHybrid.jl/issues/5
+τ*(ω⋅uhΓ)
 μ⋅(σh⋅n)
-#τ*μ⋅uh # Fails, issue https://github.com/gridap/GridapHybrid.jl/issues/5
+τ*μ⋅uh
 τ*μ⋅uhΓ
 a((σh,uh,uhΓ),(v,ω,μ)) = ∫( v⊙(A∘σh) + (∇⋅v)⋅uh + ∇(ω)⊙σh )dΩ -
                            ∫((v⋅n)⋅uhΓ)d∂K -

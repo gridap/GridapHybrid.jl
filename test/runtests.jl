@@ -6,5 +6,6 @@ module Tests
   @testset "Scalar2ArrayBlockMapTests" begin include("Scalar2ArrayBlockMapTests.jl") end
   @testset "DarcyRTHTests" begin include("DarcyRTHTests.jl") end
   @testset "DarcyHDGTests" begin include("DarcyHDGTests.jl") end
+  @testset "LinearElasticityHDGTests" begin include("LinearElasticityHDGTests.jl") end
   @testset "MultiFieldLagrangeMultipliersTests" begin include("MultiFieldLagrangeMultipliersTests.jl") end
 end # module
