@@ -39,6 +39,10 @@ function invA(ε)
   Gridap.TensorValues.SymTensorValue(vals)
 end
 
+function f(x)
+  x
+end
+
 t=Gridap.TensorValues.SymTensorValue{2, Int64, 3}(1, 2, 3)
 @test t .≈ invA(A(t))
 @test t .≈ A(invA(t))
@@ -130,6 +134,15 @@ v⊙(A∘σh)
 μ⋅(σh⋅n)
 τ*μ⋅uh
 τ*μ⋅uhΓ
+∫( v⊙(A∘σh) + (∇⋅v)⋅uh + ∇(ω)⊙σh )dΩ
+∫((v⋅n)⋅uhΓ)d∂K
+∫(ω⋅(σh⋅n))d∂K
+∫(τ*(ω⋅uh))d∂K
+∫(τ*(ω⋅uhΓ))d∂K
+∫(μ⋅(σh⋅n))d∂K
+∫(τ*μ⋅uh)d∂K
+∫(τ*μ⋅uhΓ)d∂K
+
 a((σh,uh,uhΓ),(v,ω,μ)) = ∫( v⊙(A∘σh) + (∇⋅v)⋅uh + ∇(ω)⊙σh )dΩ -
                            ∫((v⋅n)⋅uhΓ)d∂K -
                            #-∫(ω*(σh⋅n-τ*(uh-uhΓ)))*d∂K
@@ -140,12 +153,12 @@ a((σh,uh,uhΓ),(v,ω,μ)) = ∫( v⊙(A∘σh) + (∇⋅v)⋅uh + ∇(ω)⊙σh
                            ∫(μ⋅(σh⋅n))d∂K -
                            ∫(τ*μ⋅uh)d∂K +
                            ∫(τ*μ⋅uhΓ)d∂K
-l((v,ω,μ)) = -∫(ω⋅f)*dΩ
+l((v,ω,μ)) = ∫(-ω⋅f)*dΩ
 
 op=HybridAffineFEOperator((u,v)->(a(u,v),l(v)), X, Y, [1,2], [3])
 xh=solve(op)
 
-uh,_=xh
+_,uh,_=xh
 e = u -uh
 @test sqrt(sum(∫(e⋅e)dΩ)) < 1.0e-12
 

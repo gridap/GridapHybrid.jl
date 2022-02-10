@@ -138,3 +138,51 @@ function Gridap.Arrays.evaluate!(
   end
   a
 end
+
+function Gridap.Arrays.return_cache(
+  k::Gridap.Fields.BroadcastingFieldOpMap,
+  f::Gridap.Fields.ArrayBlock{A,1},
+  g::Gridap.Fields.ArrayBlock{B,2}) where {A,B}
+  # Degenerated case in which we have a single-block f
+  if (size(f)==(1,))
+    return return_cache(k,f.array[1],g)
+  end
+  fi = testvalue(A)
+  gi = testvalue(B)
+  ci = return_cache(k,fi,gi)
+  hi = evaluate!(ci,k,fi,gi)
+  Gridap.Helpers.@check size(g.array,1) == 1 || size(g.array,2) == 0
+  s = (size(f.array,1),size(g.array,2))
+  a = Array{typeof(hi),2}(undef,s)
+  b = Array{typeof(ci),2}(undef,s)
+  t = fill(false,s)
+  for j in 1:s[2]
+    for i in 1:s[1]
+      if f.touched[i] && g.touched[1,j]
+        t[i,j] = true
+        b[i,j] = return_cache(k,f.array[i],g.array[1,j])
+      end
+    end
+  end
+  ArrayBlock(a,t), b
+end
+
+function Gridap.Arrays.evaluate!(
+  cache,k::Gridap.Fields.BroadcastingFieldOpMap,
+  f::Gridap.Fields.ArrayBlock{A,1},
+  g::Gridap.Fields.ArrayBlock{B,2}) where {A,B}
+  # Degenerated case in which we have a single-block f
+  if (size(f)==(1,))
+    return evaluate!(cache,k,f.array[1],g)
+  end
+  a,b = cache
+  s = size(a.array)
+  for j in 1:s[2]
+    for i in 1:s[1]
+      if f.touched[i] && g.touched[1,j]
+        a.array[i,j] = evaluate!(b[i,j],k,f.array[i],g.array[1,j])
+      end
+    end
+  end
+  a
+end

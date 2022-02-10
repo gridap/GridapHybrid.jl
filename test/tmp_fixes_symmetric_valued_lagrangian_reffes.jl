@@ -32,6 +32,70 @@ function Gridap.Polynomials._set_value!(
     k
 end
 
+function Gridap.Polynomials._gradient_nd!(
+  v::AbstractVector{G},
+  x,
+  orders,
+  terms::AbstractVector{CartesianIndex{D}},
+  c::AbstractMatrix{T},
+  g::AbstractMatrix{T},
+  ::Type{<:Gridap.TensorValues.SymTensorValue{D}}) where {G,T,D}
+
+  dim = D
+  for d in 1:dim
+    Gridap.Polynomials._evaluate_1d!(c,x,orders[d],d)
+    Gridap.Polynomials._gradient_1d!(g,x,orders[d],d)
+  end
+
+  z = zero(Gridap.TensorValues.Mutable(VectorValue{D,T}))
+  o = one(T)
+  k = 1
+
+  for ci in terms
+
+    s = z
+    for i in eachindex(s)
+      @inbounds s[i] = o
+    end
+    for q in 1:dim
+      for d in 1:dim
+        if d != q
+          @inbounds s[q] *= c[d,ci[d]]
+        else
+          @inbounds s[q] *= g[d,ci[d]]
+        end
+      end
+    end
+    k = Gridap.Polynomials._set_gradient!(v,s,k,Gridap.TensorValues.SymTensorValue{D})
+  end
+
+end
+
+
+
+function Gridap.Polynomials._set_gradient!(
+  v::AbstractVector{G},s,k,::Type{<:Gridap.TensorValues.SymTensorValue{D}}) where {G,D}
+  m = zero(Gridap.TensorValues.Mutable(G))
+  # Without the following line modification,
+  # it asserts on LoadError: AssertionError: L == (D * (D + 1)) ÷ 2
+  # To fix this in Gridap.TensorValues.SymTensorValue
+  w = zero(Gridap.TensorValues.SymTensorValue{D,eltype(s),D*(D + 1)÷2})
+  z = zero(eltype(s))
+  for j in CartesianIndices(w)
+    if j[1]<=j[2]
+      for i in CartesianIndices(m)
+        @inbounds m[i] = z
+      end
+      for i in CartesianIndices(s)
+        @inbounds m[i,j] = s[i]
+      end
+      @inbounds v[k] = m
+      k += 1
+    end
+  end
+  k
+end
+
 function Gridap.ReferenceFEs._generate_dof_layout_node_major(
   ::Type{T},
   nnodes::Integer) where T <: Gridap.TensorValues.SymTensorValue
