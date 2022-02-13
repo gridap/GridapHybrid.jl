@@ -119,7 +119,7 @@ function Gridap.FESpaces.solve!(uh,solver::LinearFESolver,op::HybridAffineFEOper
 
   cache = nothing
   free_dof_values=assemble_vector(assem,([lhₑ,uhphₖ],[lhₑ_dofs,uhph_dofs]))
-  FEFunction(op.test,free_dof_values), cache
+  FEFunction(op.trial,free_dof_values), cache
 end
 
 function _get_cell_wise_facets(model::DiscreteModel)
@@ -304,6 +304,21 @@ function Gridap.FESpaces.get_cell_fe_data(
   cell_wise_facets=_get_cell_wise_facets(model)
   restrict_facet_dof_ids_to_cell_boundary(cell_wise_facets,sface_to_data)
 end
+
+# TO-DO: We need additional expressivity in Gridap
+# This is required in order to be able to evaluate the residual
+# of the hybridizable formulation. Commented out while we do not
+# perform the necessary modifications to Gridap
+
+# D-dim strian
+# No need to transform sface_to_data
+# function Gridap.FESpaces.get_cell_fe_data(
+#   fun::typeof(get_cell_dof_ids),
+#   sface_to_data,
+#   sglue::FaceToFaceGlue{<:Gridap.Arrays.IdentityVector},
+#   tglue::SkeletonGlue)
+#   sface_to_data
+# end
 
 struct RestrictFacetDoFsToSkeleton{F} <: Gridap.Fields.Map
   facet_dofs::F

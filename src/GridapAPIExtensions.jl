@@ -76,6 +76,56 @@ function Gridap.Arrays.lazy_map(
   lazy_map(Gridap.Fields.LinearCombinationMap(:),i_to_values,i_to_basis_x)
 end
 
+# The following three function overloads are required in order to be able to
+# have a FE function in place of the trial operand in an integral over the
+# cell boundaries
+function Gridap.Fields.linear_combination(u::Vector,
+                                          f::Gridap.Fields.ArrayBlock)
+  i::Int = findfirst(f.touched)
+  fi = f.array[i]
+  ufi = Gridap.Fields.linear_combination(u,fi)
+  g = Vector{typeof(ufi)}(undef,length(f.touched))
+  for i in eachindex(f.touched)
+    if f.touched[i]
+      g[i] = Gridap.Fields.linear_combination(u,f.array[i])
+    end
+  end
+  ArrayBlock(g,f.touched)
+end
+
+function Gridap.Arrays.return_cache(k::Gridap.Fields.LinearCombinationMap,
+                                    u::Vector,
+                                    fx::Gridap.Fields.ArrayBlock)
+  i::Int = findfirst(fx.touched)
+  fxi = fx.array[i]
+  li = return_cache(k,u,fxi)
+  ufxi = evaluate!(li,k,u,fxi)
+  l = Vector{typeof(li)}(undef,size(fx.array))
+  g = Vector{typeof(ufxi)}(undef,size(fx.array))
+  for i in eachindex(fx.array)
+    if fx.touched[i]
+      l[i] = return_cache(k,u,fx.array[i])
+    end
+  end
+  ArrayBlock(g,fx.touched),l
+end
+
+function Gridap.Arrays.evaluate!(cache,
+                                 k::Gridap.Fields.LinearCombinationMap,
+                                 u::Vector,
+                                 fx::Gridap.Fields.ArrayBlock)
+  g,l = cache
+  Gridap.Helpers.@check g.touched == fx.touched
+  for i in eachindex(fx.array)
+    if fx.touched[i]
+      g.array[i] = evaluate!(l[i],k,u,fx.array[i])
+    end
+  end
+  g
+end
+
+
+
 
 function Gridap.Arrays.return_cache(
   #::typeof(evaluate),

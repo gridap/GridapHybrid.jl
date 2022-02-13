@@ -1,5 +1,5 @@
 
-# This function overloads must go to Gridap 0.17, in the present or improved form
+# These function overloads must go to Gridap 0.17, in the present (or improved) form !!!!
 
 @generated function Gridap.TensorValues._flatten_upper_triangle(data::AbstractArray,::Val{D}) where D
   str = ""
@@ -81,13 +81,18 @@ function Gridap.Polynomials._set_gradient!(
   # To fix this in Gridap.TensorValues.SymTensorValue
   w = zero(Gridap.TensorValues.SymTensorValue{D,eltype(s),D*(D + 1)÷2})
   z = zero(eltype(s))
-  for j in CartesianIndices(w)
-    if j[1]<=j[2]
+
+  ciw=CartesianIndices(w)
+  for c in 1:size(ciw,2) # Go over cols
+    for r in 1:c         # Go over upper triangle, current col
       for i in CartesianIndices(m)
         @inbounds m[i] = z
       end
       for i in CartesianIndices(s)
-        @inbounds m[i,j] = s[i]
+        @inbounds m[i,r,c] = s[i]
+        if (r!=c)
+          @inbounds m[i,c,r] = s[i]
+        end
       end
       @inbounds v[k] = m
       k += 1
