@@ -79,6 +79,36 @@ function Gridap.CellData.get_triangulation(f::Gridap.MultiField.MultiFieldCellFi
   trian
 end
 
+# uh : Trial Basis of L2-projection source space (bulk)
+# uhΓ: Trial Basis of L2-projection target space (skeleton)
+function Pₘ(uh, uhΓ, μ, d∂K)
+  A = ∫(μ⋅uhΓ)d∂K
+  B = ∫(μ⋅uh)d∂K
+  # [c][f][bμ,buhΓ==bμ][f,f]
+  A_array = _remove_sum_facets(_remove_densify(A.dict[keys(A.dict)...]))
+  # [c][f][bμ,buh][f]
+  B_array = _remove_sum_facets(_remove_densify(B.dict[keys(B.dict)...]))
+  # [c][f][1,buh][1,f]
+  pm_uh_dofs = lazy_map(GridapHybrid.compute_bulk_to_skeleton_l2_projection_dofs,
+                        A_array, B_array)
+  # [c][f][1,buhΓ][1,f]
+  uhΓ_d∂K      = Gridap.CellData.change_domain(uhΓ, d∂K.quad.trian, ReferenceDomain())
+  uhΓ_d∂K_data = Gridap.CellData.get_data(uhΓ_d∂K)
+  # [c][f][1,buh][1,f]
+  field_array=lazy_map(GridapHybrid.setup_bulk_to_skeleton_l2_projected_fields,
+                       pm_uh_dofs, uhΓ_d∂K_data)
+  Gridap.CellData.GenericCellField(field_array,d∂K.quad.trian,ReferenceDomain())
+end
+
+function _remove_densify(
+     a::Gridap.Arrays.LazyArray{<:Fill{<:Gridap.Fields.DensifyInnerMostBlockLevelMap}})
+  a.args[1]
+end
+
+function _remove_sum_facets(
+  a::Gridap.Arrays.LazyArray{<:Fill{<:SumFacetsMap}})
+  a.args[1]
+end
 
 function solve_linear_elasticity_hdg_symm_tensor(cells,order)
     # Geometry
@@ -128,15 +158,21 @@ function solve_linear_elasticity_hdg_symm_tensor(cells,order)
     yh = get_fe_basis(Y)
     xh = get_trial_fe_basis(X)
 
+    (v, ω, μ)     = yh
+    (σh, uh, uhΓ) = xh
+    Pₘ(uh, uhΓ, μ, d∂K)
+
     a((σh, uh, uhΓ), (v, ω, μ)) = ∫(v ⊙ (A∘σh) + (∇ ⋅ v) ⋅ uh + ∇(ω) ⊙ σh)dΩ -
                                   ∫((v ⋅ n) ⋅ uhΓ)d∂K -
                                   #-∫(ω*(σh⋅n-τ*(uh-uhΓ)))*d∂K
                                   ∫(ω ⋅ (σh ⋅ n))d∂K +
                                   ∫(τ * (ω ⋅ uh))d∂K -
+                                  # ∫(τ * (ω ⋅ Pₘ(uh, uhΓ, μ, d∂K)))d∂K -
                                   ∫(τ * (ω ⋅ uhΓ))d∂K +
                                   #∫(μ*(σh⋅n-τ*(uh-uhΓ)))*d∂K
                                   ∫(μ ⋅ (σh ⋅ n))d∂K -
-                                  ∫(τ * μ ⋅ uh)d∂K +
+                                  ∫(τ * (μ ⋅ uh))d∂K +
+                                  #∫(τ * μ ⋅ Pₘ(uh, uhΓ, μ, d∂K))d∂K +
                                   ∫(τ * μ ⋅ uhΓ)d∂K
     l((v, ω, μ)) = ∫(-ω ⋅ f) * dΩ
 

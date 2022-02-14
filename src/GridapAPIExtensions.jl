@@ -397,11 +397,259 @@ function Gridap.Arrays.lazy_map(
   lazy_map(DensifyInnerMostBlockLevelMap(),sum_facets)
 end
 
-# I cannot implement this optimization. We end up summing MatrixBlocks of different types!!!
-# function Gridap.Arrays.lazy_map(k::Gridap.Fields.Broadcasting,
-#                                 a::Gridap.Arrays.LazyArray{<:Fill{<:DensifyInnerMostBlockLevelMap}},
-#                                 b::Gridap.Arrays.LazyArray{<:Fill{<:DensifyInnerMostBlockLevelMap}})
-#   a_arg=a.args[1]
-#   b_arg=b.args[1]
-#   lazy_map(a.maps.value,lazy_map(k,a_arg,b_arg))
-# end
+function compute_bulk_to_skeleton_l2_projection_dofs(
+  A::Matrix{<:Real},
+  B::Matrix{<:Real})
+  cache=return_cache(compute_bulk_to_skeleton_l2_projection_dofs,A,B)
+  evaluate!(cache,compute_bulk_to_skeleton_l2_projection_dofs,A,B)
+end
+
+function Gridap.Arrays.return_cache(
+  k::typeof(compute_bulk_to_skeleton_l2_projection_dofs),
+  A::Matrix{<:Real},
+  B::Matrix{<:Real})
+  # c=CachedArray(B)
+  # c
+  nothing
+end
+
+function Gridap.Arrays.evaluate!(
+  cache,
+  k::typeof(compute_bulk_to_skeleton_l2_projection_dofs),
+  A::Matrix{<:Real},
+  B::Matrix{<:Real})
+  #setsize!(cache,size(B))
+  #cache.array .= B
+  #ldiv!(lu(A),cache.array) # TO-DO: explore in-place lu!()
+  #cache.array
+  A\B
+end
+
+function setup_bulk_to_skeleton_l2_projected_fields(
+  A::Matrix{<:Real},
+  B::AbstractArray{<:Gridap.Fields.Field})
+  cache=return_cache(setup_bulk_to_skeleton_l2_projected_fields,A,B)
+  evaluate!(cache,setup_bulk_to_skeleton_l2_projected_fields,A,B)
+end
+
+function Gridap.Arrays.return_cache(
+  k::typeof(setup_bulk_to_skeleton_l2_projected_fields),
+  A::Matrix{<:Real},
+  B::AbstractArray{<:Gridap.Fields.Field})
+  return_cache(Gridap.Fields.linear_combination,A,B)
+end
+
+function Gridap.Arrays.evaluate!(
+  cache,
+  k::typeof(setup_bulk_to_skeleton_l2_projected_fields),
+  A::Matrix{<:Real},
+  B::AbstractArray{<:Gridap.Fields.Field})
+  evaluate!(cache,Gridap.Fields.linear_combination,A,B)
+end
+
+function Gridap.Arrays.return_cache(
+  k::typeof(setup_bulk_to_skeleton_l2_projected_fields),
+  A::Matrix{<:Real},
+  B::Transpose{T,<:AbstractArray{<:Gridap.Fields.Field}}) where T
+  c=return_cache(k,A,B.parent)
+  v=evaluate!(c,k,A,B.parent)
+  return_cache(transpose,v), c
+end
+
+function Gridap.Arrays.evaluate!(
+  cache,
+  k::typeof(setup_bulk_to_skeleton_l2_projected_fields),
+  A::Matrix{<:Real},
+  B::Transpose{T,<:AbstractArray{<:Gridap.Fields.Field}}) where T
+  ct,clc=cache
+  v=evaluate!(clc,Gridap.Fields.linear_combination,A,B.parent)
+  evaluate!(ct,transpose,v)
+end
+
+# The following overloads are required to compute the L2
+# projection of the bulk trial basis functions onto the space of traces
+# (defined on the skeleton)
+
+Tprojfuncs=Union{typeof(compute_bulk_to_skeleton_l2_projection_dofs),
+        typeof(setup_bulk_to_skeleton_l2_projected_fields)}
+function Gridap.Arrays.return_cache(
+  k::Tprojfuncs,
+  A::Gridap.Fields.VectorBlock,
+  B::Gridap.Fields.VectorBlock)
+
+  Gridap.Helpers.@check size(A.array) == size(B.array)
+  Gridap.Helpers.@check A.touched == B.touched
+
+  ai=testitem(A)
+  xi=testitem(B)
+
+  T=Gridap.Arrays.return_type(k,ai,xi)
+  Tc=typeof(Gridap.Arrays.return_cache(k,ai,xi))
+  r=Vector{T}(undef,size(A.array))
+  rc=Vector{Tc}(undef,size(A.array))
+  for i in eachindex(A)
+    if A.touched[i]
+      rc[i]=Gridap.Arrays.return_cache(k,A.array[i],B.array[i])
+    end
+  end
+  (Gridap.Fields.ArrayBlock(r,A.touched),Gridap.Fields.ArrayBlock(rc,A.touched))
+end
+
+function Gridap.Arrays.evaluate!(
+  cache,
+  k::Tprojfuncs,
+  A::Gridap.Fields.VectorBlock,
+  B::Gridap.Fields.VectorBlock)
+  Gridap.Helpers.@check size(A.array) == size(B.array)
+  Gridap.Helpers.@check A.touched == B.touched
+  (r,rc)=cache
+  Gridap.Helpers.@check size(r.array) == size(A.array)
+  for i in eachindex(A)
+    if A.touched[i]
+      r.array[i]=Gridap.Arrays.evaluate!(rc.array[i],k,A.array[i],B.array[i])
+    end
+  end
+  r
+end
+
+# A [1,b1], e.g., [1,2] nonzero block (matrix to be inverted)
+# B [1,b2], e.g., [1,3] nonzero block (several RHS)
+function Gridap.Arrays.return_cache(
+  k::typeof(compute_bulk_to_skeleton_l2_projection_dofs),
+  A::Gridap.Fields.MatrixBlock,
+  B::Gridap.Fields.MatrixBlock)
+
+  Gridap.Helpers.@check size(A.array) == size(B.array)
+
+  nA=findall(A.touched)
+  nB=findall(B.touched)
+
+  Gridap.Helpers.@check length(nA)==length(nB)
+  Gridap.Helpers.@check length(nA)==1
+  Gridap.Helpers.@check nA[1][1]==nB[1][1]
+
+  tb=nB[1][2]
+  nb=size(A.array)[1]
+  ai=testitem(A)
+  bi=testitem(B)
+  T=Gridap.Arrays.return_type(k,ai,bi)
+  touched  = Matrix{Bool}(undef,(1,nb))
+  touched .= false
+  touched[1,tb] = true
+  r = Matrix{T}(undef,(1,nb))
+  c = Gridap.Arrays.return_cache(k,ai,bi)
+  Gridap.Fields.ArrayBlock(r,touched), c, tb, nb
+end
+
+function Gridap.Arrays.evaluate!(
+  cache,
+  k::typeof(compute_bulk_to_skeleton_l2_projection_dofs),
+  A::Gridap.Fields.MatrixBlock,
+  B::Gridap.Fields.MatrixBlock)
+  r,c,tb,nb=cache
+  Gridap.Helpers.@check size(A.array) == size(B.array)
+  Gridap.Helpers.@check size(A.array) == (nb,nb)
+  Gridap.Helpers.@check size(r)       == (1,nb)
+  Gridap.Helpers.@check length(findall(A.touched)) == 1
+  Gridap.Helpers.@check length(findall(B.touched)) == 1
+  Gridap.Helpers.@check r.touched[1,tb]
+  ai=testitem(A)
+  bi=testitem(B)
+  r.array[1,tb]=evaluate!(c,k,ai,bi)
+  r
+end
+
+# A [f,f]      , e.g., [2,2] nonzero block (matrix to be inverted)
+# B [f]        , e.g., [2]   nonzero block (several RHS)
+# Return [1,f] , e.g., [1,2]
+function Gridap.Arrays.return_cache(
+  k::typeof(compute_bulk_to_skeleton_l2_projection_dofs),
+  A::Gridap.Fields.MatrixBlock{<:Matrix},
+  B::Gridap.Fields.VectorBlock{<:Matrix})
+
+  Gridap.Helpers.@check size(A.array)[1] == size(A.array)[2]
+  Gridap.Helpers.@check size(A.array)[1] == size(A.array)[2]
+
+  nA=findall(A.touched)
+  nB=findall(B.touched)
+
+  Gridap.Helpers.@check length(nA)==length(nB)
+  Gridap.Helpers.@check length(nA)==1
+  Gridap.Helpers.@check nA[1][1]==nB[1][1]
+  Gridap.Helpers.@check nA[1][2]==nB[1][1]
+
+  tb=nA[1][1]
+  nb=size(A.array)[1]
+  ai=testitem(A)
+  bi=testitem(B)
+  T=Gridap.Arrays.return_type(k,ai,bi)
+  touched  = Matrix{Bool}(undef,(1,nb))
+  touched .= false
+  touched[1,tb] = true
+  r = Matrix{T}(undef,(1,nb))
+  c = Gridap.Arrays.return_cache(k,ai,bi)
+  Gridap.Fields.ArrayBlock(r,touched), c, tb, nb
+end
+
+function Gridap.Arrays.evaluate!(
+  cache,
+  k::typeof(compute_bulk_to_skeleton_l2_projection_dofs),
+  A::Gridap.Fields.MatrixBlock{<:Matrix},
+  B::Gridap.Fields.VectorBlock{<:Matrix})
+  r,c,tb,nb=cache
+  Gridap.Helpers.@check size(A.array)[1] == size(A.array)[2]
+  Gridap.Helpers.@check size(A.array)[1] == size(A.array)[2]
+  Gridap.Helpers.@check size(r)       == (1,nb)
+  Gridap.Helpers.@check length(findall(A.touched)) == 1
+  Gridap.Helpers.@check length(findall(B.touched)) == 1
+  Gridap.Helpers.@check r.touched[1,tb]
+  ai=testitem(A)
+  bi=testitem(B)
+  r.array[1,tb]=evaluate!(c,k,ai,bi)
+  r
+end
+
+
+function Gridap.Arrays.return_cache(
+  k::typeof(setup_bulk_to_skeleton_l2_projected_fields),
+  A::Gridap.Fields.MatrixBlock,
+  B::Gridap.Fields.MatrixBlock)
+
+  Gridap.Helpers.@check size(A.array) == size(B.array)
+
+  nA=findall(A.touched)
+  nB=findall(B.touched)
+
+  Gridap.Helpers.@check length(nA)==length(nB)
+  Gridap.Helpers.@check length(nA)==1
+  Gridap.Helpers.@check nA[1][1]==nB[1][1]
+
+  tb=nA[1][2]
+  nb=size(A.array)[2]
+  ai=testitem(A)
+  bi=testitem(B)
+  T=Gridap.Arrays.return_type(k,ai,bi)
+  touched  = Matrix{Bool}(undef,(1,nb))
+  touched .= false
+  touched[1,tb] = true
+  r = Matrix{T}(undef,(1,nb))
+  c = Gridap.Arrays.return_cache(k,ai,bi)
+  Gridap.Fields.ArrayBlock(r,touched), c, tb, nb
+end
+
+function Gridap.Arrays.evaluate!(
+  cache,
+  k::typeof(setup_bulk_to_skeleton_l2_projected_fields),
+  A::Gridap.Fields.MatrixBlock,
+  B::Gridap.Fields.MatrixBlock)
+  r,c,tb,nb=cache
+  Gridap.Helpers.@check size(A.array) == size(B.array)
+  Gridap.Helpers.@check size(r)       == (1,nb)
+  Gridap.Helpers.@check length(findall(A.touched)) == 1
+  Gridap.Helpers.@check length(findall(B.touched)) == 1
+  Gridap.Helpers.@check r.touched[1,tb]
+  ai=testitem(A)
+  bi=testitem(B)
+  r.array[1,tb]=evaluate!(c,k,ai,bi)
+  r
+end
