@@ -319,10 +319,20 @@ function _transform_cell_to_cell_lface_array(glue,
   Gridap.Arrays.CompressedArray(ctype_to_vector_block,glue.cell_to_ctype)
 end
 
+function _transform_cell_to_cell_lface_array(glue,
+  cell_array::AbstractVector;
+  add_naive_innermost_block_level=false)
+  ctype_to_vector_block=SkeletonVectorFromCellVector(glue,cell_array)
+  if add_naive_innermost_block_level
+    ctype_to_vector_block=collect(lazy_map(AddNaiveInnerMostBlockLevelMap(),ctype_to_vector_block))
+  end
+  ctype_to_vector_block
+end
+
 function _transform_cell_to_cell_lface_array(
   glue,
-  cell_array::Gridap.Arrays.LazyArray{<:Fill{typeof(transpose)}};
-  add_naive_innermost_block_level=false)
+  cell_array::Gridap.Arrays.LazyArray{<:Fill{typeof(transpose)},T,N,<:Tuple{<:Fill}};
+  add_naive_innermost_block_level=false) where {T,N}
   Gridap.Helpers.@check typeof(cell_array.args[1]) <: Fill
   cell_array_fill = Fill(evaluate(transpose,cell_array.args[1].value),length(cell_array))
   _transform_cell_to_cell_lface_array(glue,cell_array_fill; add_naive_innermost_block_level=add_naive_innermost_block_level)
@@ -332,25 +342,25 @@ end
 # The following two function overloads are required in order to be able to
 # have a FE function in place of the trial operand in an integral over the
 # cell boundaries
-function _transform_cell_to_cell_lface_array(
-  glue,
-  cell_array::Gridap.Arrays.LazyArray{<:Fill{typeof(Gridap.Fields.linear_combination)}};
-  add_naive_innermost_block_level=false)
-  cell_lface_array_args2=_transform_cell_to_cell_lface_array(glue,cell_array.args[2];
-           add_naive_innermost_block_level=add_naive_innermost_block_level)
-  cell_lface_array_args1=_transform_cell_to_cell_lface_array(glue,cell_array.args[1];
-           add_naive_innermost_block_level=add_naive_innermost_block_level)
-  lazy_map(linear_combination,cell_lface_array_args1,cell_lface_array_args2)
-end
+# function _transform_cell_to_cell_lface_array(
+#   glue,
+#   cell_array::Gridap.Arrays.LazyArray{<:Fill{typeof(Gridap.Fields.linear_combination)}};
+#   add_naive_innermost_block_level=false)
+#   cell_lface_array_args2=_transform_cell_to_cell_lface_array(glue,cell_array.args[2];
+#            add_naive_innermost_block_level=add_naive_innermost_block_level)
+#   cell_lface_array_args1=_transform_cell_to_cell_lface_array(glue,cell_array.args[1];
+#            add_naive_innermost_block_level=add_naive_innermost_block_level)
+#   lazy_map(linear_combination,cell_lface_array_args1,cell_lface_array_args2)
+# end
 
-function _transform_cell_to_cell_lface_array(
-  glue,
-  cell_array::Gridap.Arrays.LazyArray{<:Fill{<:Broadcasting{<:Gridap.Arrays.PosNegReindex}}};
-  add_naive_innermost_block_level=false)
-  println("WARNING!!! Hard-coded to 4 facets/cell!!!")
-  x=[cell_array for i=1:4]
-  lazy_map(BlockMap(4,collect(1:4)),x...)
-end
+# function _transform_cell_to_cell_lface_array(
+#   glue,
+#   cell_array::Gridap.Arrays.LazyArray{<:Fill{<:Broadcasting{<:Gridap.Arrays.PosNegReindex}}};
+#   add_naive_innermost_block_level=false)
+#   println("WARNING!!! Hard-coded to 4 facets/cell!!!")
+#   x=[cell_array for i=1:4]
+#   lazy_map(BlockMap(4,collect(1:4)),x...)
+# end
 
 
 function _restrict_to_cell_boundary_facet_fe_basis(model,
@@ -599,19 +609,19 @@ function Gridap.ReferenceFEs.expand_cell_data(
 
   TD=eltype(type_to_data)
   ctype_to_vector_block=
-    Vector{Gridap.Fields.VectorBlock{TD}}(undef,length(cell_to_type.data))
-  for ctype=1:length(cell_to_type.data)
-     num_facets=length(cell_to_type.data[ctype])
+    Vector{Gridap.Fields.VectorBlock{TD}}(undef,length(cell_to_type.values))
+  for ctype=1:length(cell_to_type.values)
+     num_facets=length(cell_to_type.values[ctype])
      v=Vector{TD}(undef,num_facets)
      t=Vector{Bool}(undef,num_facets)
      t.=true
      for lface=1:num_facets
-      ftype=cell_to_type.data[ctype][lface]
+      ftype=cell_to_type.values[ctype][lface]
       v[lface]=type_to_data[ftype]
      end
      ctype_to_vector_block[ctype]=Gridap.Fields.ArrayBlock(v,t)
   end
-  Gridap.Arrays.CompressedArray(ctype_to_vector_block,cell_to_ctype.ptrs)
+  Gridap.Arrays.CompressedArray(ctype_to_vector_block,cell_to_type.ptrs)
 end
 
 

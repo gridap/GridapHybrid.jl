@@ -561,7 +561,7 @@ end
 
 # A [f,f]      , e.g., [2,2] nonzero block (matrix to be inverted)
 # B [f]        , e.g., [2]   nonzero block (several RHS)
-# Return [1,f] , e.g., [1,2]
+# Return [1]
 function Gridap.Arrays.return_cache(
   k::typeof(compute_bulk_to_skeleton_l2_projection_dofs),
   A::Gridap.Fields.MatrixBlock{<:Matrix},
@@ -578,17 +578,14 @@ function Gridap.Arrays.return_cache(
   Gridap.Helpers.@check nA[1][1]==nB[1][1]
   Gridap.Helpers.@check nA[1][2]==nB[1][1]
 
-  tb=nA[1][1]
-  nb=size(A.array)[1]
   ai=testitem(A)
   bi=testitem(B)
   T=Gridap.Arrays.return_type(k,ai,bi)
-  touched  = Matrix{Bool}(undef,(1,nb))
-  touched .= false
-  touched[1,tb] = true
-  r = Matrix{T}(undef,(1,nb))
+  touched  = Vector{Bool}(undef,1)
+  touched .= true
+  r = Vector{T}(undef,1)
   c = Gridap.Arrays.return_cache(k,ai,bi)
-  Gridap.Fields.ArrayBlock(r,touched), c, tb, nb
+  Gridap.Fields.ArrayBlock(r,touched), c
 end
 
 function Gridap.Arrays.evaluate!(
@@ -596,19 +593,17 @@ function Gridap.Arrays.evaluate!(
   k::typeof(compute_bulk_to_skeleton_l2_projection_dofs),
   A::Gridap.Fields.MatrixBlock{<:Matrix},
   B::Gridap.Fields.VectorBlock{<:Matrix})
-  r,c,tb,nb=cache
+  r,c=cache
   Gridap.Helpers.@check size(A.array)[1] == size(A.array)[2]
   Gridap.Helpers.@check size(A.array)[1] == size(A.array)[2]
-  Gridap.Helpers.@check size(r)       == (1,nb)
   Gridap.Helpers.@check length(findall(A.touched)) == 1
   Gridap.Helpers.@check length(findall(B.touched)) == 1
-  Gridap.Helpers.@check r.touched[1,tb]
+  Gridap.Helpers.@check r.touched[1]
   ai=testitem(A)
   bi=testitem(B)
-  r.array[1,tb]=evaluate!(c,k,ai,bi)
+  r.array[1]=evaluate!(c,k,ai,bi)
   r
 end
-
 
 function Gridap.Arrays.return_cache(
   k::typeof(setup_bulk_to_skeleton_l2_projected_fields),
@@ -651,5 +646,44 @@ function Gridap.Arrays.evaluate!(
   ai=testitem(A)
   bi=testitem(B)
   r.array[1,tb]=evaluate!(c,k,ai,bi)
+  r
+end
+
+# A: [1,f]
+# B: [1]
+# output [1]
+function Gridap.Arrays.return_cache(
+  k::typeof(setup_bulk_to_skeleton_l2_projected_fields),
+  A::Gridap.Fields.VectorBlock,
+  B::Gridap.Fields.MatrixBlock)
+
+  Gridap.Helpers.@check size(A.array) == (1,)
+
+  nB=findall(B.touched)
+  Gridap.Helpers.@check length(nB)==1
+
+  ai=testitem(A)
+  bi=testitem(B)
+  T=Gridap.Arrays.return_type(k,ai,bi)
+  touched  = Vector{Bool}(undef,1)
+  touched .= true
+  r = Vector{T}(undef,1)
+  c = Gridap.Arrays.return_cache(k,ai,bi)
+  Gridap.Fields.ArrayBlock(r,touched), c
+end
+
+function Gridap.Arrays.evaluate!(
+  cache,
+  k::typeof(setup_bulk_to_skeleton_l2_projected_fields),
+  A::Gridap.Fields.VectorBlock{<:Matrix},
+  B::Gridap.Fields.MatrixBlock)
+  r,c,=cache
+  Gridap.Helpers.@check size(A.array) == (1,)
+  Gridap.Helpers.@check length(findall(B.touched)) == 1
+  Gridap.Helpers.@check length(findall(A.touched)) == 1
+  Gridap.Helpers.@check r.touched[1]
+  ai=testitem(A)
+  bi=testitem(B)
+  r.array[1]=evaluate!(c,k,ai,bi)
   r
 end

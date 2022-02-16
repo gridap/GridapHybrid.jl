@@ -173,14 +173,14 @@ Base.size(a::SkeletonVectorFromFacetVector) = (length(a.glue.cell_to_ctype),)
 Base.IndexStyle(::Type{<:SkeletonVectorFromFacetVector}) = IndexLinear()
 
 function Gridap.Arrays.array_cache(a::SkeletonVectorFromFacetVector{T}) where T
-   fvc=array_cache(a.facet_vector)
+   fvc=array_cache(a.cell_vector)
    cwfc=array_cache(a.cell_wise_facets_ids)
    vbc=_compressed_vector_from_glue(T,a.glue)
    fvc=_compressed_vector_from_glue(typeof(fvc),a.glue)
    for ctype=1:length(a.glue.ctype_to_lface_to_ftype)
     num_facets=length(a.glue.ctype_to_lface_to_ftype[ctype])
     for lface=1:num_facets
-      fvc.values[ctype][lface]=array_cache(a.facet_vector)
+      fvc.values[ctype][lface]=array_cache(a.cell_vector)
     end
   end
    fvc,cwfc,vbc
@@ -191,7 +191,7 @@ function Gridap.Arrays.getindex!(cache,a::SkeletonVectorFromFacetVector,cell::In
   vb=vbc[cell]
   cwf=getindex!(cwfc,a.cell_wise_facets_ids,cell)
   for (lfacet,gfacet) in enumerate(cwf)
-    fv=getindex!(fvc[cell][lfacet],a.facet_vector,gfacet)
+    fv=getindex!(fvc[cell][lfacet],a.cell_vector,gfacet)
     vb.array[lfacet]=fv
   end
   vb
@@ -238,7 +238,7 @@ function Gridap.Arrays.lazy_map(
   a::Gridap.Arrays.CompressedArray{<:Gridap.Fields.VectorBlock}) where T
   Gridap.Helpers.@check length(a) == length(b)
   af=_cell_lfacet_vector_to_facet_vector(b.glue,a)
-  bf=b.facet_vector
+  bf=b.cell_vector
   bfx=lazy_map(evaluate,bf,af)
   SkeletonVectorFromFacetVector(b.glue,b.cell_wise_facets_ids,bfx)
 end
@@ -275,6 +275,43 @@ end
 function Gridap.Arrays.lazy_map(
   ::typeof(∇),
   b::SkeletonVectorFromFacetVector)
-  ∇bf=lazy_map(∇,b.facet_vector)
+  ∇bf=lazy_map(∇,b.cell_vector)
   SkeletonVectorFromFacetVector(b.glue,b.cell_wise_facets_ids,∇bf)
+end
+
+
+struct SkeletonVectorFromCellVector{T,G,V} <: AbstractVector{Gridap.Fields.VectorBlock{T}}
+  glue::G
+  cell_vector::V
+  function SkeletonVectorFromCellVector(glue,cell_vector)
+    G=typeof(glue)
+    V=typeof(cell_vector)
+    T=eltype(V)
+    new{T,G,V}(glue,cell_vector)
+  end
+end
+
+Base.size(a::SkeletonVectorFromCellVector) = (length(a.glue.cell_to_ctype),)
+
+Base.IndexStyle(::Type{<:SkeletonVectorFromCellVector}) = IndexLinear()
+
+function Gridap.Arrays.array_cache(a::SkeletonVectorFromCellVector{T}) where T
+   cvc=array_cache(a.cell_vector)
+   vbc=_compressed_vector_from_glue(T,a.glue)
+   cvc,vbc
+end
+
+function Gridap.Arrays.getindex!(cache,a::SkeletonVectorFromCellVector,cell::Integer)
+  cvc,vbc=cache
+  vb=vbc[cell]
+  fv=getindex!(cvc,a.cell_vector,cell)
+  for lfacet=1:length(vb.touched)
+    vb.array[lfacet]=fv
+  end
+  vb
+end
+
+function Base.getindex(a::SkeletonVectorFromCellVector,cell::Integer)
+  c=array_cache(a)
+  Gridap.Arrays.getindex!(c,a,cell)
 end
