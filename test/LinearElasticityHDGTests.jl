@@ -22,8 +22,9 @@ end
 # applied to the strain tensor
 function invA(ε)
   n = prod(size(ε))
-  A = zeros(n, n)
-  b = zeros(n)
+  T=eltype(ε)
+  A = zeros(T,n, n)
+  b = zeros(T,n)
   for i in eachindex(ε)
     b[i] = ε[i]
   end
@@ -36,17 +37,16 @@ function invA(ε)
       A[i, j] += -ν / E
     end
   end
-  vals = Gridap.TensorValues._flatten_upper_triangle(reshape(A \ b, (D, D)), Val(D))
-  Gridap.TensorValues.SymTensorValue(vals)
+  Gridap.TensorValues.TensorValue(reshape(A\b,(D,D)))
 end
 
-function A(σ) # compliance tensor
-  σ
-end
+# function A(σ) # compliance tensor
+#   σ
+# end
 
-function invA(ε) # compliance tensor
-  ε
-end
+# function invA(ε) # compliance tensor
+#   ε
+# end
 
 function u_exact(x) # Linear exact displacement vector
   VectorValue(x[1] + 2 * x[2], 2 * x[1] + x[2])
@@ -59,7 +59,7 @@ function u_exact(x) # Analytical smooth displacement vector
 end
 
 function σ_exact(x)
-  σ=0.5 * (∇(u_exact)(x) + transpose(∇(u_exact)(x)))
+  σ=invA(0.5 * (∇(u_exact)(x) + transpose(∇(u_exact)(x))))
   D=size(σ)[1]
   vals = Gridap.TensorValues._flatten_upper_triangle(reshape(collect(σ.data),(D,D)), Val(D))
   Gridap.TensorValues.SymTensorValue(vals)
@@ -69,7 +69,7 @@ function f(x)
   (∇ ⋅ (σ_exact))(x)
 end
 
-t = Gridap.TensorValues.SymTensorValue{2,Int64,3}(1, 2, 3)
+t = Gridap.TensorValues.SymTensorValue{2,Float64,3}(1, 2, 3)
 @test t .≈ invA(A(t))
 @test t .≈ A(invA(t))
 
@@ -192,8 +192,8 @@ function solve_linear_elasticity_hdg_symm_tensor(
     xh = solve(op)
 
     σh, uh, uhΓ = xh
-    eσ = interpolate(σ_exact,V) - σh
-    eu = interpolate(u_exact,W) - uh
+    eσ = σ_exact - σh
+    eu = u_exact - uh
     norm2_σ=sqrt(sum(∫(eσ ⊙ eσ)dΩ))
     norm2_u=sqrt(sum(∫(eu ⋅ eu)dΩ))
     norm2_σ,norm2_u
