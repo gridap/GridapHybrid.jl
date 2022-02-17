@@ -167,6 +167,14 @@ function solve_linear_elasticity_hdg_symm_tensor(
        end
     end
 
+    # Testing for correctness of Pₘ projection
+    (v, ω, μ) = yh
+    (σh, uh, uhΓ) = xh
+    dc=∫(μ⋅(uh-Pₘ(uh, uhΓ, μ, d∂K)))d∂K
+    for k in dc.dict[d∂K.quad.trian]
+       @test all(k[3,2] .< 1.0e-14)
+    end
+
     a((σh, uh, uhΓ), (v, ω, μ)) = ∫(v ⊙ (A∘σh) + (∇ ⋅ v) ⋅ uh + ∇(ω) ⊙ σh)dΩ -
                       ∫((v ⋅ n) ⋅ uhΓ)d∂K -
                       #-∫(ω*(σh⋅n-τ*(uh-uhΓ)))*d∂K
@@ -238,7 +246,7 @@ function solve_linear_elasticity_hdg_symm_tensor(
     xaxis=:log, yaxis=:log,
     label=["L2σ (measured)" "L2u (measured)" "slope k" "slope k+1" "slope k+2"],
     shape=:auto,
-    xlabel="h",ylabel="L2 error norm",legend=:bottomright)
+    xlabel="h",ylabel="L2 error norm (PM)",legend=:bottomright)
 
   println("Slope L2-norm stress (PM): $(slope(hs,el2σ_PM))")
   println("Slope L2-norm      u (PM): $(slope(hs,el2u_PM))")
