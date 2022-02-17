@@ -111,10 +111,10 @@ function _remove_sum_facets(
 end
 
 function solve_linear_elasticity_hdg_symm_tensor(
-     cells,order;bulk_to_skeleton_projection=true)
+    cells,order;alpha=1.0,bulk_to_skeleton_projection=true,write_results=false)
     # Geometry
     partition = (0,1,0,1)
-    model = simplexify(CartesianDiscreteModel(partition, cells))
+    model = CartesianDiscreteModel(partition, cells)
     D = num_cell_dims(model)
     Ω = Triangulation(ReferenceFE{D}, model)
     Γ = Triangulation(ReferenceFE{D-1}, model)
@@ -147,7 +147,7 @@ function solve_linear_elasticity_hdg_symm_tensor(
     X = MultiFieldFESpace([U, P, L])
 
     # FE formulation params
-    τ = 1 # HDG stab parameter
+    τ = alpha*order*order*(1.0/cells[1]) # HDG stab parameter
     println("h=$(1.0/cells[1]) τ=$(τ)")
 
     degree = 2 * (order + 1) # TO-DO: To think which is the minimum degree required
@@ -197,17 +197,23 @@ function solve_linear_elasticity_hdg_symm_tensor(
     norm2_σ=sqrt(sum(∫(eσ ⊙ eσ)dΩ))
     norm2_u=sqrt(sum(∫(eu ⋅ eu)dΩ))
     norm2_σ,norm2_u
+
+    if (write_results)
+      writevtk(Ω,"results_$(cells)_k=$(order)",cellfields=["σh"=>σh,"uh"=>uh,"σ_exact"=>σ_exact, "error"=>eσ])
+    end
+    return     norm2_σ,norm2_u
     #@test sqrt(sum(∫(eu ⋅ eu)dΩ)) < 1.0e-12
     #@test sqrt(sum(∫(eσ ⊙ eσ)dΩ)) < 1.0e-12
   end
 
 
-  function conv_test(ns,order;bulk_to_skeleton_projection=false)
+  function conv_test(ns,order;alpha=1.0,bulk_to_skeleton_projection=false)
     el2σ = Float64[]
     el2u = Float64[]
     hs = Float64[]
     for n in ns
-      l2σ, l2u = solve_linear_elasticity_hdg_symm_tensor((n,n),order;bulk_to_skeleton_projection)
+      l2σ, l2u = solve_linear_elasticity_hdg_symm_tensor((n,n),order;
+                                                          alpha=alpha,bulk_to_skeleton_projection=bulk_to_skeleton_projection)
       println(l2σ, " ", l2u)
       h = 1.0/n
       push!(el2σ,l2σ)
@@ -241,7 +247,7 @@ function solve_linear_elasticity_hdg_symm_tensor(
   println("Slope L2-norm stress (no PM): $(slope(hs,el2σ_noPM))")
   println("Slope L2-norm      u (no PM): $(slope(hs,el2u_noPM))")
 
-  el2σ_PM, el2u_PM, hs = conv_test([8,16,32,64,128],1;bulk_to_skeleton_projection=true)
+  el2σ_PM, el2u_PM, hs = conv_test([8,16,32,64,128],1;alpha=5.0,bulk_to_skeleton_projection=true)
   plot(hs,[el2σ_PM el2u_PM slopek slopekp1 slopekp2],
     xaxis=:log, yaxis=:log,
     label=["L2σ (measured)" "L2u (measured)" "slope k" "slope k+1" "slope k+2"],
