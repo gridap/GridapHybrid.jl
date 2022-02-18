@@ -175,10 +175,9 @@ function solve_linear_elasticity_hdg_symm_tensor(
        @test all(k[3,2] .< 1.0e-14)
     end
 
-    a((σh, uh, uhΓ), (v, ω, μ)) = ∫(v ⊙ (A∘σh) + (∇ ⋅ v) ⋅ uh + ∇(ω) ⊙ σh)dΩ -
-                      ∫((v ⋅ n) ⋅ uhΓ)d∂K -
+    a((σh, uh, uhΓ), (v, ω, μ)) = ∫(v ⊙ (A∘σh) + (∇⋅v) ⋅ uh - ω⋅(∇⋅σh))dΩ -
+                      ∫((v ⋅ n) ⋅ uhΓ)d∂K +
                       #-∫(ω*(σh⋅n-τ*(uh-uhΓ)))*d∂K
-                      ∫(ω ⋅ (σh ⋅ n))d∂K +
                       ∫(τ * (ω ⋅ project(uh, uhΓ, μ, d∂K;bulk_to_skeleton_projection=bulk_to_skeleton_projection)))d∂K -
                       ∫(τ * (ω ⋅ uhΓ))d∂K +
                       #∫(μ*(σh⋅n-τ*(uh-uhΓ)))*d∂K
@@ -247,7 +246,7 @@ function solve_linear_elasticity_hdg_symm_tensor(
   println("Slope L2-norm stress (no PM): $(slope(hs,el2σ_noPM))")
   println("Slope L2-norm      u (no PM): $(slope(hs,el2u_noPM))")
 
-  el2σ_PM, el2u_PM, hs = conv_test([8,16,32,64,128],1;alpha=5.0,bulk_to_skeleton_projection=true)
+  el2σ_PM, el2u_PM, hs = conv_test([8,16,32,64,128],1;alpha=1.0,bulk_to_skeleton_projection=true)
   plot(hs,[el2σ_PM el2u_PM slopek slopekp1 slopekp2],
     xaxis=:log, yaxis=:log,
     label=["L2σ (measured)" "L2u (measured)" "slope k" "slope k+1" "slope k+2"],
