@@ -147,7 +147,7 @@ function solve_linear_elasticity_hdg_symm_tensor(
     X = MultiFieldFESpace([U, P, L])
 
     # FE formulation params
-    τ = alpha*order*order*(1.0/cells[1]) # HDG stab parameter
+    τ = cells[1] # alpha*order*order*(1.0/cells[1]) # HDG stab parameter
     println("h=$(1.0/cells[1]) τ=$(τ)")
 
     degree = 2 * (order + 1) # TO-DO: To think which is the minimum degree required
