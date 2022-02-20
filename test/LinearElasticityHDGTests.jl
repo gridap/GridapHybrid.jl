@@ -22,8 +22,9 @@ end
 # applied to the strain tensor
 function invA(ε)
   n = prod(size(ε))
-  A = zeros(n, n)
-  b = zeros(n)
+  T=eltype(ε)
+  A = zeros(T,n, n)
+  b = zeros(T,n)
   for i in eachindex(ε)
     b[i] = ε[i]
   end
@@ -36,17 +37,16 @@ function invA(ε)
       A[i, j] += -ν / E
     end
   end
-  vals = Gridap.TensorValues._flatten_upper_triangle(reshape(A \ b, (D, D)), Val(D))
-  Gridap.TensorValues.SymTensorValue(vals)
+  Gridap.TensorValues.TensorValue(reshape(A\b,(D,D)))
 end
 
-function A(σ) # compliance tensor
-  σ
-end
+# function A(σ) # compliance tensor
+#   σ
+# end
 
-function invA(ε) # compliance tensor
-  ε
-end
+# function invA(ε) # compliance tensor
+#   ε
+# end
 
 function u_exact(x) # Linear exact displacement vector
   VectorValue(x[1] + 2 * x[2], 2 * x[1] + x[2])
@@ -59,7 +59,7 @@ function u_exact(x) # Analytical smooth displacement vector
 end
 
 function σ_exact(x)
-  σ=0.5 * (∇(u_exact)(x) + transpose(∇(u_exact)(x)))
+  σ=invA(0.5 * (∇(u_exact)(x) + transpose(∇(u_exact)(x))))
   D=size(σ)[1]
   vals = Gridap.TensorValues._flatten_upper_triangle(reshape(collect(σ.data),(D,D)), Val(D))
   Gridap.TensorValues.SymTensorValue(vals)
@@ -69,7 +69,7 @@ function f(x)
   (∇ ⋅ (σ_exact))(x)
 end
 
-t = Gridap.TensorValues.SymTensorValue{2,Int64,3}(1, 2, 3)
+t = Gridap.TensorValues.SymTensorValue{2,Float64,3}(1, 2, 3)
 @test t .≈ invA(A(t))
 @test t .≈ A(invA(t))
 
@@ -111,10 +111,10 @@ function _remove_sum_facets(
 end
 
 function solve_linear_elasticity_hdg_symm_tensor(
-     cells,order;bulk_to_skeleton_projection=true)
+    cells,order;alpha=1.0,bulk_to_skeleton_projection=true,write_results=false)
     # Geometry
     partition = (0,1,0,1)
-    model = simplexify(CartesianDiscreteModel(partition, cells))
+    model = CartesianDiscreteModel(partition, cells)
     D = num_cell_dims(model)
     Ω = Triangulation(ReferenceFE{D}, model)
     Γ = Triangulation(ReferenceFE{D-1}, model)
@@ -147,7 +147,7 @@ function solve_linear_elasticity_hdg_symm_tensor(
     X = MultiFieldFESpace([U, P, L])
 
     # FE formulation params
-    τ = 1 # HDG stab parameter
+    τ = cells[1] # alpha*order*order*(1.0/cells[1]) # HDG stab parameter
     println("h=$(1.0/cells[1]) τ=$(τ)")
 
     degree = 2 * (order + 1) # TO-DO: To think which is the minimum degree required
@@ -167,10 +167,17 @@ function solve_linear_elasticity_hdg_symm_tensor(
        end
     end
 
-    a((σh, uh, uhΓ), (v, ω, μ)) = ∫(v ⊙ (A∘σh) + (∇ ⋅ v) ⋅ uh + ∇(ω) ⊙ σh)dΩ -
-                      ∫((v ⋅ n) ⋅ uhΓ)d∂K -
+    # Testing for correctness of Pₘ projection
+    (v, ω, μ) = yh
+    (σh, uh, uhΓ) = xh
+    dc=∫(μ⋅(uh-Pₘ(uh, uhΓ, μ, d∂K)))d∂K
+    for k in dc.dict[d∂K.quad.trian]
+       @test all(k[3,2] .< 1.0e-14)
+    end
+
+    a((σh, uh, uhΓ), (v, ω, μ)) = ∫(v ⊙ (A∘σh) + (∇⋅v) ⋅ uh - ω⋅(∇⋅σh))dΩ -
+                      ∫((v ⋅ n) ⋅ uhΓ)d∂K +
                       #-∫(ω*(σh⋅n-τ*(uh-uhΓ)))*d∂K
-                      ∫(ω ⋅ (σh ⋅ n))d∂K +
                       ∫(τ * (ω ⋅ project(uh, uhΓ, μ, d∂K;bulk_to_skeleton_projection=bulk_to_skeleton_projection)))d∂K -
                       ∫(τ * (ω ⋅ uhΓ))d∂K +
                       #∫(μ*(σh⋅n-τ*(uh-uhΓ)))*d∂K
@@ -184,22 +191,28 @@ function solve_linear_elasticity_hdg_symm_tensor(
     xh = solve(op)
 
     σh, uh, uhΓ = xh
-    eσ = interpolate(σ_exact,V) - σh
-    eu = interpolate(u_exact,W) - uh
+    eσ = σ_exact - σh
+    eu = u_exact - uh
     norm2_σ=sqrt(sum(∫(eσ ⊙ eσ)dΩ))
     norm2_u=sqrt(sum(∫(eu ⋅ eu)dΩ))
     norm2_σ,norm2_u
+
+    if (write_results)
+      writevtk(Ω,"results_$(cells)_k=$(order)",cellfields=["σh"=>σh,"uh"=>uh,"σ_exact"=>σ_exact, "error"=>eσ])
+    end
+    return     norm2_σ,norm2_u
     #@test sqrt(sum(∫(eu ⋅ eu)dΩ)) < 1.0e-12
     #@test sqrt(sum(∫(eσ ⊙ eσ)dΩ)) < 1.0e-12
   end
 
 
-  function conv_test(ns,order;bulk_to_skeleton_projection=false)
+  function conv_test(ns,order;alpha=1.0,bulk_to_skeleton_projection=false)
     el2σ = Float64[]
     el2u = Float64[]
     hs = Float64[]
     for n in ns
-      l2σ, l2u = solve_linear_elasticity_hdg_symm_tensor((n,n),order;bulk_to_skeleton_projection)
+      l2σ, l2u = solve_linear_elasticity_hdg_symm_tensor((n,n),order;
+                                                          alpha=alpha,bulk_to_skeleton_projection=bulk_to_skeleton_projection)
       println(l2σ, " ", l2u)
       h = 1.0/n
       push!(el2σ,l2σ)
@@ -233,12 +246,12 @@ function solve_linear_elasticity_hdg_symm_tensor(
   println("Slope L2-norm stress (no PM): $(slope(hs,el2σ_noPM))")
   println("Slope L2-norm      u (no PM): $(slope(hs,el2u_noPM))")
 
-  el2σ_PM, el2u_PM, hs = conv_test([8,16,32,64,128],1;bulk_to_skeleton_projection=true)
+  el2σ_PM, el2u_PM, hs = conv_test([8,16,32,64,128],1;alpha=1.0,bulk_to_skeleton_projection=true)
   plot(hs,[el2σ_PM el2u_PM slopek slopekp1 slopekp2],
     xaxis=:log, yaxis=:log,
     label=["L2σ (measured)" "L2u (measured)" "slope k" "slope k+1" "slope k+2"],
     shape=:auto,
-    xlabel="h",ylabel="L2 error norm",legend=:bottomright)
+    xlabel="h",ylabel="L2 error norm (PM)",legend=:bottomright)
 
   println("Slope L2-norm stress (PM): $(slope(hs,el2σ_PM))")
   println("Slope L2-norm      u (PM): $(slope(hs,el2u_PM))")
