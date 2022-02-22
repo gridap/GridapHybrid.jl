@@ -185,17 +185,6 @@ end
     (rh,nh,ψh,sh,τh,vh,ηh,μh)   = Y_basis
     residual((ωh,ρh,ϕh,th,σh,uh,ϕhΓ,uhΓ),(rh,nh,ψh,sh,τh,vh,ηh,μh))
 
-    ∫( rh⋅((κ∘(σh,ϕh))⋅ωh) - rh⋅ρh )dΩ #+
-    ∫( ωh⋅nh-(∇⋅nh)*ϕh )dΩ # +
-    ∫((nh⋅n)*ϕhΓ)d∂K
-      #∫( (∇⋅ρh)*ψh - α*tr(th)*ψh - ℓ*ψh )dΩ +
-      #∫( sh⊙(N∘th) - sh⊙σh - tr(sh)*(g∘ϕh) )dΩ +
-      #∫( τh⊙th - (∇⋅τh)⋅uh )dΩ - ∫((τh⋅n)⋅uhΓ)d∂K +
-      #∫( ∇(vh)⊙σh - vh⋅f)dΩ - ∫(vh⋅(σh⋅n))d∂K + ∫(τuΓ*(vh⋅Pₘ(uh, uhΓ_basis, μh, d∂K)))d∂K
-      #                                        - ∫(τuΓ*(vh⋅uhΓ))d∂K +
-      #∫( ηh*(ωh⋅n) )d∂K + ∫( τϕΓ*ηh*ϕh )d∂K - ∫( τϕΓ*ηh*ϕhΓ )d∂K #+
-      #∫( μh⋅(σh⋅n) )d∂K - ∫( τuΓ*μh⋅Pₘ(uh, uhΓ_basis, μh, d∂K) )d∂K + ∫( τuΓ*μh⋅uhΓ )d∂K
-
     # Jacobian
     # We aim at computing it using Automatic Differentiation
     # TO-DO: Need to think how to implement HybridFEOperator
