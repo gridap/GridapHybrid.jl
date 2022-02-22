@@ -40,7 +40,7 @@ function N(t)
   td   = _dev(t)
   tdsq = td⊙td
   I    = one(t)
-  (λ + 2.0/3.0*ζ(td))*tr(t)*I + 2.0*μ*(1.0-ζ(td))*t
+  (λ + 2.0/3.0*ζ(tdsq))*tr(t)*I + 2.0*μ*(1.0-ζ(tdsq))*t
 end
 
 # Extracts deviatoric component of t
@@ -50,15 +50,21 @@ function _dev(t)
   t-(tr(t)/D)*I
 end
 
+# Solute dependent active stress component
+function g(ϕ)
+  ϕ
+  # ??? To be defined
+end
+
 # Solute concentration Dirichlet boundary
 function ϕ₀(x)
-  x
+  x[1]
   # ??? To be defined
 end
 
 # Displacement Dirichlet boundary
 function u₀(x)
-  VectorValue(x,x)
+  x
   # ??? To be defined
 end
 
@@ -89,10 +95,11 @@ function Gridap.CellData.get_triangulation(f::Gridap.MultiField.MultiFieldCellFi
   trian
 end
 
-function solve_stress_assisted_diffusion_hencky_hdg(
-    cells,order;write_results=false)
+#function solve_stress_assisted_diffusion_hencky_hdg(cells,order;write_results=false)
     # Geometry
     partition = (0,1,0,1)
+    cells=(2,2)
+    order=1
     model = CartesianDiscreteModel(partition, cells)
     D = num_cell_dims(model)
     Ω = Triangulation(ReferenceFE{D}, model)
@@ -134,8 +141,8 @@ function solve_stress_assisted_diffusion_hencky_hdg(
     Ψ_TR   = TrialFESpace(Ψ)
     S_TR   = TrialFESpace(S)
     V_TR   = TrialFESpace(V)
-    MϕΓ_TR = TrialFESpace(Ψ,ϕ₀)
-    MuΓ_TR = TrialFESpace(Ψ,u₀)
+    MϕΓ_TR = TrialFESpace(MϕΓ,ϕ₀)
+    MuΓ_TR = TrialFESpace(MuΓ,u₀)
     Y_TR   = MultiFieldFESpace([W_TR, W_TR, Ψ_TR, S_TR, S_TR, V_TR, MϕΓ_TR, MuΓ_TR])
 
     # FE formulation params
@@ -145,7 +152,6 @@ function solve_stress_assisted_diffusion_hencky_hdg(
     degree = 2 * (order + 1) # TO-DO: To think which is the minimum degree required
     dΩ = Measure(Ω, degree)
     n = get_cell_normal_vector(∂K)
-    nₒ = get_cell_owner_normal_vector(∂K)
     d∂K = Measure(∂K, degree)
 
     # Stabilization operator (solute concentration)
@@ -153,26 +159,42 @@ function solve_stress_assisted_diffusion_hencky_hdg(
     # Stabilization operator (displacements)
     τuΓ = 1.0 # To be defined???
 
+    Y_basis    = get_fe_basis(Y)
+    Y_TR_basis = get_trial_fe_basis(Y_TR)
+    (_,_,_,_,_,_,_,uhΓ_basis) = Y_TR_basis
+
     # Residual
     # current_iterate  => (ωh,ρh,ϕh,th,σh,uh,ϕhΓ,uhΓ)
     # test space basis => (rh,nh,ψh,sh,τh,vh,ηh,μh)
     function residual((ωh,ρh,ϕh,th,σh,uh,ϕhΓ,uhΓ),(rh,nh,ψh,sh,τh,vh,ηh,μh))
-      ∫( rh⋅κ(ρh,ϕh)-rh⋅ρh )dΩ +
+      ∫( rh⋅((κ∘(σh,ϕh))⋅ωh) - rh⋅ρh )dΩ +
       ∫( ωh⋅nh-(∇⋅nh)*ϕh )dΩ + ∫((nh⋅n)*ϕhΓ)d∂K +
       ∫( (∇⋅ρh)*ψh - α*tr(th)*ψh - ℓ*ψh )dΩ +
       ∫( sh⊙(N∘th) - sh⊙σh - tr(sh)*(g∘ϕh) )dΩ +
       ∫( τh⊙th - (∇⋅τh)⋅uh )dΩ - ∫((τh⋅n)⋅uhΓ)d∂K +
-      ∫( ∇(vh)⊙σh - vh⋅f)dΩ - ∫(vh⋅(σh⋅n))d∂K + ∫(τuΓ*(vh⋅Pₘ(uh, uhΓ, μh, d∂K)))d∂K
+      ∫( ∇(vh)⊙σh - vh⋅f)dΩ - ∫(vh⋅(σh⋅n))d∂K + ∫(τuΓ*(vh⋅Pₘ(uh, uhΓ_basis, μh, d∂K)))d∂K
                                               - ∫(τuΓ*(vh⋅uhΓ))d∂K +
-      ∫( ηh*(ωh⋅n) )d∂K + ∫( τϕΓ*ηh*ϕh )d∂K - ∫( τϕΓ*ηh*ϕhΓ )d∂K +
-      ∫( μh⋅(σh⋅n) )d∂K - ∫( τuΓ*μh⋅Pₘ(uh, uhΓ, μh, d∂K) )d∂K + ∫( τuΓ*μh⋅uhΓ )d∂K
+      ∫( ηh*(ωh⋅n) )d∂K + ∫( τϕΓ*ηh*ϕh )d∂K - ∫( τϕΓ*ηh*ϕhΓ )d∂K #+
+      ∫( μh⋅(σh⋅n) )d∂K - ∫( τuΓ*μh⋅Pₘ(uh, uhΓ_basis, μh, d∂K) )d∂K + ∫( τuΓ*μh⋅uhΓ )d∂K
     end
 
-    yh = get_fe_basis(Y)
-    xh = get_trial_fe_basis(Y_TR)
-    (ωh,ρh,ϕh,th,σh,uh,ϕhΓ,uhΓ) = yh
-    (rh,nh,ψh,sh,τh,vh,ηh,μh)   = xh
+    free_values = rand(num_free_dofs(Y_TR))
+    xh          = FEFunction(Y_TR,free_values)
+
+    (ωh,ρh,ϕh,th,σh,uh,ϕhΓ,uhΓ) = xh
+    (rh,nh,ψh,sh,τh,vh,ηh,μh)   = Y_basis
     residual((ωh,ρh,ϕh,th,σh,uh,ϕhΓ,uhΓ),(rh,nh,ψh,sh,τh,vh,ηh,μh))
+
+    ∫( rh⋅((κ∘(σh,ϕh))⋅ωh) - rh⋅ρh )dΩ #+
+    ∫( ωh⋅nh-(∇⋅nh)*ϕh )dΩ # +
+    ∫((nh⋅n)*ϕhΓ)d∂K
+      #∫( (∇⋅ρh)*ψh - α*tr(th)*ψh - ℓ*ψh )dΩ +
+      #∫( sh⊙(N∘th) - sh⊙σh - tr(sh)*(g∘ϕh) )dΩ +
+      #∫( τh⊙th - (∇⋅τh)⋅uh )dΩ - ∫((τh⋅n)⋅uhΓ)d∂K +
+      #∫( ∇(vh)⊙σh - vh⋅f)dΩ - ∫(vh⋅(σh⋅n))d∂K + ∫(τuΓ*(vh⋅Pₘ(uh, uhΓ_basis, μh, d∂K)))d∂K
+      #                                        - ∫(τuΓ*(vh⋅uhΓ))d∂K +
+      #∫( ηh*(ωh⋅n) )d∂K + ∫( τϕΓ*ηh*ϕh )d∂K - ∫( τϕΓ*ηh*ϕhΓ )d∂K #+
+      #∫( μh⋅(σh⋅n) )d∂K - ∫( τuΓ*μh⋅Pₘ(uh, uhΓ_basis, μh, d∂K) )d∂K + ∫( τuΓ*μh⋅uhΓ )d∂K
 
     # Jacobian
     # We aim at computing it using Automatic Differentiation
@@ -198,7 +220,7 @@ function solve_stress_assisted_diffusion_hencky_hdg(
     # return     norm2_σ,norm2_u
     #@test sqrt(sum(∫(eu ⋅ eu)dΩ)) < 1.0e-12
     #@test sqrt(sum(∫(eσ ⊙ eσ)dΩ)) < 1.0e-12
-  end
+  # end
 
 
   function conv_test(ns,order)
@@ -228,6 +250,8 @@ function solve_stress_assisted_diffusion_hencky_hdg(
   cells=(2,2)
   order=1
   solve_stress_assisted_diffusion_hencky_hdg(cells,order;write_results=false)
+
+
 
   # ns=[8,16,32,64,128]
   # order=1

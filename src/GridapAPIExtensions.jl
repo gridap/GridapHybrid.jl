@@ -559,6 +559,52 @@ function Gridap.Arrays.evaluate!(
   r
 end
 
+# A [1,b1], e.g., [1,2] nonzero block (matrix to be inverted)
+# B [b2]  , e.g., [3] nonzero block (single RHS)
+function Gridap.Arrays.return_cache(
+  k::typeof(compute_bulk_to_skeleton_l2_projection_dofs),
+  A::Gridap.Fields.MatrixBlock,
+  B::Gridap.Fields.VectorBlock)
+
+  Gridap.Helpers.@check size(A.array)[2] == size(B.array)[1]
+
+  nA=findall(A.touched)
+  nB=findall(B.touched)
+
+  Gridap.Helpers.@check length(nA)==length(nB)
+  Gridap.Helpers.@check length(nA)==1
+
+  tb=nB[1][1]
+  nb=size(B.array)[1]
+  ai=testitem(A)
+  bi=testitem(B)
+  T=Gridap.Arrays.return_type(k,ai,bi)
+  touched  = Vector{Bool}(undef,nb)
+  touched .= false
+  touched[tb] = true
+  r = Vector{T}(undef,nb)
+  c = Gridap.Arrays.return_cache(k,ai,bi)
+  Gridap.Fields.ArrayBlock(r,touched), c, tb, nb
+end
+
+function Gridap.Arrays.evaluate!(
+  cache,
+  k::typeof(compute_bulk_to_skeleton_l2_projection_dofs),
+  A::Gridap.Fields.MatrixBlock,
+  B::Gridap.Fields.VectorBlock)
+  r,c,tb,nb=cache
+  Gridap.Helpers.@check size(A.array) == size(B.array)
+  Gridap.Helpers.@check size(A.array) == (nb,nb)
+  Gridap.Helpers.@check size(r)       == (nb,)
+  Gridap.Helpers.@check length(findall(A.touched)) == 1
+  Gridap.Helpers.@check length(findall(B.touched)) == 1
+  Gridap.Helpers.@check r.touched[tb]
+  ai=testitem(A)
+  bi=testitem(B)
+  r.array[tb]=evaluate!(c,k,ai,bi)
+  r
+end
+
 # A [f,f]      , e.g., [2,2] nonzero block (matrix to be inverted)
 # B [f]        , e.g., [2]   nonzero block (several RHS)
 # Return [1]
