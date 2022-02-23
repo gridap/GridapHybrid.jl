@@ -298,11 +298,16 @@ end
 function Gridap.FESpaces.get_cell_fe_data(
   fun,
   sface_to_data,
-  sglue::FaceToFaceGlue,
-  tglue::SkeletonGlue)
+  sglue::FaceToFaceGlue{Dc},
+  tglue::SkeletonGlue) where Dc
   model=tglue.trian.model
-  cell_wise_facets=_get_cell_wise_facets(model)
-  restrict_facet_dof_ids_to_cell_boundary(cell_wise_facets,sface_to_data)
+  if Dc == num_cell_dims(model)
+    sface_to_data
+  else
+    @assert Dc==num_cell_dims(model)-1
+    cell_wise_facets=_get_cell_wise_facets(model)
+    restrict_facet_dof_ids_to_cell_boundary(cell_wise_facets,sface_to_data)
+  end 
 end
 
 # TO-DO: We need additional expressivity in Gridap

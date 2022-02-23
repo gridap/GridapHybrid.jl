@@ -71,13 +71,13 @@ end
 # Vector field of body loads
 function f(x)
   # (∇ ⋅ (σ_exact))(x)
-  VectorValue(x,x)
+  x
   # ??? To be defined
 end
 
 # Source/sink of solute concentration
 function ℓ(x)
-  x
+  x[1]
   # ??? To be defined
 end
 
@@ -168,13 +168,13 @@ end
     # test space basis => (rh,nh,ψh,sh,τh,vh,ηh,μh)
     function residual((ωh,ρh,ϕh,th,σh,uh,ϕhΓ,uhΓ),(rh,nh,ψh,sh,τh,vh,ηh,μh))
       ∫( rh⋅((κ∘(σh,ϕh))⋅ωh) - rh⋅ρh )dΩ +
-      ∫( ωh⋅nh-(∇⋅nh)*ϕh )dΩ + ∫((nh⋅n)*ϕhΓ)d∂K +
-      ∫( (∇⋅ρh)*ψh - α*tr(th)*ψh - ℓ*ψh )dΩ +
+      ∫( nh⋅ωh-(∇⋅nh)*ϕh )dΩ + ∫((nh⋅n)*ϕhΓ)d∂K  +
+      ∫( ψh*(∇⋅ρh) - α*ψh*tr(th) - ψh*ℓ )dΩ +
       ∫( sh⊙(N∘th) - sh⊙σh - tr(sh)*(g∘ϕh) )dΩ +
       ∫( τh⊙th - (∇⋅τh)⋅uh )dΩ - ∫((τh⋅n)⋅uhΓ)d∂K +
-      ∫( ∇(vh)⊙σh - vh⋅f)dΩ - ∫(vh⋅(σh⋅n))d∂K + ∫(τuΓ*(vh⋅Pₘ(uh, uhΓ_basis, μh, d∂K)))d∂K
-                                              - ∫(τuΓ*(vh⋅uhΓ))d∂K +
-      ∫( ηh*(ωh⋅n) )d∂K + ∫( τϕΓ*ηh*ϕh )d∂K - ∫( τϕΓ*ηh*ϕhΓ )d∂K #+
+      ∫( ∇(vh)⊙σh - vh⋅f)dΩ - ∫(vh⋅(σh⋅n))d∂K + ∫(τuΓ*(vh⋅Pₘ(uh, uhΓ_basis, μh, d∂K)))d∂K -
+                                                ∫(τuΓ*(vh⋅uhΓ))d∂K +
+      ∫( ηh*(ωh⋅n) )d∂K + ∫( τϕΓ*ηh*ϕh )d∂K - ∫( τϕΓ*ηh*ϕhΓ )d∂K +
       ∫( μh⋅(σh⋅n) )d∂K - ∫( τuΓ*μh⋅Pₘ(uh, uhΓ_basis, μh, d∂K) )d∂K + ∫( τuΓ*μh⋅uhΓ )d∂K
     end
 
@@ -183,7 +183,9 @@ end
 
     (ωh,ρh,ϕh,th,σh,uh,ϕhΓ,uhΓ) = xh
     (rh,nh,ψh,sh,τh,vh,ηh,μh)   = Y_basis
-    residual((ωh,ρh,ϕh,th,σh,uh,ϕhΓ,uhΓ),(rh,nh,ψh,sh,τh,vh,ηh,μh))
+    dc=residual((ωh,ρh,ϕh,th,σh,uh,ϕhΓ,uhΓ),(rh,nh,ψh,sh,τh,vh,ηh,μh))
+
+    res=assemble_vector(dc,Y)
 
     # Jacobian
     # We aim at computing it using Automatic Differentiation

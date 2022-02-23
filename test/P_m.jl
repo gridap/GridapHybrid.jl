@@ -1,19 +1,22 @@
-# uh : Trial Basis of L2-projection source space (bulk)
+# uh : Trial Basis of L2-projection source space (bulk) or FEFunction
 # uhΓ: Trial Basis of L2-projection target space (skeleton)
+# μ  : Test  Basis of L2-projection target space (skeleton)
 function Pₘ(uh, uhΓ, μ, d∂K)
   A = ∫(μ⋅uhΓ)d∂K
   B = ∫(μ⋅uh)d∂K
   # [c][f][bμ,buhΓ==bμ][f,f]
-  A_array = _remove_sum_facets(_remove_densify(A.dict[keys(A.dict)...]))
-  # [c][f][bμ,buh][f]
-  B_array = _remove_sum_facets(_remove_densify(B.dict[keys(B.dict)...]))
-  # [c][f][1,buh][1]
-  pm_uh_dofs = lazy_map(GridapHybrid.compute_bulk_to_skeleton_l2_projection_dofs,
-    A_array, B_array)
+  A_array = _remove_sum_facets(_remove_densify(Gridap.CellData.get_array(A)))
+  # [c][f][bμ,buh][f] (if uh Trial Basis)
+  # [c][f][bμ]    [f] (if uh FE Function)
+  B_array = _remove_sum_facets(_remove_densify(Gridap.CellData.get_array(B)))
+  # [c][f][1,buh][1] (if uh Trial Basis)
+  # [c][f]           (if uh FE Function)
+  pm_uh_dofs = lazy_map(GridapHybrid.compute_bulk_to_skeleton_l2_projection_dofs, A_array, B_array)
   # [c][f][1,buhΓ][1,f]
   uhΓ_d∂K = Gridap.CellData.change_domain(uhΓ, d∂K.quad.trian, ReferenceDomain())
   uhΓ_d∂K_data = Gridap.CellData.get_data(uhΓ_d∂K)
-  # [c][f][1,buh][1]
+  # [c][f][1,buh][1] (if uh Trial Basis)
+  # [c][f]           (if uh FE Function)
   field_array = lazy_map(GridapHybrid.setup_bulk_to_skeleton_l2_projected_fields,
     pm_uh_dofs, uhΓ_d∂K_data)
   Gridap.CellData.GenericCellField(field_array, d∂K.quad.trian, ReferenceDomain())
