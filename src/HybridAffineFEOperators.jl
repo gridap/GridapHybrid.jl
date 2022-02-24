@@ -256,6 +256,37 @@ function _hybridrizable_to_hybrid_contributions(matcontribs,veccontribs)
    omatcontribs, oveccontribs
 end
 
+function _hybridrizable_to_hybrid_contributions_vector(veccontribs)
+  Dli = maximum(map(tr->num_cell_dims(tr), collect(keys(veccontribs.dict))))
+  D   = Dli
+  vskeleton = _find_skeleton(veccontribs); Gridap.Helpers.@check length(vskeleton)==1
+  vbulk     = _find_bulk(D,veccontribs)    ; Gridap.Helpers.@check length(vbulk)<=1
+  vboun     = _find_boundary(veccontribs); Gridap.Helpers.@check length(vboun)<=1
+  oveccontribs = DomainContribution()
+  if length(vbulk)!=0
+   vbulk=vbulk[1]
+   add_contribution!(oveccontribs,vskeleton...,veccontribs[vbulk])
+  end
+  if length(vboun)!=0
+   add_contribution!(oveccontribs,vboun...,veccontribs[vboun])
+  end
+  oveccontribs
+end
+
+function _hybridrizable_to_hybrid_contributions_matrix(matcontribs)
+  Dbi = maximum(map(tr->num_cell_dims(tr), collect(keys(matcontribs.dict))))
+  D   = Dbi
+  mskeleton = _find_skeleton(matcontribs); Gridap.Helpers.@check length(mskeleton)==1
+  mbulk     = _find_bulk(D,matcontribs)    ; Gridap.Helpers.@check length(mbulk)==1
+  mboun     = _find_boundary(matcontribs); Gridap.Helpers.@check length(mboun)==0
+  omatcontribs = DomainContribution()
+  mskeleton = mskeleton[1]
+  mbulk     = mbulk[1]
+  add_contribution!(omatcontribs,mskeleton,matcontribs[mskeleton])
+  add_contribution!(omatcontribs,mskeleton,matcontribs[mbulk])
+  omatcontribs
+end
+
 function _find_skeleton(dc::DomainContribution)
   [trian for trian in keys(dc.dict) if isa(trian,SkeletonTriangulation)]
 end
@@ -307,7 +338,7 @@ function Gridap.FESpaces.get_cell_fe_data(
     @assert Dc==num_cell_dims(model)-1
     cell_wise_facets=_get_cell_wise_facets(model)
     restrict_facet_dof_ids_to_cell_boundary(cell_wise_facets,sface_to_data)
-  end 
+  end
 end
 
 # TO-DO: We need additional expressivity in Gridap

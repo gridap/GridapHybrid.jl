@@ -97,7 +97,7 @@ end
 #function solve_stress_assisted_diffusion_hencky_hdg(cells,order;write_results=false)
     # Geometry
     partition = (0,1,0,1)
-    cells=(1,1)
+    cells=(4,4)
     order=1
     model = CartesianDiscreteModel(partition, cells)
     D = num_cell_dims(model)

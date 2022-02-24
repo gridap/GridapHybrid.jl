@@ -196,38 +196,34 @@ function Gridap.FESpaces._jacobian(f,
   fuh::Gridap.CellData.DomainContribution)
   terms = DomainContribution()
   U = Gridap.FESpaces.get_fe_space(uh)
+  fuh = _hybridrizable_to_hybrid_contributions_vector(fuh)
   for trian in get_domains(fuh)
-    # TO-DO: think a better solution here, we
-    # cannot restrict to SkeletonTriangulation in the general case
-    if isa(trian,SkeletonTriangulation)
-
-      
-        g = Gridap.FESpaces._change_argument(jacobian,f,trian,uh)
-        cell_u = lazy_map(DensifyInnerMostBlockLevelMap(),get_cell_dof_values(uh,trian))
-        cell_id = Gridap.FESpaces._compute_cell_ids(uh,trian)
-        cell_grad = autodiff_array_jacobian(g,cell_u,cell_id)
-        monolithic_result=cell_grad
-        blocks        = [] # TO-DO type unstable. How can I infer the type of its entries?
-        blocks_coords = Tuple{Int,Int}[]
-        nfields = length(U.spaces)
-        cell_dofs_field_offsets=Gridap.MultiField._get_cell_dofs_field_offsets(uh)
-        for j=1:nfields
-          view_range_j=cell_dofs_field_offsets[j]:cell_dofs_field_offsets[j+1]-1
-          for i=1:nfields
-            view_range_i=cell_dofs_field_offsets[i]:cell_dofs_field_offsets[i+1]-1
-            # TO-DO: depending on the residual being differentiated, we may end with
-            #        blocks [i,j] full of zeros. I guess that it might desirable to early detect
-            #        these zero blocks and use a touch[i,j]==false block in ArrayBlock.
-            #        How can we detect that we have a zero block?
-            block=lazy_map(x->view(x,view_range_i,view_range_j),monolithic_result)
-            append!(blocks,[block])
-            append!(blocks_coords,[(i,j)])
-          end
-        end
-        cell_grad=lazy_map(BlockMap((nfields,nfields),blocks_coords),blocks...)
-        add_contribution!(terms,trian,cell_grad)
+    Gridap.Helpers.@check isa(trian,SkeletonTriangulation)
+    g = Gridap.FESpaces._change_argument(jacobian,f,trian,uh)
+    cell_u = lazy_map(DensifyInnerMostBlockLevelMap(),get_cell_dof_values(uh,trian))
+    cell_id = Gridap.FESpaces._compute_cell_ids(uh,trian)
+    cell_grad = autodiff_array_jacobian(g,cell_u,cell_id)
+    monolithic_result=cell_grad
+    blocks        = [] # TO-DO type unstable. How can I infer the type of its entries?
+    blocks_coords = Tuple{Int,Int}[]
+    nfields = length(U.spaces)
+    cell_dofs_field_offsets=Gridap.MultiField._get_cell_dofs_field_offsets(uh,trian)
+    for j=1:nfields
+      view_range_j=cell_dofs_field_offsets[j]:cell_dofs_field_offsets[j+1]-1
+      for i=1:nfields
+        view_range_i=cell_dofs_field_offsets[i]:cell_dofs_field_offsets[i+1]-1
+        # TO-DO: depending on the residual being differentiated, we may end with
+        #        blocks [i,j] full of zeros. I guess that it might desirable to early detect
+        #        these zero blocks and use a touch[i,j]==false block in ArrayBlock.
+        #        How can we detect that we have a zero block?
+        block=lazy_map(x->view(x,view_range_i,view_range_j),monolithic_result)
+        append!(blocks,[block])
+        append!(blocks_coords,[(i,j)])
       end
     end
+    cell_grad=lazy_map(BlockMap((nfields,nfields),blocks_coords),blocks...)
+    add_contribution!(terms,trian,cell_grad)
+  end
   terms
 end
 
@@ -325,16 +321,17 @@ function Gridap.FESpaces._change_argument(
       Ui=U.spaces[i]
       Ui_trian=get_triangulation(Ui)
       model=get_background_model(Ui_trian)
-      cells_around_facets = _get_cells_around_facets(model)
       cell_wise_facets = _get_cell_wise_facets(model)
       D=num_cell_dims(model)
-      if (isa(Ui_trian, Triangulation{D,D}))       # Cell triangulation
+      if (isa(Ui_trian, Triangulation{D,D}))         # Cell triangulation
         cf = CellField(Ui, cell_values_field)
       elseif (isa(Ui_trian, Triangulation{D - 1,D})) # Facet triangulation
-        cell_lface_dof_values = _generate_cell_lface_dofs_from_cell_dofs(trian.glue,
-          cell_wise_facets,
-          cell_values_field,
-          get_cell_dof_ids(Ui))
+        cell_lface_dof_values =
+         _generate_cell_lface_dofs_from_cell_dofs(
+            trian.glue,
+            cell_wise_facets,
+            cell_values_field,
+            get_cell_dof_ids(Ui))
         Ui_basis = get_fe_basis(Ui)
         Ui_basis_data = get_data(Ui_basis)
         Ui_basis_cell_lface_data = SkeletonVectorFromFacetVector(
@@ -346,11 +343,11 @@ function Gridap.FESpaces._change_argument(
       else
         Gridap.Helpers.@notimplemented
       end
-
       push!(single_fields,cf)
     end
     xh = Gridap.MultiField.MultiFieldCellField(single_fields)
     cell_grad = f(xh)
+    cell_grad=_hybridrizable_to_hybrid_contributions_matrix(cell_grad)
     cell_grad_cont_block=get_contribution(cell_grad,trian)
     bs = [cell_dofs_field_offsets[i+1]-cell_dofs_field_offsets[i] for i=1:nfields]
     lazy_map(DensifyInnerMostBlockLevelMap(),
