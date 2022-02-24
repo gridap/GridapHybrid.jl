@@ -6,7 +6,6 @@ module StressAssistedHenckyHDGTests
 using Test
 using Gridap
 using FillArrays
-using Gridap.Geometry
 using GridapHybrid
 using Plots
 
@@ -98,7 +97,7 @@ end
 #function solve_stress_assisted_diffusion_hencky_hdg(cells,order;write_results=false)
     # Geometry
     partition = (0,1,0,1)
-    cells=(2,2)
+    cells=(1,1)
     order=1
     model = CartesianDiscreteModel(partition, cells)
     D = num_cell_dims(model)
@@ -168,7 +167,7 @@ end
     # test space basis => (rh,nh,ψh,sh,τh,vh,ηh,μh)
     function residual((ωh,ρh,ϕh,th,σh,uh,ϕhΓ,uhΓ),(rh,nh,ψh,sh,τh,vh,ηh,μh))
       ∫( rh⋅((κ∘(σh,ϕh))⋅ωh) - rh⋅ρh )dΩ +
-      ∫( nh⋅ωh-(∇⋅nh)*ϕh )dΩ + ∫((nh⋅n)*ϕhΓ)d∂K  +
+      ∫( nh⋅ωh-(∇⋅nh)*ϕh )dΩ + ∫((nh⋅n)*ϕhΓ)d∂K +
       ∫( ψh*(∇⋅ρh) - α*ψh*tr(th) - ψh*ℓ )dΩ +
       ∫( sh⊙(N∘th) - sh⊙σh - tr(sh)*(g∘ϕh) )dΩ +
       ∫( τh⊙th - (∇⋅τh)⋅uh )dΩ - ∫((τh⋅n)⋅uhΓ)d∂K +
@@ -178,7 +177,7 @@ end
       ∫( μh⋅(σh⋅n) )d∂K - ∫( τuΓ*μh⋅Pₘ(uh, uhΓ_basis, μh, d∂K) )d∂K + ∫( τuΓ*μh⋅uhΓ )d∂K
     end
 
-    free_values = rand(num_free_dofs(Y_TR))
+    free_values = ones(num_free_dofs(Y_TR))
     xh          = FEFunction(Y_TR,free_values)
 
     (ωh,ρh,ϕh,th,σh,uh,ϕhΓ,uhΓ) = xh
@@ -187,6 +186,9 @@ end
 
     res=assemble_vector(dc,Y)
 
+    dc=jacobian(x->residual(x,Y_basis),xh)
+
+    A=assemble_matrix(dc,Y_TR,Y)
     # Jacobian
     # We aim at computing it using Automatic Differentiation
     # TO-DO: Need to think how to implement HybridFEOperator
