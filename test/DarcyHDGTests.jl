@@ -23,12 +23,6 @@ function g(x)
   Gridap.Helpers.@check false
 end
 
-function Gridap.CellData.get_triangulation(f::Gridap.MultiField.MultiFieldCellField)
-  s1 = first(f.single_fields)
-  trian = get_triangulation(s1)
-  trian
-end
-
 function solve_darcy_lhdg(model,order)
     # Geometry
     D = num_cell_dims(model)

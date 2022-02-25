@@ -22,7 +22,7 @@ function HybridAffineFEOperator(
   # Transform DomainContribution objects of the hybridizable system into a
   # suitable form for assembling the linear system defined on the skeleton
   # (i.e., the hybrid system)
-  obiform, oliform = _hybridrizable_to_hybrid_contributions(biform,liform)
+  obiform, oliform = _merge_bulk_and_skeleton_contributions(biform,liform)
 
   # Pair LHS and RHS terms associated to SkeletonTriangulation
   matvec,mat,vec=Gridap.FESpaces._pair_contribution_when_possible(obiform,oliform)
@@ -73,7 +73,7 @@ function Gridap.FESpaces.solve!(uh,solver::LinearFESolver,op::HybridAffineFEOper
   # Transform DomainContribution objects of the hybridizable system into a
   # suitable form for assembling the linear system defined on the skeleton
   # (i.e., the hybrid system)
-  obiform, oliform = _hybridrizable_to_hybrid_contributions(biform,liform)
+  obiform, oliform = _merge_bulk_and_skeleton_contributions(biform,liform)
 
   # Pair LHS and RHS terms associated to SkeletonTriangulation
   matvec,_,_=Gridap.FESpaces._pair_contribution_when_possible(obiform,oliform)
@@ -224,7 +224,7 @@ end
 # These may be modified (along with the code supporting them) as we consider
 # more general scenarios.
 
-function _hybridrizable_to_hybrid_contributions(matcontribs,veccontribs)
+function _merge_bulk_and_skeleton_contributions(matcontribs,veccontribs)
    Dbi = maximum(map(tr->num_cell_dims(tr), collect(keys(matcontribs.dict))))
    Dli = maximum(map(tr->num_cell_dims(tr), collect(keys(veccontribs.dict))))
    D   = max(Dbi,Dli)
@@ -256,7 +256,7 @@ function _hybridrizable_to_hybrid_contributions(matcontribs,veccontribs)
    omatcontribs, oveccontribs
 end
 
-function _hybridrizable_to_hybrid_contributions_vector(veccontribs)
+function _merge_bulk_and_skeleton_vector_contributions(veccontribs)
   Dli = maximum(map(tr->num_cell_dims(tr), collect(keys(veccontribs.dict))))
   D   = Dli
   vskeleton = _find_skeleton(veccontribs); Gridap.Helpers.@check length(vskeleton)==1
@@ -273,7 +273,7 @@ function _hybridrizable_to_hybrid_contributions_vector(veccontribs)
   oveccontribs
 end
 
-function _hybridrizable_to_hybrid_contributions_matrix(matcontribs)
+function _merge_bulk_and_skeleton_matrix_contributions(matcontribs)
   Dbi = maximum(map(tr->num_cell_dims(tr), collect(keys(matcontribs.dict))))
   D   = Dbi
   mskeleton = _find_skeleton(matcontribs); Gridap.Helpers.@check length(mskeleton)==1

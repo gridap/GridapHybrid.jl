@@ -88,12 +88,6 @@ end
 
 include("P_m.jl")
 
-function Gridap.CellData.get_triangulation(f::Gridap.MultiField.MultiFieldCellField)
-  s1 = first(f.single_fields)
-  trian = get_triangulation(s1)
-  trian
-end
-
 #function solve_stress_assisted_diffusion_hencky_hdg(cells,order;write_results=false)
     # Geometry
     partition = (0,1,0,1)

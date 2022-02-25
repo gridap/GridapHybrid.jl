@@ -21,12 +21,6 @@ module DarcyRTHTests
     Gridap.Helpers.@check false
   end
 
-  function Gridap.CellData.get_triangulation(f::Gridap.MultiField.MultiFieldCellField)
-    s1 = first(f.single_fields)
-    trian = get_triangulation(s1)
-    trian
-  end
-
   function solve_darcy_rth(model,order)
       D = num_cell_dims(model)
       Ω = Triangulation(ReferenceFE{D},model)

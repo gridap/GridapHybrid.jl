@@ -21,12 +21,6 @@ module MultiFieldLagrangeMultipliersTests
     Gridap.Helpers.@check false
   end
 
-  function Gridap.CellData.get_triangulation(f::Gridap.MultiField.MultiFieldCellField)
-    s1 = first(f.single_fields)
-    trian = get_triangulation(s1)
-    trian
-  end
-
   partition = (0,1,0,1)
   cells = (2,2)
   model = CartesianDiscreteModel(partition,cells)

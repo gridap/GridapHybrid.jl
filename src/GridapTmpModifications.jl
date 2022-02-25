@@ -2,6 +2,12 @@
 # These codes should go eventually to Gridap at the end!!!
 
 
+function Gridap.CellData.get_triangulation(f::Gridap.MultiField.MultiFieldCellField)
+  s1 = first(f.single_fields)
+  trian = get_triangulation(s1)
+  trian
+end
+
 ##
 
 function Gridap.CellData.CellQuadrature(trian::Triangulation,cell_quad,ids::DomainStyle)
@@ -196,7 +202,7 @@ function Gridap.FESpaces._jacobian(f,
   fuh::Gridap.CellData.DomainContribution)
   terms = DomainContribution()
   U = Gridap.FESpaces.get_fe_space(uh)
-  fuh = _hybridrizable_to_hybrid_contributions_vector(fuh)
+  fuh = _merge_bulk_and_skeleton_vector_contributions(fuh)
   for trian in get_domains(fuh)
     Gridap.Helpers.@check isa(trian,SkeletonTriangulation)
     g = Gridap.FESpaces._change_argument(jacobian,f,trian,uh)
@@ -347,7 +353,7 @@ function Gridap.FESpaces._change_argument(
     end
     xh = Gridap.MultiField.MultiFieldCellField(single_fields)
     cell_grad = f(xh)
-    cell_grad=_hybridrizable_to_hybrid_contributions_matrix(cell_grad)
+    cell_grad=_merge_bulk_and_skeleton_matrix_contributions(cell_grad)
     cell_grad_cont_block=get_contribution(cell_grad,trian)
     bs = [cell_dofs_field_offsets[i+1]-cell_dofs_field_offsets[i] for i=1:nfields]
     lazy_map(DensifyInnerMostBlockLevelMap(),

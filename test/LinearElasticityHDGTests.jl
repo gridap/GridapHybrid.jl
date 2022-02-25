@@ -73,12 +73,6 @@ t = Gridap.TensorValues.SymTensorValue{2,Float64,3}(1, 2, 3)
 @test t .≈ invA(A(t))
 @test t .≈ A(invA(t))
 
-function Gridap.CellData.get_triangulation(f::Gridap.MultiField.MultiFieldCellField)
-  s1 = first(f.single_fields)
-  trian = get_triangulation(s1)
-  trian
-end
-
 include("P_m.jl")
 
 function solve_linear_elasticity_hdg_symm_tensor(
