@@ -10,9 +10,6 @@ using Gridap.Geometry
 using GridapHybrid
 using Plots
 
-
-include("tmp_fixes_symmetric_valued_lagrangian_reffes.jl")
-
 const ν = 0.3 # Poisson ratio
 const E = 1.0 # Young's modulus
 function A(σ) # compliance tensor
@@ -151,6 +148,7 @@ function solve_linear_elasticity_hdg_symm_tensor(
                       bulk_to_skeleton_projection=bulk_to_skeleton_projection))d∂K +
                       ∫(τ * μ ⋅ uhΓ)d∂K
     l((v, ω, μ)) = ∫(-ω ⋅ f) * dΩ
+
 
     op = HybridAffineFEOperator((u, v) -> (a(u, v), l(v)), X, Y, [1, 2], [3])
     xh = solve(op)

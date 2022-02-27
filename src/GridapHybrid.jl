@@ -28,6 +28,11 @@ export Skeleton
 
 include("HybridAffineFEOperators.jl")
 export HybridAffineFEOperator
+include("HybridFEOperators.jl")
+export HybridFEOperator
+
+include("HybridLinearSolvers.jl")
+
 
 include("GridapAPIExtensions.jl")
 include("GridapTmpModifications.jl")

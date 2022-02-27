@@ -34,13 +34,13 @@ function _check_preconditions(interior_fields::AbstractVector{<:Integer},
 end
 
 function Gridap.Arrays.return_cache(k::StaticCondensationMap{IFT,BFT},
-  Ab::Tuple{<:Gridap.Fields.MatrixBlock{<:Matrix{T}},<:Gridap.Fields.VectorBlock{<:Vector{T}}}) where {IFT, BFT, T}
+  Ab::Tuple{<:Gridap.Fields.MatrixBlock{<:AbstractMatrix{T}},<:Gridap.Fields.VectorBlock{<:AbstractVector{T}}}) where {IFT, BFT, T}
   Gridap.Arrays.return_cache(k,Ab[1],Ab[2])
 end
 
 function Gridap.Arrays.return_cache(k::StaticCondensationMap{IFT,BFT},
-                                    A::Gridap.Fields.MatrixBlock{<:Matrix{T}},
-                                    b::Gridap.Fields.VectorBlock{<:Vector{T}}) where {IFT, BFT, T}
+                                    A::Gridap.Fields.MatrixBlock{<:AbstractMatrix{T}},
+                                    b::Gridap.Fields.VectorBlock{<:AbstractVector{T}}) where {IFT, BFT, T}
 
   A11_matblk = _build_matblk(A,k.interior_fields,k.interior_fields)
   A21_matblk = _build_matblk(A,k.boundary_fields,k.interior_fields)
@@ -69,7 +69,7 @@ function Gridap.Arrays.return_cache(k::StaticCondensationMap{IFT,BFT},
    (b2_vecblk,b2_cache))
 end
 
-function _compute_brs_bcs(a::Gridap.Fields.MatrixBlock{<:Matrix})
+function _compute_brs_bcs(a::Gridap.Fields.MatrixBlock{<:AbstractMatrix})
   brs=Vector{Int}(undef, size(a)[1])
   bcs=Vector{Int}(undef, size(a)[2])
   for j=1:size(a)[2]
@@ -84,7 +84,7 @@ function _compute_brs_bcs(a::Gridap.Fields.MatrixBlock{<:Matrix})
 end
 
 
-function _build_matblk(a::Gridap.Fields.MatrixBlock{<:Matrix{T}},
+function _build_matblk(a::Gridap.Fields.MatrixBlock{<:AbstractMatrix{T}},
                        rf::AbstractVector{<:Integer},
                        cf::AbstractVector{<:Integer}) where {T}
   s = (length(rf),length(cf))
@@ -103,8 +103,8 @@ function _build_matblk(a::Gridap.Fields.MatrixBlock{<:Matrix{T}},
 end
 
 
-function _set_matblk!(a::Gridap.Fields.MatrixBlock{<:Matrix{T}},
-                      b::Gridap.Fields.MatrixBlock{<:Matrix{T}},
+function _set_matblk!(a::Gridap.Fields.MatrixBlock{<:AbstractMatrix{T}},
+                      b::Gridap.Fields.MatrixBlock{<:AbstractMatrix{T}},
                       rf::AbstractVector{<:Integer},
                       cf::AbstractVector{<:Integer}) where {T}
   for (J,BJ) in enumerate(cf)
@@ -117,7 +117,7 @@ function _set_matblk!(a::Gridap.Fields.MatrixBlock{<:Matrix{T}},
   end
 end
 
-function _build_vecblk(a::Gridap.Fields.VectorBlock{<:Vector{T}},
+function _build_vecblk(a::Gridap.Fields.VectorBlock{<:AbstractVector{T}},
                        F::AbstractVector{<:Integer}) where {T}
   s = length(F)
   array    = Vector{Vector{T}}(undef,s)
@@ -132,8 +132,8 @@ function _build_vecblk(a::Gridap.Fields.VectorBlock{<:Vector{T}},
   Gridap.Fields.ArrayBlock(array,touched)
 end
 
-function _set_vecblk!(a::Gridap.Fields.VectorBlock{<:Vector{T}},
-                      b::Gridap.Fields.VectorBlock{<:Vector{T}},
+function _set_vecblk!(a::Gridap.Fields.VectorBlock{<:AbstractVector{T}},
+                      b::Gridap.Fields.VectorBlock{<:AbstractVector{T}},
                       F::AbstractVector{<:Integer}) where {T}
   for (I,BI) in enumerate(F)
     Gridap.Helpers.@check a.touched[I] == b.touched[BI]
@@ -145,14 +145,14 @@ end
 
 function Gridap.Arrays.evaluate!(cache,
   k::StaticCondensationMap{IFT,BFT},
-  Ab::Tuple{<:Gridap.Fields.MatrixBlock{<:Matrix{T}},<:Gridap.Fields.VectorBlock{<:Vector{T}}}) where {IFT, BFT, T}
+  Ab::Tuple{<:Gridap.Fields.MatrixBlock{<:AbstractMatrix{T}},<:Gridap.Fields.VectorBlock{<:AbstractVector{T}}}) where {IFT, BFT, T}
   Gridap.Arrays.evaluate!(cache,k,Ab[1],Ab[2])
 end
 
 function Gridap.Arrays.evaluate!(cache,
   k::StaticCondensationMap{IFT,BFT},
-  A::Gridap.Fields.MatrixBlock{<:Matrix{T}},
-  b::Gridap.Fields.VectorBlock{<:Vector{T}}) where {IFT, BFT, T}
+  A::Gridap.Fields.MatrixBlock{<:AbstractMatrix{T}},
+  b::Gridap.Fields.VectorBlock{<:AbstractVector{T}}) where {IFT, BFT, T}
 
    kdensify,interior_brs,boundary_brs,A11t,A21t,A12t,A22t,b1t,b2t=cache
    A11_matblk,A11_cache=A11t

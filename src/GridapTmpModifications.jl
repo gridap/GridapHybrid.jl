@@ -362,3 +362,5 @@ function Gridap.FESpaces._change_argument(
   end
   g
 end
+
+include("tmp_fixes_symmetric_valued_lagrangian_reffes.jl")

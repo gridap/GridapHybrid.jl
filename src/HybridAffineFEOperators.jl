@@ -4,7 +4,7 @@ struct HybridAffineFEOperator{TB,TS} <: FEOperator
   test::MultiFieldFESpace
   bulk_fields::TB
   skeleton_fields::TS
-  condensed_op::AffineFEOperator
+  skeleton_op::AffineFEOperator
 end
 
 function HybridAffineFEOperator(
@@ -30,14 +30,9 @@ function HybridAffineFEOperator(
   # Add StaticCondensationMap to matvec terms
   matvec=_add_static_condensation(matvec,bulk_fields,skeleton_fields)
 
-  if (length(skeleton_fields)==1)
-    # Single-field skeleton system
-    M = trial[skeleton_fields[1]]
-    L = test[skeleton_fields[1]]
-  else
-    # Multi-field skeleton system
-    M = MultiFieldFESpace([trial[i] for i in skeleton_fields])
-    L = MultiFieldFESpace([test[i] for i in skeleton_fields])
+  M,L=_setup_fe_spaces_skeleton_system(trial,test,skeleton_fields)
+
+  if (length(skeleton_fields)!=1)
     matvec=_block_skeleton_system_contributions(matvec,L)
   end
   assem=SparseMatrixAssembler(M,L)
@@ -50,8 +45,21 @@ function HybridAffineFEOperator(
 
   A,b = assemble_matrix_and_vector(assem,data)
 
-  condensed_op=AffineFEOperator(M,L,A,b)
-  HybridAffineFEOperator(weakform,trial,test,bulk_fields,skeleton_fields,condensed_op)
+  skeleton_op=AffineFEOperator(M,L,A,b)
+  HybridAffineFEOperator(weakform,trial,test,bulk_fields,skeleton_fields,skeleton_op)
+end
+
+function _setup_fe_spaces_skeleton_system(trial, test, skeleton_fields)
+  if (length(skeleton_fields)==1)
+    # Single-field skeleton system
+    M = trial[skeleton_fields[1]]
+    L = test[skeleton_fields[1]]
+  else
+    # Multi-field skeleton system
+    M = MultiFieldFESpace([trial[i] for i in skeleton_fields])
+    L = MultiFieldFESpace([test[i] for i in skeleton_fields])
+  end
+  M,L
 end
 
 Gridap.FESpaces.get_test(feop::HybridAffineFEOperator) = feop.test
@@ -63,7 +71,7 @@ end
 
 function Gridap.FESpaces.solve!(uh,solver::LinearFESolver,op::HybridAffineFEOperator, cache)
   # Solve linear system defined on the skeleton
-  lh = solve(op.condensed_op)
+  lh = solve(op.skeleton_op)
 
   # Invoke weak form of the hybridizable system
   u = get_trial_fe_basis(op.trial)
@@ -78,6 +86,28 @@ function Gridap.FESpaces.solve!(uh,solver::LinearFESolver,op::HybridAffineFEOper
   # Pair LHS and RHS terms associated to SkeletonTriangulation
   matvec,_,_=Gridap.FESpaces._pair_contribution_when_possible(obiform,oliform)
 
+  free_dof_values=_compute_hybridizable_from_skeleton_free_dof_values(
+                    get_free_dof_values(lh),
+                    op.trial,
+                    op.test,
+                    Gridap.FESpaces.get_trial(op.skeleton_op),
+                    matvec,
+                    op.bulk_fields,
+                    op.skeleton_fields)
+
+  cache=nothing
+  FEFunction(op.trial,free_dof_values), cache
+end
+
+function _compute_hybridizable_from_skeleton_free_dof_values(skeleton_free_dofs,
+                                                             trial_hybridizable,
+                                                             test_hybridizable,
+                                                             trial_skeleton,
+                                                             matvec,
+                                                             bulk_fields,
+                                                             skeleton_fields)
+  lh=FEFunction(trial_skeleton,skeleton_free_dofs)
+
   # Convert dof-wise dof values of lh into cell-wise dof values lhₖ
   Γ=first(keys(matvec.dict))
   Gridap.Helpers.@check isa(Γ,SkeletonTriangulation)
@@ -85,15 +115,15 @@ function Gridap.FESpaces.solve!(uh,solver::LinearFESolver,op::HybridAffineFEOper
 
   # Compute cell-wise dof values of bulk fields out of lhₖ
   t = matvec.dict[Γ]
-  m=BackwardStaticCondensationMap(op.bulk_fields,op.skeleton_fields)
+  m=BackwardStaticCondensationMap(bulk_fields,skeleton_fields)
   uhphlhₖ=lazy_map(m,t,lhₖ)
 
   model=get_background_model(Γ)
   cell_wise_facets=_get_cell_wise_facets(model)
   cells_around_facets=_get_cells_around_facets(model)
 
-  nfields=length(op.bulk_fields)+length(op.skeleton_fields)
-  m=Gridap.Fields.BlockMap(nfields,op.skeleton_fields)
+  nfields=length(bulk_fields)+length(skeleton_fields)
+  m=Gridap.Fields.BlockMap(nfields,skeleton_fields)
   L=Gridap.FESpaces.get_fe_space(lh)
   lhₑ=lazy_map(m,
                  convert_cell_wise_dofs_array_to_facet_dofs_array(
@@ -102,24 +132,22 @@ function Gridap.FESpaces.solve!(uh,solver::LinearFESolver,op::HybridAffineFEOper
                  lhₖ,
                  get_cell_dof_ids(L))...)
 
-  assem = SparseMatrixAssembler(op.trial,op.test)
-  lhₑ_dofs=get_cell_dof_ids(op.trial,get_triangulation(L))
-  lhₑ_dofs=lazy_map(m,lhₑ_dofs.args[op.skeleton_fields]...)
+  assem = SparseMatrixAssembler(trial_hybridizable,test_hybridizable)
+  lhₑ_dofs=get_cell_dof_ids(trial_hybridizable,get_triangulation(L))
+  lhₑ_dofs=lazy_map(m,lhₑ_dofs.args[skeleton_fields]...)
 
-  Ω = op.trial[first(op.bulk_fields)]
+  Ω = trial_hybridizable[first(bulk_fields)]
   Ω = get_triangulation(Ω)
 
-  m=Gridap.Fields.BlockMap(length(op.bulk_fields),op.bulk_fields)
-  uhph_dofs=get_cell_dof_ids(op.trial,Ω)
+  m=Gridap.Fields.BlockMap(length(bulk_fields),bulk_fields)
+  uhph_dofs=get_cell_dof_ids(trial_hybridizable,Ω)
   # This last step is needed as get_cell_dof_ids(...) returns as many blocks
-  # as fields in op.trial, regardless of the FEspaces defined on Ω or not
-  uhph_dofs=lazy_map(m,uhph_dofs.args[op.bulk_fields]...)
+  # as fields in trial, regardless of the FEspaces defined on Ω or not
+  uhph_dofs=lazy_map(m,uhph_dofs.args[bulk_fields]...)
 
-  uhphₖ=lazy_map(RestrictArrayBlockMap(op.bulk_fields),uhphlhₖ)
+  uhphₖ=lazy_map(RestrictArrayBlockMap(bulk_fields),uhphlhₖ)
 
-  cache = nothing
   free_dof_values=assemble_vector(assem,([lhₑ,uhphₖ],[lhₑ_dofs,uhph_dofs]))
-  FEFunction(op.trial,free_dof_values), cache
 end
 
 function _get_cell_wise_facets(model::DiscreteModel)
@@ -230,27 +258,29 @@ function _merge_bulk_and_skeleton_contributions(matcontribs,veccontribs)
    D   = max(Dbi,Dli)
 
    mskeleton = _find_skeleton(matcontribs); Gridap.Helpers.@check length(mskeleton)==1
-   mbulk     = _find_bulk(D,matcontribs)    ; Gridap.Helpers.@check length(mbulk)==1
+   mbulk     = _find_bulk(D,matcontribs)    ; Gridap.Helpers.@check length(mbulk)<=1
    mboun     = _find_boundary(matcontribs); Gridap.Helpers.@check length(mboun)==0
 
-   vskeleton = _find_skeleton(veccontribs); Gridap.Helpers.@check length(vskeleton)==0
+   vskeleton = _find_skeleton(veccontribs); Gridap.Helpers.@check length(vskeleton)<=1
    vbulk     = _find_bulk(D,veccontribs)    ; Gridap.Helpers.@check length(vbulk)<=1
    vboun     = _find_boundary(veccontribs); Gridap.Helpers.@check length(vboun)<=1
 
    omatcontribs = DomainContribution()
    oveccontribs = DomainContribution()
 
-   mskeleton = mskeleton[1]
-   mbulk     = mbulk[1]
+   if length(mbulk)!=0
+      add_contribution!(omatcontribs,mskeleton...,matcontribs[mbulk...])
+   end
+   add_contribution!(omatcontribs,mskeleton...,matcontribs[mskeleton...])
 
-   add_contribution!(omatcontribs,mskeleton,matcontribs[mskeleton])
-   add_contribution!(omatcontribs,mskeleton,matcontribs[mbulk])
    if length(vbulk)!=0
-    vbulk=vbulk[1]
-    add_contribution!(oveccontribs,mskeleton,veccontribs[vbulk])
+      add_contribution!(oveccontribs,mskeleton...,veccontribs[vbulk...])
+   end
+   if length(vskeleton)!=0
+    add_contribution!(oveccontribs,vskeleton...,veccontribs[vskeleton...])
    end
    if length(vboun)!=0
-    add_contribution!(oveccontribs,vboun,veccontribs[vboun])
+    add_contribution!(oveccontribs,vboun...,veccontribs[vboun...])
    end
 
    omatcontribs, oveccontribs
