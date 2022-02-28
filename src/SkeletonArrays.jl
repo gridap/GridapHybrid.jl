@@ -238,7 +238,7 @@ function Gridap.Arrays.lazy_map(
   a::Gridap.Arrays.CompressedArray{<:Gridap.Fields.VectorBlock}) where T
   Gridap.Helpers.@check length(a) == length(b)
   af=_cell_lfacet_vector_to_facet_vector(b.glue,a)
-  bf=b.cell_vector
+  bf=b.facet_vector
   bfx=lazy_map(evaluate,bf,af)
   SkeletonVectorFromFacetVector(b.glue,b.cell_wise_facets_ids,bfx)
 end
