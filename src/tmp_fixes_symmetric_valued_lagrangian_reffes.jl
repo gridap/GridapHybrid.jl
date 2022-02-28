@@ -124,6 +124,26 @@ function Gridap.ReferenceFEs._generate_dof_layout_node_major(
   (dof_to_node, dof_to_comp, node_and_comp_to_dof)
 end
 
+function Gridap.ReferenceFEs._evaluate_lagr_dof!(c::AbstractVector,
+  node_comp_to_val::AbstractVector{<:Gridap.TensorValues.SymTensorValue},
+  node_and_comp_to_dof::AbstractVector{<:Gridap.TensorValues.SymTensorValue},
+  ndofs,
+  ncomps)
+
+  setsize!(c,(ndofs,))
+  r = c.array
+  for node in LinearIndices(node_and_comp_to_dof)
+    comp_to_dof = node_and_comp_to_dof[node]
+    comp_to_val = node_comp_to_val[node]
+    for comp in 1:ncomps
+      dof = comp_to_dof.data[comp]
+      val = comp_to_val.data[comp]
+      r[dof] = val
+    end
+  end
+  r
+end
+
 function Gridap.ReferenceFEs._evaluate_lagr_dof!(
   c::AbstractMatrix,
   node_pdof_comp_to_val::AbstractMatrix{<:Gridap.TensorValues.SymTensorValue},

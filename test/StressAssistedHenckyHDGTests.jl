@@ -38,7 +38,7 @@ end
 
 function ϕ_exact(x)
   #cos(pi*x[1])*cos(pi*x[2])
-  x[1]
+  x[1]-2*x[2]
 end
 
 function ω_exact(x)
@@ -113,12 +113,13 @@ end
 
 # Source/sink of solute concentration
 function ℓ(x)
-  0.0
+  # 0.0
+  -divergence(ω_exact)(x)
 end
 
 # Appears in RHS of concentration gradient equation
 function α(x)
-  1.0
+  0.0
 end
 
 include("P_m.jl")
@@ -208,8 +209,8 @@ function solve_stress_assisted_diffusion_hencky_hdg(cells,order;write_results=fa
       ∫( ψh*(∇⋅ρh) - α*ψh*tr(th) - ψh*ℓ )dΩ +
            ∫( τϕΓ*ψh*ϕh )d∂K - ∫( τϕΓ*ψh*ϕhΓ )d∂K +
       ∫( sh⊙(N∘th) - sh⊙σh - tr(sh)*(g∘ϕh) )dΩ +
-      ∫( τh⊙th + (∇⋅τh)⋅uh )dΩ - ∫((τh⋅n)⋅uhΓ)d∂K +
-      ∫( ∇(vh)⊙σh - vh⋅f)dΩ - ∫(vh⋅(σh⋅n))d∂K + ∫(τuΓ*(vh⋅Pm_uh))d∂K -
+      ∫( τh⊙th + (∇⋅τh)⋅uh )dΩ - ∫((τh⋅n)⋅uhΓ)d∂K -
+      ∫( ∇(vh)⊙σh - vh⋅f)dΩ + ∫(τuΓ*(vh⋅Pm_uh))d∂K -
                                                 ∫(τuΓ*(vh⋅uhΓ))d∂K +
       ∫( ηh*(ωh⋅n) )d∂K + ∫( τϕΓ*ηh*ϕh )d∂K - ∫( τϕΓ*ηh*ϕhΓ )d∂K +
       ∫( μh⋅(σh⋅n) )d∂K - ∫( τuΓ*μh⋅Pm_uh)d∂K + ∫( τuΓ*μh⋅uhΓ )d∂K
@@ -299,3 +300,38 @@ function solve_stress_assisted_diffusion_hencky_hdg(cells,order;write_results=fa
   solve_stress_assisted_diffusion_hencky_hdg((10,10),1,write_results=true)
 
 end # module
+
+# xh_exact =
+# interpolate_everywhere([ω_exact,ρ_exact,ϕ_exact,t_exact,σ_exact,u_exact,ϕ_exact,u_exact],Y_TR)
+# basis = get_fe_basis(Y)
+# function residual((ωh,ρh,ϕh,th,σh,uh,ϕhΓ,uhΓ),(rh,nh,ψh,sh,τh,vh,ηh,μh))
+# Pm_uh=Pₘ(uh, uhΓ_basis, μh, d∂K)
+# ∫( rh⋅((κ∘(σh,ϕh))⋅ωh) - rh⋅ρh )dΩ +
+# ∫( nh⋅ωh+(∇⋅nh)*ϕh )dΩ - ∫((nh⋅n)*ϕhΓ)d∂K +
+# ∫( ψh*(∇⋅ρh) - α*ψh*tr(th) - ψh*ℓ )dΩ +
+#      ∫( τϕΓ*ψh*ϕh )d∂K - ∫( τϕΓ*ψh*ϕhΓ )d∂K +
+# ∫( sh⊙th - sh⊙σh - tr(sh)*ϕh )dΩ +
+# ∫( τh⊙th + (∇⋅τh)⋅uh )dΩ - ∫((τh⋅n)⋅uhΓ)d∂K +
+# #∫( vh⋅(∇⋅(σh)) + vh⋅f)dΩ +
+# ∫( ∇(vh)⊙σh - vh⋅f)dΩ - ∫(vh⋅(σh⋅n))d∂K + ∫(τuΓ*(vh⋅Pm_uh))d∂K -
+#                                           ∫(τuΓ*(vh⋅uhΓ))d∂K +
+# ∫( ηh*(ωh⋅n) )d∂K + ∫( τϕΓ*ηh*ϕh )d∂K - ∫( τϕΓ*ηh*ϕhΓ )d∂K +
+# ∫( μh⋅(σh⋅n) )d∂K - ∫( τuΓ*μh⋅Pm_uh)d∂K + ∫( τuΓ*μh⋅uhΓ )d∂K
+# end
+
+# dc=residual(xh_exact,basis)
+# res=assemble_vector(dc,Y)
+
+# (rh,nh,ψh,sh,τh,vh,ηh,μh)   = basis
+# (ωh,ρh,ϕh,th,σh,uh,ϕhΓ,uhΓ) = xh_exact
+
+# dc1=∫( -1.0*vh⋅(∇⋅(σh)) - vh⋅f)dΩ
+# dc2=∫( ∇(vh)⊙σh - vh⋅f)dΩ - ∫(vh⋅(σh⋅n))d∂K
+# Pm_uh=Pₘ(uh, uhΓ_basis, μh, d∂K)
+
+# writevtk(Ω,"results_$(cells)_k=$(order)",cellfields=["σh"=>σh,"σ_exact"=>σ_exact])
+
+
+#dc3=∫(τuΓ*(vh⋅Pm_uh))d∂K - ∫(τuΓ*(vh⋅uhΓ))d∂K
+#dc4=∫(τuΓ*(vh⋅Pm_uh))d∂K
+#dc5=∫(τuΓ*(vh⋅uhΓ))d∂K
