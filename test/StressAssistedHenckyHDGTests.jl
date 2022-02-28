@@ -22,10 +22,8 @@ function ζ(ρ)
 end
 
 function u_exact(x)
-  #u1=0.1*(-cos(x[1])*sin(x[2])+((0.5*x[1]*x[1])/λ))
-  #u2=0.1*(sin(x[1])*cos(x[2])+((0.5*x[2]*x[2])/λ))
-  u1=x[1]+x[2]
-  u2=2*x[1]-x[1]
+  u1=0.1*(-cos(x[1])*sin(x[2])+((0.5*x[1]*x[1])/λ))
+  u2=0.1*(sin(x[1])*cos(x[2])+((0.5*x[2]*x[2])/λ))
   VectorValue((u1,u2))
 end
 
@@ -37,8 +35,7 @@ function t_exact(x)
 end
 
 function ϕ_exact(x)
-  #cos(pi*x[1])*cos(pi*x[2])
-  x[1]-2*x[2]
+  cos(pi*x[1])*cos(pi*x[2])
 end
 
 function ω_exact(x)
@@ -49,18 +46,16 @@ end
 # σ: stress (tensor field)
 # ϕ: solute concentration (scalar field)
 function κ(σ,ϕ)
-  #1.0+exp(tr(σ))+exp(-ϕ)
-  one(σ)
+  1.0+exp(tr(σ))+exp(-ϕ)
 end
 
 # To define nonlinear constitutive function ...
 # t: strain (tensor field)
 function N(t)
-  # td   = _dev(t)
-  # tdsq = td⊙td
-  # I    = one(t)
-  # (λ + 2.0/3.0*ζ(tdsq))*tr(t)*I + 2.0*μ*(1.0-ζ(tdsq))*t
-  t
+  td   = _dev(t)
+  tdsq = td⊙td
+  I    = one(t)
+  (λ + 2.0/3.0*ζ(tdsq))*tr(t)*I + 2.0*μ*(1.0-ζ(tdsq))*t
 end
 
 # Extracts deviatoric component of t
@@ -79,8 +74,7 @@ C3=1.0
 # Solute dependent active stress component
 function g(ϕ)
   # C0+C0*(ϕ^C1/(C2+ϕ^C3))
-  # C0+(ϕ/(C2+ϕ))
-  ϕ
+  C0+(ϕ/(C2+ϕ))
 end
 
 # Solute concentration Dirichlet boundary
@@ -111,15 +105,14 @@ function f(x)
   -(∇⋅(σ_exact))(x)
 end
 
-# Source/sink of solute concentration
-function ℓ(x)
-  # 0.0
-  -divergence(ω_exact)(x)
-end
-
 # Appears in RHS of concentration gradient equation
 function α(x)
-  0.0
+  1.0
+end
+
+# Source/sink of solute concentration
+function ℓ(x)
+  -divergence(ρ_exact)(x)-α(x)*tr(t_exact(x))
 end
 
 include("P_m.jl")
@@ -127,7 +120,6 @@ include("P_m.jl")
 function solve_stress_assisted_diffusion_hencky_hdg(cells,order;write_results=false)
     # Geometry
     partition = (0,1,0,1)
-    order=1
     model = CartesianDiscreteModel(partition, cells)
     D = num_cell_dims(model)
     Ω = Triangulation(ReferenceFE{D}, model)
@@ -174,13 +166,13 @@ function solve_stress_assisted_diffusion_hencky_hdg(cells,order;write_results=fa
     Y_TR   = MultiFieldFESpace([W_TR, W_TR, Ψ_TR, S_TR, S_TR, V_TR, MϕΓ_TR, MuΓ_TR])
 
     # FE formulation params
-    degree = 4 * (order + 1) # TO-DO: To think which is the minimum degree required
+    degree = 2 * (order + 1) # TO-DO: To think which is the minimum degree required
     dΩ = Measure(Ω, degree)
     n = get_cell_normal_vector(∂K)
     d∂K = Measure(∂K, degree)
 
     # Stabilization operator (solute concentration)
-    τϕΓ = Float64(cells[1]) # cells[1] # To be defined???
+    τϕΓ = 1.0 # To be defined???
     # Stabilization operator (displacements)
     τuΓ = Float64(cells[1]) # To be defined???
 
@@ -190,14 +182,14 @@ function solve_stress_assisted_diffusion_hencky_hdg(cells,order;write_results=fa
     Y_TR_basis = get_trial_fe_basis(Y_TR)
     (_,_,_,_,_,_,_,uhΓ_basis) = Y_TR_basis
 
-    # Testing for correctness of Pₘ projection
-    xh              = FEFunction(Y_TR,rand(num_free_dofs(Y_TR)))
-    _,_,_,_,_,_,_,μ = Y_basis
-    _, uh, _, _ = xh
-    dc=∫(μ⋅(uh-Pₘ(uh, uhΓ_basis, μ, d∂K)))d∂K
-    for k in dc.dict[d∂K.quad.trian]
-      @test all(k[8] .< 1.0e-14)
-    end
+    # # Testing for correctness of Pₘ projection
+    # xh              = FEFunction(Y_TR,rand(num_free_dofs(Y_TR)))
+    # _,_,_,_,_,_,_,μ = Y_basis
+    # _, uh, _, _ = xh
+    # dc=∫(μ⋅(uh-Pₘ(uh, uhΓ_basis, μ, d∂K)))d∂K
+    # for k in dc.dict[d∂K.quad.trian]
+    #   @test all(k[8] .< 1.0e-14)
+    # end
 
     # Residual
     # current_iterate  => (ωh,ρh,ϕh,th,σh,uh,ϕhΓ,uhΓ)
@@ -207,11 +199,10 @@ function solve_stress_assisted_diffusion_hencky_hdg(cells,order;write_results=fa
       ∫( rh⋅((κ∘(σh,ϕh))⋅ωh) - rh⋅ρh )dΩ +
       ∫( nh⋅ωh+(∇⋅nh)*ϕh )dΩ - ∫((nh⋅n)*ϕhΓ)d∂K +
       ∫( ψh*(∇⋅ρh) - α*ψh*tr(th) - ψh*ℓ )dΩ +
-           ∫( τϕΓ*ψh*ϕh )d∂K - ∫( τϕΓ*ψh*ϕhΓ )d∂K +
+          ∫( τϕΓ*ψh*ϕh )d∂K - ∫( τϕΓ*ψh*ϕhΓ )d∂K +
       ∫( sh⊙(N∘th) - sh⊙σh - tr(sh)*(g∘ϕh) )dΩ +
-      ∫( τh⊙th + (∇⋅τh)⋅uh )dΩ - ∫((τh⋅n)⋅uhΓ)d∂K -
-      ∫( ∇(vh)⊙σh - vh⋅f)dΩ + ∫(τuΓ*(vh⋅Pm_uh))d∂K -
-                                                ∫(τuΓ*(vh⋅uhΓ))d∂K +
+      ∫( τh⊙th + (∇⋅τh)⋅uh )dΩ - ∫((τh⋅n)⋅uhΓ)d∂K +
+      ∫(∇(vh)⊙σh - vh⋅f)dΩ - ∫(vh⋅(σh⋅n))d∂K + ∫(τuΓ*(vh⋅Pm_uh))d∂K - ∫(τuΓ*(vh⋅uhΓ))d∂K +
       ∫( ηh*(ωh⋅n) )d∂K + ∫( τϕΓ*ηh*ϕh )d∂K - ∫( τϕΓ*ηh*ϕhΓ )d∂K +
       ∫( μh⋅(σh⋅n) )d∂K - ∫( τuΓ*μh⋅Pm_uh)d∂K + ∫( τuΓ*μh⋅uhΓ )d∂K
     end
@@ -228,7 +219,7 @@ function solve_stress_assisted_diffusion_hencky_hdg(cells,order;write_results=fa
 
     op=FEOperator(residual,Y_TR,Y)
 
-    nls = NLSolver(show_trace=true, method=:newton)
+    nls = NLSolver(show_trace=true, method=:newton, ftol=1.0e-14)
     solver = FESolver(nls)
 
     xh0 = FEFunction(Y_TR,zeros(num_free_dofs(Y_TR)))
@@ -236,16 +227,28 @@ function solve_stress_assisted_diffusion_hencky_hdg(cells,order;write_results=fa
 
     ωh,ρh,ϕh,th,σh,uh,_ = xh
 
-    eω = ω_exact - ωh
-    eρ = ρ_exact - ρh
-    eϕ = ϕ_exact - ϕh
-    et = t_exact - th
-    eσ = σ_exact - σh
-    eu = u_exact - uh
-    norm2_ω=sqrt(sum(∫(eω ⊙ eω)dΩ))
-    norm2_ρ=sqrt(sum(∫(eρ ⊙ eρ)dΩ))
+    xh_exact =
+      interpolate_everywhere([ω_exact,
+                              ρ_exact,
+                              ϕ_exact,
+                              t_exact,
+                              σ_exact,
+                              u_exact,
+                              ϕ_exact,
+                              u_exact],Y_TR)
+
+    ωh_exact,ρh_exact,ϕh_exact,th_exact,σh_exact,uh_exact,_ = xh_exact
+
+    eω = ωh_exact - ωh
+    eρ = ρh_exact - ρh
+    eϕ = ϕh_exact - ϕh
+    et = th_exact - th
+    eσ = σh_exact - σh
+    eu = uh_exact - uh
+    norm2_ω=sqrt(sum(∫(eω ⋅ eω)dΩ))
+    norm2_ρ=sqrt(sum(∫(eρ ⋅ eρ)dΩ))
     norm2_t=sqrt(sum(∫(et ⊙ et)dΩ))
-    norm2_ϕ=sqrt(sum(∫(eϕ ⊙ eϕ)dΩ))
+    norm2_ϕ=sqrt(sum(∫(eϕ * eϕ)dΩ))
     norm2_σ=sqrt(sum(∫(eσ ⊙ eσ)dΩ))
     norm2_u=sqrt(sum(∫(eu ⋅ eu)dΩ))
 
@@ -262,20 +265,32 @@ function solve_stress_assisted_diffusion_hencky_hdg(cells,order;write_results=fa
   end
 
   function conv_test(ns,order)
+    el2ω = Float64[]
+    el2ρ = Float64[]
+    el2t = Float64[]
+    el2ϕ = Float64[]
     el2σ = Float64[]
     el2u = Float64[]
     hs = Float64[]
     for n in ns
-      l2σ, l2u, _ = solve_stress_assisted_diffusion_hencky_hdg((n,n),order)
-      println(l2σ, " ", l2u)
+      l2ω,l2ρ,l2t,l2ϕ,l2σ,l2u = solve_stress_assisted_diffusion_hencky_hdg((n,n),order)
+      println(l2ω, " ", l2ρ, " ", l2t, " ", l2ϕ, " ", l2σ, " ", l2u)
       h = 1.0/n
+      push!(el2ω,l2ω)
+      push!(el2ρ,l2ρ)
+      push!(el2t,l2t)
+      push!(el2ϕ,l2ϕ)
       push!(el2σ,l2σ)
       push!(el2u,l2u)
       push!(hs,h)
     end
+    println(el2ω)
+    println(el2ρ)
+    println(el2t)
+    println(el2ϕ)
     println(el2σ)
     println(el2u)
-    (el2σ, el2u, hs)
+    (el2ω, el2ρ, el2t, el2ϕ, el2σ, el2u, hs)
   end
 
   function slope(hs,errors)
@@ -285,38 +300,43 @@ function solve_stress_assisted_diffusion_hencky_hdg(cells,order;write_results=fa
     linreg[2]
   end
 
-  ns=[8,16,32,64]
+  ns=[10,20,30,40,45]
   order=1
-  el2σ_PM, el2u_PM, hs = conv_test([8,16,32,64],1)
-  plot(hs,[el2σ_PM el2u_PM slopek slopekp1 slopekp2],
+  el2ω, el2ρ, el2t, el2ϕ, el2σ, el2u, hs = conv_test(ns,order)
+  slopek  =[Float64(ni)^(-(order)) for ni in ns]
+  slopekp1=[Float64(ni)^(-(order+1)) for ni in ns]
+  slopekp2=[Float64(ni)^(-(order+2)) for ni in ns]
+  plot(hs,[el2ω el2ρ el2t el2ϕ el2σ el2u slopek slopekp1 slopekp2],
     xaxis=:log, yaxis=:log,
-    label=["L2σ (measured)" "L2u (measured)" "slope k" "slope k+1" "slope k+2"],
+    label=["L2ω (measured)" "L2ρ (measured)" "L2t (measured)" "L2ϕ (measured)" "L2σ (measured)" "L2u (measured)" "slope k" "slope k+1" "slope k+2"],
     shape=:auto,
-    xlabel="h",ylabel="L2 error norm (PM)",legend=:bottomright)
+    xlabel="h",ylabel="L2 error norm",legend=:bottomright)
 
-  println("Slope L2-norm stress (PM): $(slope(hs,el2σ_PM))")
-  println("Slope L2-norm      u (PM): $(slope(hs,el2u_PM))")
-
-  solve_stress_assisted_diffusion_hencky_hdg((10,10),1,write_results=true)
+  println("Slope L2-norm      ω: $(slope(hs,el2ω))")
+  println("Slope L2-norm      ρ: $(slope(hs,el2ρ))")
+  println("Slope L2-norm      t: $(slope(hs,el2t))")
+  println("Slope L2-norm      ϕ: $(slope(hs,el2ϕ))")
+  println("Slope L2-norm stress: $(slope(hs,el2σ))")
+  println("Slope L2-norm      u: $(slope(hs,el2u))")
 
 end # module
 
+solve_stress_assisted_diffusion_hencky_hdg((40,40),1;write_results=true)
+
 # xh_exact =
-# interpolate_everywhere([ω_exact,ρ_exact,ϕ_exact,t_exact,σ_exact,u_exact,ϕ_exact,u_exact],Y_TR)
+#    interpolate_everywhere([ω_exact,ρ_exact,ϕ_exact,t_exact,σ_exact,u_exact,ϕ_exact,u_exact],Y_TR)
 # basis = get_fe_basis(Y)
 # function residual((ωh,ρh,ϕh,th,σh,uh,ϕhΓ,uhΓ),(rh,nh,ψh,sh,τh,vh,ηh,μh))
-# Pm_uh=Pₘ(uh, uhΓ_basis, μh, d∂K)
-# ∫( rh⋅((κ∘(σh,ϕh))⋅ωh) - rh⋅ρh )dΩ +
-# ∫( nh⋅ωh+(∇⋅nh)*ϕh )dΩ - ∫((nh⋅n)*ϕhΓ)d∂K +
-# ∫( ψh*(∇⋅ρh) - α*ψh*tr(th) - ψh*ℓ )dΩ +
-#      ∫( τϕΓ*ψh*ϕh )d∂K - ∫( τϕΓ*ψh*ϕhΓ )d∂K +
-# ∫( sh⊙th - sh⊙σh - tr(sh)*ϕh )dΩ +
-# ∫( τh⊙th + (∇⋅τh)⋅uh )dΩ - ∫((τh⋅n)⋅uhΓ)d∂K +
-# #∫( vh⋅(∇⋅(σh)) + vh⋅f)dΩ +
-# ∫( ∇(vh)⊙σh - vh⋅f)dΩ - ∫(vh⋅(σh⋅n))d∂K + ∫(τuΓ*(vh⋅Pm_uh))d∂K -
-#                                           ∫(τuΓ*(vh⋅uhΓ))d∂K +
-# ∫( ηh*(ωh⋅n) )d∂K + ∫( τϕΓ*ηh*ϕh )d∂K - ∫( τϕΓ*ηh*ϕhΓ )d∂K +
-# ∫( μh⋅(σh⋅n) )d∂K - ∫( τuΓ*μh⋅Pm_uh)d∂K + ∫( τuΓ*μh⋅uhΓ )d∂K
+#   Pm_uh=Pₘ(uh, uhΓ_basis, μh, d∂K)
+#   ∫( rh⋅((κ∘(σh,ϕh))⋅ωh) - rh⋅ρh )dΩ +
+#   ∫( nh⋅ωh+(∇⋅nh)*ϕh )dΩ - ∫((nh⋅n)*ϕhΓ)d∂K +
+#   ∫( ψh*(∇⋅ρh) - α*ψh*tr(th) - ψh*ℓ )dΩ +
+#        ∫( τϕΓ*ψh*ϕh )d∂K - ∫( τϕΓ*ψh*ϕhΓ )d∂K +
+#   ∫( sh⊙(N∘th) - sh⊙σh - tr(sh)*(g∘ϕh) )dΩ +
+#   ∫( τh⊙th + (∇⋅τh)⋅uh )dΩ - ∫((τh⋅n)⋅uhΓ)d∂K +
+#   ∫(∇(vh)⊙σh - vh⋅f)dΩ - ∫(vh⋅(σh⋅n))d∂K + ∫(τuΓ*(vh⋅Pm_uh))d∂K - ∫(τuΓ*(vh⋅uhΓ))d∂K +
+#   ∫( ηh*(ωh⋅n) )d∂K + ∫( τϕΓ*ηh*ϕh )d∂K - ∫( τϕΓ*ηh*ϕhΓ )d∂K +
+#   ∫( μh⋅(σh⋅n) )d∂K - ∫( τuΓ*μh⋅Pm_uh)d∂K + ∫( τuΓ*μh⋅uhΓ )d∂K
 # end
 
 # dc=residual(xh_exact,basis)
