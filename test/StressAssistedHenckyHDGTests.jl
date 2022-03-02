@@ -172,11 +172,11 @@ function solve_stress_assisted_diffusion_hencky_hdg(cells,order;write_results=fa
     d∂K = Measure(∂K, degree)
 
     # Stabilization operator (solute concentration)
-    τϕΓ = 1.0 # To be defined???
+    τρΓ = 1.0 # To be defined???
     # Stabilization operator (displacements)
     τuΓ = Float64(cells[1]) # To be defined???
 
-    println("h=$(1.0/cells[1]) τuΓ=$(τuΓ) τϕΓ=$(τϕΓ)")
+    println("h=$(1.0/cells[1]) τuΓ=$(τuΓ) τρΓ=$(τρΓ)")
 
     Y_basis    = get_fe_basis(Y)
     Y_TR_basis = get_trial_fe_basis(Y_TR)
@@ -198,12 +198,12 @@ function solve_stress_assisted_diffusion_hencky_hdg(cells,order;write_results=fa
       Pm_uh=Pₘ(uh, uhΓ_basis, μh, d∂K)
       ∫( rh⋅((κ∘(σh,ϕh))⋅ωh) - rh⋅ρh )dΩ +
       ∫( nh⋅ωh+(∇⋅nh)*ϕh )dΩ - ∫((nh⋅n)*ϕhΓ)d∂K +
-      ∫( ψh*(∇⋅ρh) - α*ψh*tr(th) - ψh*ℓ )dΩ +
-          ∫( τϕΓ*ψh*ϕh )d∂K - ∫( τϕΓ*ψh*ϕhΓ )d∂K +
+      ∫( ∇(ψh)⋅ρh - α*ψh*tr(th) - ψh*ℓ )dΩ -
+       ∫(ψh*(ρh⋅n))d∂K + ∫( τρΓ*ψh*ϕh )d∂K - ∫( τρΓ*ψh*ϕhΓ )d∂K +
       ∫( sh⊙(N∘th) - sh⊙σh - tr(sh)*(g∘ϕh) )dΩ +
       ∫( τh⊙th + (∇⋅τh)⋅uh )dΩ - ∫((τh⋅n)⋅uhΓ)d∂K +
       ∫(∇(vh)⊙σh - vh⋅f)dΩ - ∫(vh⋅(σh⋅n))d∂K + ∫(τuΓ*(vh⋅Pm_uh))d∂K - ∫(τuΓ*(vh⋅uhΓ))d∂K +
-      ∫( ηh*(ωh⋅n) )d∂K + ∫( τϕΓ*ηh*ϕh )d∂K - ∫( τϕΓ*ηh*ϕhΓ )d∂K +
+      ∫( ηh*(ρh⋅n) )d∂K - ∫( τρΓ*ηh*ϕh )d∂K + ∫( τρΓ*ηh*ϕhΓ )d∂K +
       ∫( μh⋅(σh⋅n) )d∂K - ∫( τuΓ*μh⋅Pm_uh)d∂K + ∫( τuΓ*μh⋅uhΓ )d∂K
     end
 
@@ -263,6 +263,8 @@ function solve_stress_assisted_diffusion_hencky_hdg(cells,order;write_results=fa
     #@test sqrt(sum(∫(eu ⋅ eu)dΩ)) < 1.0e-12
     #@test sqrt(sum(∫(eσ ⊙ eσ)dΩ)) < 1.0e-12
   end
+
+
 
   function conv_test(ns,order)
     el2ω = Float64[]
