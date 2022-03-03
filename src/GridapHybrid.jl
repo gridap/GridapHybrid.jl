@@ -4,9 +4,6 @@ using Gridap
 using FillArrays
 using LinearAlgebra
 
-include("GridapAPIExtensions.jl")
-include("GridapTmpModifications.jl")
-
 using Gridap.Fields
 include("StaticCondensationMap.jl")
 include("BackwardStaticCondensationMap.jl")
@@ -31,5 +28,13 @@ export Skeleton
 
 include("HybridAffineFEOperators.jl")
 export HybridAffineFEOperator
+include("HybridFEOperators.jl")
+export HybridFEOperator
+
+include("HybridLinearSolvers.jl")
+
+
+include("GridapAPIExtensions.jl")
+include("GridapTmpModifications.jl")
 
 end # module

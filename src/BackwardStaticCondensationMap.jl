@@ -19,14 +19,14 @@ struct BackwardStaticCondensationMap{IFT <: AbstractVector{<:Integer},
 end
 
 function Gridap.Arrays.return_cache(k::BackwardStaticCondensationMap{IFT,BFT},
-  Ab::Tuple{<:Gridap.Fields.MatrixBlock{<:Matrix{T}},<:Gridap.Fields.VectorBlock{<:Vector{T}}},
+  Ab::Tuple{<:Gridap.Fields.MatrixBlock{<:AbstractMatrix{T}},<:Gridap.Fields.VectorBlock{<:AbstractVector{T}}},
   x::Union{<:AbstractVector{T},<:Gridap.Fields.VectorBlock{<:AbstractVector{T}}}) where {IFT, BFT, T}
   Gridap.Arrays.return_cache(k,Ab[1],Ab[2],x)
 end
 
 function Gridap.Arrays.return_cache(k::BackwardStaticCondensationMap{IFT,BFT},
-  A::Gridap.Fields.MatrixBlock{<:Matrix{T}},
-  b::Gridap.Fields.VectorBlock{<:Vector{T}},
+  A::Gridap.Fields.MatrixBlock{<:AbstractMatrix{T}},
+  b::Gridap.Fields.VectorBlock{<:AbstractVector{T}},
   x::Gridap.Fields.VectorBlock{<:AbstractVector{T}}) where {IFT,BFT,T}
   m=DensifyInnerMostBlockLevelMap()
   cm=return_cache(m,x)
@@ -37,8 +37,8 @@ end
 
 
 function Gridap.Arrays.return_cache(k::BackwardStaticCondensationMap{IFT,BFT},
-                                    A::Gridap.Fields.MatrixBlock{<:Matrix{T}},
-                                    b::Gridap.Fields.VectorBlock{<:Vector{T}},
+                                    A::Gridap.Fields.MatrixBlock{<:AbstractMatrix{T}},
+                                    b::Gridap.Fields.VectorBlock{<:AbstractVector{T}},
                                     x::AbstractVector{T}) where {IFT,BFT,T}
     cache1=Gridap.Arrays.return_cache(k.static_condensation,A,b)
     _,interior_brs,boundary_brs,_,_,_,_,_,=cache1
@@ -52,7 +52,7 @@ end
 
 function Gridap.Arrays.evaluate!(cache,
   k::BackwardStaticCondensationMap{IFT,BFT},
-  Ab::Tuple{<:Gridap.Fields.MatrixBlock{<:Matrix{T}},<:Gridap.Fields.VectorBlock{<:Vector{T}}},
+  Ab::Tuple{<:Gridap.Fields.MatrixBlock{<:AbstractMatrix{T}},<:Gridap.Fields.VectorBlock{<:AbstractVector{T}}},
   x::Union{<:AbstractVector{T},<:Gridap.Fields.VectorBlock{<:AbstractVector{T}}}) where {IFT, BFT, T}
   Gridap.Arrays.evaluate!(cache,k,Ab[1],Ab[2],x)
 end
@@ -60,8 +60,8 @@ end
 
 function Gridap.Arrays.evaluate!(cache,
   k::BackwardStaticCondensationMap{IFT,BFT},
-  A::Gridap.Fields.MatrixBlock{<:Matrix{T}},
-  b::Gridap.Fields.VectorBlock{<:Vector{T}},
+  A::Gridap.Fields.MatrixBlock{<:AbstractMatrix{T}},
+  b::Gridap.Fields.VectorBlock{<:AbstractVector{T}},
   x::AbstractVector{T}) where {IFT, BFT, T}
 
    cache1,cache2=cache
@@ -103,8 +103,8 @@ end
 
 function Gridap.Arrays.evaluate!(cache,
   k::BackwardStaticCondensationMap{IFT,BFT},
-  A::Gridap.Fields.MatrixBlock{<:Matrix{T}},
-  b::Gridap.Fields.VectorBlock{<:Vector{T}},
+  A::Gridap.Fields.MatrixBlock{<:AbstractMatrix{T}},
+  b::Gridap.Fields.VectorBlock{<:AbstractVector{T}},
   x::Gridap.Fields.VectorBlock{<:AbstractVector{T}}) where {IFT, BFT, T}
   m,cm,ck=cache
   mx=evaluate!(cm,m,x)
@@ -115,8 +115,8 @@ end
 function Gridap.Arrays.return_cache(k::ReblockInteriorDofsMap,
                                     interior_brs::Vector{<:Integer},
                                     boundary_brs::Vector{<:Integer},
-                                    vinterior::Vector{T},
-                                    vboundary::Vector{T}) where {T}
+                                    vinterior::AbstractVector{T},
+                                    vboundary::AbstractVector{T}) where {T}
   nblks=length(interior_brs)+length(boundary_brs)
   array=Vector{Vector{T}}(undef,nblks)
   touched=Vector{Bool}(undef,nblks)
@@ -134,8 +134,8 @@ function Gridap.Arrays.evaluate!(cache,
                                  k::ReblockInteriorDofsMap,
                                  interior_brs::Vector{<:Integer},
                                  boundary_brs::Vector{<:Integer},
-                                 vinterior::Vector{T},
-                                 vboundary::Vector{T}) where {T}
+                                 vinterior::AbstractVector{T},
+                                 vboundary::AbstractVector{T}) where {T}
   nblks=length(interior_brs)+length(boundary_brs)
   current=1
   for iblk=1:length(interior_brs)

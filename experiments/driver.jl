@@ -17,12 +17,12 @@ function solve_darcy_rth(n,k,d)
   ∂T = CellBoundary(model)
 
   outputs["Preassembly RTH [s]"] = @elapsed begin
-     model_Γ,X,Y,M,L,cmat,cvec,cmat_cvec_condensed=
+     model_Γ,X,Y,M,L,cmat,cvec,cmat_cvec_skeleton=
      DarcyRTHTests.preassembly_stage_darcy_hybrid_rt(model,∂T,k)
   end
 
   outputs["Trace assembly RTH [s]"] = @elapsed begin
-    A,b,fdofscb=DarcyRTHTests.assembly_stage_darcy_hybrid_rt(model,∂T,M,L,cmat_cvec_condensed)
+    A,b,fdofscb=DarcyRTHTests.assembly_stage_darcy_hybrid_rt(model,∂T,M,L,cmat_cvec_skeleton)
   end
 
   outputs["Trace solve RTH [s]"] = @elapsed begin

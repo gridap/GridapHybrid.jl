@@ -23,12 +23,6 @@ function g(x)
   Gridap.Helpers.@check false
 end
 
-function Gridap.CellData.get_triangulation(f::Gridap.MultiField.MultiFieldCellField)
-  s1 = first(f.single_fields)
-  trian = get_triangulation(s1)
-  trian
-end
-
 function solve_darcy_lhdg(model,order)
     # Geometry
     D = num_cell_dims(model)
@@ -146,6 +140,31 @@ function solve_darcy_lhdg(model,order)
     uh,_=xh
     e = u -uh
     @test sqrt(sum(∫(e⋅e)dΩ)) < 1.0e-12
+
+    residual((uh,ph,lh),(vh,qh,mh))=a((uh,ph,lh),(vh,qh,mh))-l((vh,qh,mh))
+    op = FEOperator(residual, X, Y)
+
+    nls = NLSolver(show_trace=true, method=:newton)
+    solver = FESolver(nls)
+
+    xh0 = FEFunction(X,zeros(num_free_dofs(X)))
+    xh, = solve!(xh0,solver,op)
+
+    uh,_=xh
+    e = u -uh
+    @test sqrt(sum(∫(e⋅e)dΩ)) < 1.0e-12
+
+    op = HybridFEOperator(residual, X, Y, [1,2], [3])
+    nls = NLSolver(show_trace=true, method=:newton)
+    solver = FESolver(nls)
+    xh0 = FEFunction(X,zeros(num_free_dofs(X)))
+    xh, = solve!(xh0,solver,op)
+
+    uh,_=xh
+    e = u -uh
+    @test sqrt(sum(∫(e⋅e)dΩ)) < 1.0e-12
+
+
   end
 
   partition = (0,1,0,1)

@@ -124,8 +124,51 @@ function Gridap.Arrays.evaluate!(cache,
   g
 end
 
+function Gridap.Fields.linear_combination(u::Vector{<:Vector},
+                                          f::Gridap.Fields.ArrayBlock)
+  i::Int = findfirst(f.touched)
+  ui = u[i]
+  fi = f.array[i]
+  uifi = Gridap.Fields.linear_combination(ui,fi)
+  g = Vector{typeof(uifi)}(undef,length(f.touched))
+  for i in eachindex(f.touched)
+    if f.touched[i]
+      g[i] = Gridap.Fields.linear_combination(u[i],f.array[i])
+    end
+  end
+  ArrayBlock(g,f.touched)
+end
 
+function Gridap.Arrays.return_cache(k::Gridap.Fields.LinearCombinationMap,
+                                    u::Vector{<:Vector},
+                                    fx::Gridap.Fields.ArrayBlock)
+  i::Int = findfirst(fx.touched)
+  fxi = fx.array[i]
+  li = return_cache(k,u[i],fxi)
+  ufxi = evaluate!(li,k,u[i],fxi)
+  l = Vector{typeof(li)}(undef,size(fx.array))
+  g = Vector{typeof(ufxi)}(undef,size(fx.array))
+  for i in eachindex(fx.array)
+    if fx.touched[i]
+      l[i] = return_cache(k,u[i],fx.array[i])
+    end
+  end
+  ArrayBlock(g,fx.touched),l
+end
 
+function Gridap.Arrays.evaluate!(cache,
+                                 k::Gridap.Fields.LinearCombinationMap,
+                                 u::Vector,
+                                 fx::Gridap.Fields.ArrayBlock)
+  g,l = cache
+  Gridap.Helpers.@check g.touched == fx.touched
+  for i in eachindex(fx.array)
+    if fx.touched[i]
+      g.array[i] = evaluate!(l[i],k,u[i],fx.array[i])
+    end
+  end
+  g
+end
 
 function Gridap.Arrays.return_cache(
   #::typeof(evaluate),
@@ -425,8 +468,29 @@ function Gridap.Arrays.evaluate!(
   A\B
 end
 
-function setup_bulk_to_skeleton_l2_projected_fields(
+function Gridap.Arrays.return_cache(
+  k::typeof(compute_bulk_to_skeleton_l2_projection_dofs),
   A::Matrix{<:Real},
+  B::Vector{<:Real})
+  # c=CachedArray(B)
+  # c
+  nothing
+end
+
+function Gridap.Arrays.evaluate!(
+  cache,
+  k::typeof(compute_bulk_to_skeleton_l2_projection_dofs),
+  A::Matrix{<:Real},
+  B::Vector{<:Real})
+  #setsize!(cache,size(B))
+  #cache.array .= B
+  #ldiv!(lu(A),cache.array) # TO-DO: explore in-place lu!()
+  #cache.array
+  A\B
+end
+
+function setup_bulk_to_skeleton_l2_projected_fields(
+  A::Array,
   B::AbstractArray{<:Gridap.Fields.Field})
   cache=return_cache(setup_bulk_to_skeleton_l2_projected_fields,A,B)
   evaluate!(cache,setup_bulk_to_skeleton_l2_projected_fields,A,B)
@@ -434,7 +498,7 @@ end
 
 function Gridap.Arrays.return_cache(
   k::typeof(setup_bulk_to_skeleton_l2_projected_fields),
-  A::Matrix{<:Real},
+  A::Array,
   B::AbstractArray{<:Gridap.Fields.Field})
   return_cache(Gridap.Fields.linear_combination,A,B)
 end
@@ -442,14 +506,14 @@ end
 function Gridap.Arrays.evaluate!(
   cache,
   k::typeof(setup_bulk_to_skeleton_l2_projected_fields),
-  A::Matrix{<:Real},
+  A::Array,
   B::AbstractArray{<:Gridap.Fields.Field})
   evaluate!(cache,Gridap.Fields.linear_combination,A,B)
 end
 
 function Gridap.Arrays.return_cache(
   k::typeof(setup_bulk_to_skeleton_l2_projected_fields),
-  A::Matrix{<:Real},
+  A::Array,
   B::Transpose{T,<:AbstractArray{<:Gridap.Fields.Field}}) where T
   c=return_cache(k,A,B.parent)
   v=evaluate!(c,k,A,B.parent)
@@ -459,7 +523,7 @@ end
 function Gridap.Arrays.evaluate!(
   cache,
   k::typeof(setup_bulk_to_skeleton_l2_projected_fields),
-  A::Matrix{<:Real},
+  A::Array,
   B::Transpose{T,<:AbstractArray{<:Gridap.Fields.Field}}) where T
   ct,clc=cache
   v=evaluate!(clc,Gridap.Fields.linear_combination,A,B.parent)
@@ -512,6 +576,29 @@ function Gridap.Arrays.evaluate!(
   r
 end
 
+
+function Gridap.Arrays.return_cache(
+  k::typeof(setup_bulk_to_skeleton_l2_projected_fields),
+  A::Vector,
+  B::Gridap.Fields.MatrixBlock)
+  nB=findall(B.touched)
+  Gridap.Helpers.@check length(nB)==1
+  xi=testitem(B)
+  Gridap.Arrays.return_cache(k,A,xi)
+end
+
+function Gridap.Arrays.evaluate!(
+  cache,
+  k::typeof(setup_bulk_to_skeleton_l2_projected_fields),
+  A::Vector,
+  B::Gridap.Fields.MatrixBlock)
+  nB=findall(B.touched)
+  Gridap.Helpers.@check length(nB)==1
+  xi=testitem(B)
+  Gridap.Arrays.evaluate!(cache,k,A,xi)
+end
+
+
 # A [1,b1], e.g., [1,2] nonzero block (matrix to be inverted)
 # B [1,b2], e.g., [1,3] nonzero block (several RHS)
 function Gridap.Arrays.return_cache(
@@ -557,6 +644,39 @@ function Gridap.Arrays.evaluate!(
   bi=testitem(B)
   r.array[1,tb]=evaluate!(c,k,ai,bi)
   r
+end
+
+# A [b,b], e.g.,  [8,8] nonzero block (matrix to be inverted)
+# B [b  ], e.g.,  [8]   nonzero block (single RHS)
+function Gridap.Arrays.return_cache(
+  k::typeof(compute_bulk_to_skeleton_l2_projection_dofs),
+  A::Gridap.Fields.MatrixBlock,
+  B::Gridap.Fields.VectorBlock)
+
+  Gridap.Helpers.@check size(A.array)[2] == size(B.array)[1]
+
+  nA=findall(A.touched)
+  nB=findall(B.touched)
+
+  Gridap.Helpers.@check length(nA)==length(nB)
+  Gridap.Helpers.@check length(nA)==1
+
+  ai=testitem(A)
+  bi=testitem(B)
+  c=Gridap.Arrays.return_cache(k,ai,bi)
+  c
+end
+
+function Gridap.Arrays.evaluate!(
+  cache,
+  k::typeof(compute_bulk_to_skeleton_l2_projection_dofs),
+  A::Gridap.Fields.MatrixBlock,
+  B::Gridap.Fields.VectorBlock)
+  Gridap.Helpers.@check length(findall(A.touched)) == 1
+  Gridap.Helpers.@check length(findall(B.touched)) == 1
+  ai=testitem(A)
+  bi=testitem(B)
+  evaluate!(cache,k,ai,bi)
 end
 
 # A [f,f]      , e.g., [2,2] nonzero block (matrix to be inverted)
@@ -654,7 +774,7 @@ end
 # output [1]
 function Gridap.Arrays.return_cache(
   k::typeof(setup_bulk_to_skeleton_l2_projected_fields),
-  A::Gridap.Fields.VectorBlock,
+  A::Gridap.Fields.VectorBlock{<:Matrix},
   B::Gridap.Fields.MatrixBlock)
 
   Gridap.Helpers.@check size(A.array) == (1,)
@@ -686,4 +806,13 @@ function Gridap.Arrays.evaluate!(
   bi=testitem(B)
   r.array[1]=evaluate!(c,k,ai,bi)
   r
+end
+
+# TO-DO: The current version of this function is very simple and
+# it does not cover all possible scenarios. In particular, it only
+# convers the case where all fields in uh are posed either on a cell
+# triangulation or facet triangulation including resp. all cells and
+# facets of the underlying background model.
+function Gridap.FESpaces._compute_cell_ids(uh,ttrian::SkeletonTriangulation)
+  collect(1:num_cells(ttrian))
 end

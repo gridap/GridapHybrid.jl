@@ -267,20 +267,20 @@ function CellData.change_domain_ref_ref(
   @notimplementedif !(isa(strian,Triangulation{D-1,D}) || isa(strian,Triangulation{D,D}))
 
   if isa(strian,Triangulation{D,D})
-    b=_restrict_to_cell_boundary_cell_fe_basis(ttrian.model,
-                                                ttrian.glue,
-                                                tglue.tcell_lface_mface_map,
-                                                a)
+    b=_restrict_to_skeleton_cell_field(ttrian.model,
+                                       ttrian.glue,
+                                       tglue.tcell_lface_mface_map,
+                                       a)
   elseif isa(strian,Triangulation{D-1,D})
-    b=_restrict_to_cell_boundary_facet_fe_basis(ttrian.model,ttrian.glue,a)
+    b=_restrict_to_skeleton_facet_field(ttrian.model,ttrian.glue,a)
   end
   CellData.similar_cell_field(a,b,ttrian,ReferenceDomain())
 end
 
-function _restrict_to_cell_boundary_cell_fe_basis(model,
-                                                  glue,
-                                                  tface_to_mface_map,
-                                                  cell_fe_basis::Gridap.CellData.CellField)
+function _restrict_to_skeleton_cell_field(model,
+                                          glue,
+                                          tface_to_mface_map,
+                                          cell_fe_basis::Gridap.CellData.CellField)
   D = num_cell_dims(model)
   Gridap.Helpers.@check isa(get_triangulation(cell_fe_basis),Triangulation{D,D})
   cell_a_q = _transform_cell_to_cell_lface_array(glue,
@@ -338,34 +338,19 @@ function _transform_cell_to_cell_lface_array(
   _transform_cell_to_cell_lface_array(glue,cell_array_fill; add_naive_innermost_block_level=add_naive_innermost_block_level)
 end
 
-# TO-DO !!!!! (see warning below)
-# The following two function overloads are required in order to be able to
-# have a FE function in place of the trial operand in an integral over the
-# cell boundaries
-# function _transform_cell_to_cell_lface_array(
-#   glue,
-#   cell_array::Gridap.Arrays.LazyArray{<:Fill{typeof(Gridap.Fields.linear_combination)}};
-#   add_naive_innermost_block_level=false)
-#   cell_lface_array_args2=_transform_cell_to_cell_lface_array(glue,cell_array.args[2];
-#            add_naive_innermost_block_level=add_naive_innermost_block_level)
-#   cell_lface_array_args1=_transform_cell_to_cell_lface_array(glue,cell_array.args[1];
-#            add_naive_innermost_block_level=add_naive_innermost_block_level)
-#   lazy_map(linear_combination,cell_lface_array_args1,cell_lface_array_args2)
-# end
+function _restrict_to_skeleton_facet_field(model,
+                                           glue,
+                                           facet_fe_function::Gridap.FESpaces.SingleFieldFEFunction)
+  D = num_cell_dims(model)
+  Gridap.Helpers.@check isa(get_triangulation(facet_fe_function),Triangulation{D-1,D})
+  facet_field_array=Gridap.CellData.get_data(facet_fe_function)
+  cell_wise_facets_ids=_get_cell_wise_facets(model)
+  SkeletonVectorFromFacetVector(glue,cell_wise_facets_ids,facet_field_array)
+end
 
-# function _transform_cell_to_cell_lface_array(
-#   glue,
-#   cell_array::Gridap.Arrays.LazyArray{<:Fill{<:Broadcasting{<:Gridap.Arrays.PosNegReindex}}};
-#   add_naive_innermost_block_level=false)
-#   println("WARNING!!! Hard-coded to 4 facets/cell!!!")
-#   x=[cell_array for i=1:4]
-#   lazy_map(BlockMap(4,collect(1:4)),x...)
-# end
-
-
-function _restrict_to_cell_boundary_facet_fe_basis(model,
-                                                   glue,
-                                                   facet_fe_basis::Gridap.CellData.CellField)
+function _restrict_to_skeleton_facet_field(model,
+                                           glue,
+                                           facet_fe_basis::Gridap.CellData.CellField)
 
   D = num_cell_dims(model)
   Gridap.Helpers.@check isa(get_triangulation(facet_fe_basis),Triangulation{D-1,D})

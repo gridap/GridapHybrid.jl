@@ -173,14 +173,14 @@ Base.size(a::SkeletonVectorFromFacetVector) = (length(a.glue.cell_to_ctype),)
 Base.IndexStyle(::Type{<:SkeletonVectorFromFacetVector}) = IndexLinear()
 
 function Gridap.Arrays.array_cache(a::SkeletonVectorFromFacetVector{T}) where T
-   fvc=array_cache(a.cell_vector)
+   fvc=array_cache(a.facet_vector)
    cwfc=array_cache(a.cell_wise_facets_ids)
    vbc=_compressed_vector_from_glue(T,a.glue)
    fvc=_compressed_vector_from_glue(typeof(fvc),a.glue)
    for ctype=1:length(a.glue.ctype_to_lface_to_ftype)
     num_facets=length(a.glue.ctype_to_lface_to_ftype[ctype])
     for lface=1:num_facets
-      fvc.values[ctype][lface]=array_cache(a.cell_vector)
+      fvc.values[ctype][lface]=array_cache(a.facet_vector)
     end
   end
    fvc,cwfc,vbc
@@ -191,7 +191,7 @@ function Gridap.Arrays.getindex!(cache,a::SkeletonVectorFromFacetVector,cell::In
   vb=vbc[cell]
   cwf=getindex!(cwfc,a.cell_wise_facets_ids,cell)
   for (lfacet,gfacet) in enumerate(cwf)
-    fv=getindex!(fvc[cell][lfacet],a.cell_vector,gfacet)
+    fv=getindex!(fvc[cell][lfacet],a.facet_vector,gfacet)
     vb.array[lfacet]=fv
   end
   vb
@@ -238,7 +238,7 @@ function Gridap.Arrays.lazy_map(
   a::Gridap.Arrays.CompressedArray{<:Gridap.Fields.VectorBlock}) where T
   Gridap.Helpers.@check length(a) == length(b)
   af=_cell_lfacet_vector_to_facet_vector(b.glue,a)
-  bf=b.cell_vector
+  bf=b.facet_vector
   bfx=lazy_map(evaluate,bf,af)
   SkeletonVectorFromFacetVector(b.glue,b.cell_wise_facets_ids,bfx)
 end
