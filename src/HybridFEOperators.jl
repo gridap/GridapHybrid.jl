@@ -4,8 +4,8 @@ mutable struct HybridFEMatrix{T,TB,TS} <: AbstractMatrix{T}
   skeleton_fields    :: TS
   trial_hybridizable :: MultiFieldFESpace
   test_hybridizable  :: MultiFieldFESpace
-  trial_skeleton     :: MultiFieldFESpace
-  test_skeleton      :: MultiFieldFESpace
+  trial_skeleton     :: FESpace
+  test_skeleton      :: FESpace
   mat_contribs       :: DomainContribution # Cell-wise un-assembled matrix contributions
 end
 
@@ -14,16 +14,16 @@ mutable struct HybridFEVector{T,V,TB,TS} <: AbstractVector{T}
   skeleton_fields    :: TS
   trial_hybridizable :: MultiFieldFESpace
   test_hybridizable  :: MultiFieldFESpace
-  trial_skeleton     :: MultiFieldFESpace
-  test_skeleton      :: MultiFieldFESpace
+  trial_skeleton     :: FESpace
+  test_skeleton      :: FESpace
   vec_contribs       :: DomainContribution # Cell-wise un-assembled vector contributions
   vec                :: V
   function HybridFEVector(bulk_fields::TB,
                           skeleton_fields::TS,
                           trial_hybridizable::MultiFieldFESpace,
                           test_hybridizable::MultiFieldFESpace,
-                          trial_skeleton::MultiFieldFESpace,
-                          test_skeleton::MultiFieldFESpace,
+                          trial_skeleton::FESpace,
+                          test_skeleton::FESpace,
                           vec_contribs::DomainContribution) where {TB,TS}
     vec=assemble_vector(vec_contribs,test_hybridizable)
     T=Float64
@@ -72,8 +72,8 @@ struct HybridFEOperator{TB,TS} <: FEOperator
   test::MultiFieldFESpace
   bulk_fields::TB
   skeleton_fields::TS
-  trial_skeleton::MultiFieldFESpace
-  test_skeleton::MultiFieldFESpace
+  trial_skeleton::FESpace
+  test_skeleton::FESpace
   assem_hybridizable::SparseMatrixAssembler
   assem_skeleton::SparseMatrixAssembler
   function HybridFEOperator(

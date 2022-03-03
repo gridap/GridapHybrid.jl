@@ -153,6 +153,18 @@ function solve_darcy_lhdg(model,order)
     uh,_=xh
     e = u -uh
     @test sqrt(sum(∫(e⋅e)dΩ)) < 1.0e-12
+
+    op = HybridFEOperator(residual, X, Y, [1,2], [3])
+    nls = NLSolver(show_trace=true, method=:newton)
+    solver = FESolver(nls)
+    xh0 = FEFunction(X,zeros(num_free_dofs(X)))
+    xh, = solve!(xh0,solver,op)
+
+    uh,_=xh
+    e = u -uh
+    @test sqrt(sum(∫(e⋅e)dΩ)) < 1.0e-12
+
+
   end
 
   partition = (0,1,0,1)

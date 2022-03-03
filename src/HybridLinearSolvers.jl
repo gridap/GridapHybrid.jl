@@ -44,12 +44,30 @@ function Gridap.Algebra.solve!(
     SparseMatrixAssembler(ns.A.trial_skeleton,ns.A.test_skeleton),data)
   x_skel = A\b
 
-  free_dof_values=_compute_hybridizable_from_skeleton_free_dof_values(
-                    x_skel,
+  # Correction has to be zero at Dirichlet DoFs
+  skeleton_fe_function = _generate_skeleton_fe_function(ns.A.trial_skeleton,x_skel)
+
+  copy!(x,_compute_hybridizable_from_skeleton_free_dof_values(
+                    skeleton_fe_function,
                     ns.A.trial_hybridizable,
                     ns.A.test_hybridizable,
                     ns.A.trial_skeleton,
                     matvec,
                     ns.A.bulk_fields,
-                    ns.A.skeleton_fields)
+                    ns.A.skeleton_fields))
+  x
+end
+
+function _generate_skeleton_fe_function(fe::Gridap.FESpaces.SingleFieldFESpace, free_dofs)
+  FEFunction(fe,free_dofs,zeros(num_dirichlet_dofs(fe)))
+end
+
+function _generate_skeleton_fe_function(fe::Gridap.MultiField.MultiFieldFESpace, free_dofs)
+  blocks = Gridap.FESpaces.SingleFieldFEFunction[]
+  for (field,U) in enumerate(fe.spaces)
+    free_dofs_i = Gridap.MultiField.restrict_to_field(fe,free_dofs,field)
+    uhi = FEFunction(U, free_dofs_i, zeros(num_dirichlet_dofs(U)))
+    push!(blocks,uhi)
+  end
+  Gridap.MultiField.MultiFieldFEFunction(free_dofs,fe,blocks)
 end

@@ -215,9 +215,8 @@ function solve_stress_assisted_diffusion_hencky_hdg(cells,order;write_results=fa
     # res=assemble_vector(dc,Y)
     # dc=jacobian(x->residual(x,Y_basis),xh)
     # A=assemble_matrix(dc,Y_TR,Y)
-    # op=HybridFEOperator(residual,Y_TR,Y,collect(1:6),[7,8])
-
-    op=FEOperator(residual,Y_TR,Y)
+    @time op=HybridFEOperator(residual,Y_TR,Y,collect(1:6),[7,8])
+    # op=FEOperator(residual,Y_TR,Y)
 
     nls = NLSolver(show_trace=true, method=:newton, ftol=1.0e-14)
     solver = FESolver(nls)
@@ -321,9 +320,9 @@ function solve_stress_assisted_diffusion_hencky_hdg(cells,order;write_results=fa
   println("Slope L2-norm stress: $(slope(hs,el2σ))")
   println("Slope L2-norm      u: $(slope(hs,el2u))")
 
-end # module
+# end # module
 
-solve_stress_assisted_diffusion_hencky_hdg((40,40),1;write_results=true)
+# solve_stress_assisted_diffusion_hencky_hdg((1,1),1;write_results=true)
 
 # xh_exact =
 #    interpolate_everywhere([ω_exact,ρ_exact,ϕ_exact,t_exact,σ_exact,u_exact,ϕ_exact,u_exact],Y_TR)
