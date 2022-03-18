@@ -514,6 +514,37 @@ end
 function Gridap.Arrays.return_cache(
   k::typeof(setup_bulk_to_skeleton_l2_projected_fields),
   A::Array,
+  B::VectorBlock{<:AbstractArray{<:Gridap.Fields.Field}})
+  bi=testitem(B)
+  T=Gridap.Arrays.return_type(k,A,bi)
+  Tc=typeof(Gridap.Arrays.return_cache(k,A,bi))
+  r=Vector{T}(undef,size(B.array))
+  rc=Vector{Tc}(undef,size(B.array))
+  for i in eachindex(B)
+    if B.touched[i]
+      rc[i]=Gridap.Arrays.return_cache(k,A,B.array[i])
+    end
+  end
+  (Gridap.Fields.ArrayBlock(r,B.touched),Gridap.Fields.ArrayBlock(rc,B.touched))
+end
+
+function Gridap.Arrays.evaluate!(
+  cache,
+  k::typeof(setup_bulk_to_skeleton_l2_projected_fields),
+  A::Array,
+  B::VectorBlock{<:AbstractArray{<:Gridap.Fields.Field}})
+  (r,rc)=cache
+  for i in eachindex(B)
+    if B.touched[i]
+      r.array[i]=Gridap.Arrays.evaluate!(rc.array[i],k,A,B.array[i])
+    end
+  end
+  r
+end
+
+function Gridap.Arrays.return_cache(
+  k::typeof(setup_bulk_to_skeleton_l2_projected_fields),
+  A::Array,
   B::Transpose{T,<:AbstractArray{<:Gridap.Fields.Field}}) where T
   c=return_cache(k,A,B.parent)
   v=evaluate!(c,k,A,B.parent)
@@ -541,22 +572,24 @@ function Gridap.Arrays.return_cache(
   A::Gridap.Fields.VectorBlock,
   B::Gridap.Fields.VectorBlock)
 
-  Gridap.Helpers.@check size(A.array) == size(B.array)
-  Gridap.Helpers.@check A.touched == B.touched
-
-  ai=testitem(A)
-  xi=testitem(B)
-
-  T=Gridap.Arrays.return_type(k,ai,xi)
-  Tc=typeof(Gridap.Arrays.return_cache(k,ai,xi))
-  r=Vector{T}(undef,size(A.array))
-  rc=Vector{Tc}(undef,size(A.array))
-  for i in eachindex(A)
-    if A.touched[i]
-      rc[i]=Gridap.Arrays.return_cache(k,A.array[i],B.array[i])
+  Gridap.Helpers.@check size(A.array) == size(B.array) || size(A.array)==(1,)
+  if (size(A.array)==(1,))
+    Gridap.Arrays.return_cache(k,A.array[1],B)
+  else
+    Gridap.Helpers.@check A.touched == B.touched
+    ai=testitem(A)
+    xi=testitem(B)
+    T=Gridap.Arrays.return_type(k,ai,xi)
+    Tc=typeof(Gridap.Arrays.return_cache(k,ai,xi))
+    r=Vector{T}(undef,size(A.array))
+    rc=Vector{Tc}(undef,size(A.array))
+    for i in eachindex(A)
+      if A.touched[i]
+        rc[i]=Gridap.Arrays.return_cache(k,A.array[i],B.array[i])
+      end
     end
+    (Gridap.Fields.ArrayBlock(r,A.touched),Gridap.Fields.ArrayBlock(rc,A.touched))
   end
-  (Gridap.Fields.ArrayBlock(r,A.touched),Gridap.Fields.ArrayBlock(rc,A.touched))
 end
 
 function Gridap.Arrays.evaluate!(
@@ -564,18 +597,21 @@ function Gridap.Arrays.evaluate!(
   k::Tprojfuncs,
   A::Gridap.Fields.VectorBlock,
   B::Gridap.Fields.VectorBlock)
-  Gridap.Helpers.@check size(A.array) == size(B.array)
-  Gridap.Helpers.@check A.touched == B.touched
-  (r,rc)=cache
-  Gridap.Helpers.@check size(r.array) == size(A.array)
-  for i in eachindex(A)
-    if A.touched[i]
-      r.array[i]=Gridap.Arrays.evaluate!(rc.array[i],k,A.array[i],B.array[i])
+  Gridap.Helpers.@check size(A.array) == size(B.array) || size(A.array)==(1,)
+  if (size(A.array)==(1,))
+    Gridap.Arrays.evaluate!(cache,k,A.array[1],B)
+  else
+    Gridap.Helpers.@check A.touched == B.touched
+    (r,rc)=cache
+    Gridap.Helpers.@check size(r.array) == size(A.array)
+    for i in eachindex(A)
+      if A.touched[i]
+        r.array[i]=Gridap.Arrays.evaluate!(rc.array[i],k,A.array[i],B.array[i])
+      end
     end
+    r
   end
-  r
 end
-
 
 function Gridap.Arrays.return_cache(
   k::typeof(setup_bulk_to_skeleton_l2_projected_fields),
@@ -815,4 +851,10 @@ end
 # facets of the underlying background model.
 function Gridap.FESpaces._compute_cell_ids(uh,ttrian::SkeletonTriangulation)
   collect(1:num_cells(ttrian))
+end
+
+function Gridap.Arrays.evaluate!(cache,
+                                 k::Gridap.Fields.DensifyInnerMostBlockLevelMap,
+                                 x::Number)
+  x
 end
