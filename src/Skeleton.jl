@@ -397,7 +397,6 @@ end
 function _transform_face_to_cell_lface_expanded_array(glue,
               face_array::Gridap.Arrays.CompressedArray{<:ArrayBlock})
   ftype_to_block_layout=_get_block_layout(face_array.values)
-  println(ftype_to_block_layout)
   T=eltype(face_array.values[1])
   if length(ftype_to_block_layout[1][1]) == 1
     TB=Gridap.Fields.VectorBlock{T}
