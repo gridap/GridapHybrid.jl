@@ -4,6 +4,7 @@ using GridapHybrid
 using FillArrays
 using IterativeSolvers
 using Printf
+using LinearAlgebra
 
 include("P_m.jl")
 
@@ -13,7 +14,7 @@ function M1_to_M0(uh1, M0, dΩ, d∂K)
   M1 = Gridap.FESpaces.get_fe_space(uh1)
   vh0 = get_fe_basis(M0)
   uh0 = get_trial_fe_basis(M0)
-  dcM = ∫(vh0 * uh0)d∂K
+  dcM = ∫(vh0⋅uh0)d∂K
   M = assemble_matrix(dcM, M0, M0)
 
   ∂K_diam_array = get_array(∫(1)d∂K)
@@ -23,7 +24,7 @@ function M1_to_M0(uh1, M0, dΩ, d∂K)
 
   uh0_in_M1 = M0_to_M1(vh0, M0, M1, d∂K)
   # dcb = ∫(uh1 * uh0_in_M1 * (K_diam_cf / ∂K_diam_cf))d∂K
-  dcb = ∫(uh1 * uh0_in_M1)d∂K
+  dcb = ∫(uh1⋅uh0_in_M1)d∂K
 
   b = assemble_vector(dcb, M0)
   FEFunction(M0, M \ b)
@@ -60,8 +61,8 @@ function M0_to_M1(uh0::Union{<:Gridap.FESpaces.FEBasis,<:Gridap.FESpaces.FEFunct
   μ = get_fe_basis(M1)
   v = get_trial_fe_basis(M1)
 
-  A = ∫(μ * v)d∂K
-  B = ∫(μ * uh0t)d∂K
+  A = ∫(μ ⋅ v)d∂K
+  B = ∫(μ ⋅ uh0t)d∂K
 
   # [c][f][f,f]
   A_array = _remove_sum_facets(_remove_densify(Gridap.CellData.get_array(A)))
@@ -107,13 +108,15 @@ end
 # M0  : coarse space
 # dΩ  : bulk measure
 # d∂K : skeleton measure
-function nonnested_mg_2_level_v_cycle!(x, op1, A0, M0, dΩ, d∂K; rtol=1.0e-06, maxiter=10)
+function nonnested_mg_2_level_v_cycle!(x, op1, A0, M0, dΩ, d∂K;
+                                       rtol=1.0e-06, maxiter=10, smooth_iter=2)
   # TO-DO: - sign should not be here.
   #        for unknown reason, matrix is symmetric negative definite
-  A1 = -op1.skeleton_op.op.matrix
+  A1 = op1.skeleton_op.op.matrix
   b1 = op1.skeleton_op.op.vector
-
   M1 = op1.skeleton_op.test
+
+  A0=lu(A0)
 
   r = b1 - A1 * x  # dynamic memory alloc
   nrm_r0 = norm(r)
@@ -123,10 +126,10 @@ function nonnested_mg_2_level_v_cycle!(x, op1, A0, M0, dΩ, d∂K; rtol=1.0e-06,
   @printf "%6s  %12s" "Iter" "Rel res\n"
   while current_iter <= maxiter && rel_res > rtol
     @printf "%6i  %12.4e\n" current_iter rel_res
-    smooth!(x, A1, b1; maxiter=2)
+    smooth!(x, A1, b1; maxiter=smooth_iter)
     r .= b1 .- A1 * x  # dynamic memory alloc
     I1_B0_Q0!(x, M1, A1, r, A0, M0, dΩ, d∂K)
-    smooth!(x, A1, b1; maxiter=2)
+    smooth!(x, A1, b1; maxiter=smooth_iter)
     r .= b1 .- A1 * x
     nrm_r = norm(r)
     rel_res = nrm_r / nrm_r0
@@ -145,8 +148,8 @@ function I1_B0_Q0!(x, M1, A1, b1, A0, M0, dΩ, d∂K)
   # To-Do: In the following bunch of lines I am doing something
   # numerically that can be just be performed symbollicaly.
   # Namely to transform a SkeletonArray to a FacetArray.
-  a(u, v) = ∫(v * u)d∂K
-  l(v) = ∫(v * δh1_∂K)d∂K
+  a(u, v) = ∫(v ⋅ u)d∂K
+  l(v) = ∫(v ⋅ δh1_∂K)d∂K
   Aδh1 = assemble_matrix(a, M1, M1)
   bδh1 = assemble_vector(l, M1)
   δh1 = FEFunction(M1, Aδh1 \ bδh1)
@@ -157,4 +160,3 @@ end
 function smooth!(x, A, b; maxiter=1)
   gauss_seidel!(x, A, b; maxiter=maxiter)
 end
-
