@@ -15,44 +15,45 @@ struct SkeletonGrid{Dc,Dp,P,A,B,C,D} <: Grid{Dc,Dp}
   cell_lface_nodes::B
   ftype_freffe::C
   cell_lface_ftype::D
-  function SkeletonGrid(grid::Grid)
-    D = num_cell_dims(grid)
-    Dp = num_point_dims(grid)
-    node_coord = get_node_coordinates(grid)
-    cell_ctype = get_cell_type(grid)
-    ctype_reffe       = get_reffes(grid)
-    @notimplementedif length(ctype_reffe) != 1
-    reffe = first(ctype_reffe)
-    freffes = get_reffaces(ReferenceFE{D-1},reffe)
-    @notimplementedif length(freffes) != 1
-    ftype_freffe = [first(freffes),]
+end
 
-    ####
-    ctype_lface_ftype = map(reffe->get_face_type(reffe,D-1),ctype_reffe)
-    cell_lface_ftype  = expand_cell_data(ctype_lface_ftype,cell_ctype)
-    ###
+function SkeletonGrid(grid::Grid)
+  D = num_cell_dims(grid)
+  Dp = num_point_dims(grid)
+  node_coord = get_node_coordinates(grid)
+  cell_ctype = get_cell_type(grid)
+  ctype_reffe       = get_reffes(grid)
+  @notimplementedif length(ctype_reffe) != 1
+  reffe = first(ctype_reffe)
+  freffes = get_reffaces(ReferenceFE{D-1},reffe)
+  @notimplementedif length(freffes) != 1
+  ftype_freffe = [first(freffes),]
 
-    cell_nodes = get_cell_node_ids(grid)
-    function f(reffe)
-      lface_to_lnodes=get_face_nodes(reffe,D-1)
-      ArrayBlock(lface_to_lnodes,[true for i=1:length(lface_to_lnodes)])
-    end
-    ctype_lface_to_lnodes = map(f,ctype_reffe)
-    cell_lface_to_lnodes  = expand_cell_data(ctype_lface_to_lnodes,cell_ctype)
-    m=lazy_map(Reindex,cell_nodes)
-    fi = testitem(cell_lface_to_lnodes)
-    mi = testitem(m)
-    T = return_type(mi, fi)
-    cell_lface_nodes=LazyArray(T,m,cell_lface_to_lnodes)
+  ####
+  ctype_lface_ftype = map(reffe->get_face_type(reffe,D-1),ctype_reffe)
+  cell_lface_ftype  = expand_cell_data(ctype_lface_ftype,cell_ctype)
+  ###
 
-    A = typeof(node_coord)
-    B = typeof(cell_lface_nodes)
-    C = typeof(ftype_freffe)
-    E = typeof(cell_lface_ftype)
-    P = typeof(grid)
-    new{D-1,Dp,P,A,B,C,E}(
-      grid,node_coord,cell_lface_nodes,ftype_freffe,cell_lface_ftype)
+  cell_nodes = get_cell_node_ids(grid)
+  function f(reffe)
+    lface_to_lnodes=get_face_nodes(reffe,D-1)
+    ArrayBlock(lface_to_lnodes,[true for i=1:length(lface_to_lnodes)])
   end
+  ctype_lface_to_lnodes = map(f,ctype_reffe)
+  cell_lface_to_lnodes  = expand_cell_data(ctype_lface_to_lnodes,cell_ctype)
+  m=lazy_map(Reindex,cell_nodes)
+  fi = testitem(cell_lface_to_lnodes)
+  mi = testitem(m)
+  T = return_type(mi, fi)
+  cell_lface_nodes=LazyArray(T,m,cell_lface_to_lnodes)
+
+  A = typeof(node_coord)
+  B = typeof(cell_lface_nodes)
+  C = typeof(ftype_freffe)
+  E = typeof(cell_lface_ftype)
+  P = typeof(grid)
+  new{D-1,Dp,P,A,B,C,E}(
+    grid,node_coord,cell_lface_nodes,ftype_freffe,cell_lface_ftype)
 end
 
 Geometry.get_node_coordinates(a::SkeletonGrid) = a.node_coord
@@ -115,32 +116,33 @@ struct SkeletonTriangulation{Dc,Dp,A,B,C} <: Triangulation{Dc,Dp}
   grid::B
   sign_flip::C
   glue::Gridap.Geometry.FaceToCellGlue
-  function SkeletonTriangulation(model::DiscreteModel)
-    A     = typeof(model)
-    D     = num_cell_dims(model)
-    mgrid = get_grid(model)
-    fgrid = Grid(ReferenceFE{D-1},model)
-    glue =  Gridap.Geometry.FaceToCellGlue(get_grid_topology(model),
-                                           mgrid,
-                                           fgrid,
-                                           collect(1:num_facets(model)),
-                                           Fill(Int8(1),num_facets(model)))
-    sgrid = SkeletonGrid(mgrid)
-    B = typeof(sgrid)
+end
 
-    # Generate sign_flip
-    # TO-DO: here I am reusing the machinery for global RT FE spaces.
-    #        Sure there is a way to decouple this from global RT FE spaces.
-    function _get_sign_flip(model)
-      basis,reffe_args,reffe_kwargs = ReferenceFE(raviart_thomas,Float64,0)
-      cell_reffe = ReferenceFE(model,basis,reffe_args...;reffe_kwargs...)
-      Gridap.FESpaces.get_sign_flip(model,cell_reffe)
-    end
-    sign_flip=_get_sign_flip(model)
+function SkeletonTriangulation(model::DiscreteModel)
+  A     = typeof(model)
+  D     = num_cell_dims(model)
+  mgrid = get_grid(model)
+  fgrid = Grid(ReferenceFE{D-1},model)
+  glue =  Gridap.Geometry.FaceToCellGlue(get_grid_topology(model),
+                                         mgrid,
+                                         fgrid,
+                                         collect(1:num_facets(model)),
+                                         Fill(Int8(1),num_facets(model)))
+  sgrid = SkeletonGrid(mgrid)
+  B = typeof(sgrid)
 
-    C = typeof(sign_flip)
-    new{D-1,D,A,B,C}(model,sgrid,sign_flip,glue)
+  # Generate sign_flip
+  # TO-DO: here I am reusing the machinery for global RT FE spaces.
+  #        Sure there is a way to decouple this from global RT FE spaces.
+  function _get_sign_flip(model)
+    basis,reffe_args,reffe_kwargs = ReferenceFE(raviart_thomas,Float64,0)
+    cell_reffe = ReferenceFE(model,basis,reffe_args...;reffe_kwargs...)
+    Gridap.FESpaces.get_sign_flip(model,cell_reffe)
   end
+  sign_flip=_get_sign_flip(model)
+
+  C = typeof(sign_flip)
+  new{D-1,D,A,B,C}(model,sgrid,sign_flip,glue)
 end
 
 Skeleton(args...) = SkeletonTriangulation(args...)
@@ -201,8 +203,28 @@ function Gridap.FESpaces.get_cell_fe_data(
   sface_to_data
 end
 
-function Geometry.best_target(a::BodyFittedTriangulation{Dca},
-                              b::BodyFittedTriangulation{Dcb}) where {Dca,Dcb}
+function Geometry.best_target(a::BodyFittedTriangulation{1},
+                              b::BodyFittedTriangulation{2}) where {Dca,Dcb}
+  _best_target(a,b)
+end
+
+function Geometry.best_target(a::BodyFittedTriangulation{2},
+                              b::BodyFittedTriangulation{1}) where {Dca,Dcb}
+  _best_target(a,b)
+end
+
+function Geometry.best_target(a::BodyFittedTriangulation{2},
+                              b::BodyFittedTriangulation{3}) where {Dca,Dcb}
+  _best_target(a,b)
+end
+
+function Geometry.best_target(a::BodyFittedTriangulation{3},
+                              b::BodyFittedTriangulation{2}) where {Dca,Dcb}
+  _best_target(a,b)
+end
+
+function _best_target(a::BodyFittedTriangulation{Dca},
+                      b::BodyFittedTriangulation{Dcb}) where {Dca,Dcb}
   @assert Dca==Dcb-1 || Dca-1==Dcb
   @assert get_background_model(a)===get_background_model(b)
   Skeleton(get_background_model(a))

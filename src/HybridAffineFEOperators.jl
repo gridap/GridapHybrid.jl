@@ -1,7 +1,7 @@
 struct HybridAffineFEOperator{TB,TS} <: FEOperator
     weakform::Function
-    trial::MultiFieldFESpace
-    test::MultiFieldFESpace
+    trial
+    test
     bulk_fields::TB
     skeleton_fields::TS
     skeleton_op::AffineFEOperator
@@ -9,8 +9,8 @@ end
 
 function HybridAffineFEOperator(
   weakform::Function,
-  trial::MultiFieldFESpace,
-  test::MultiFieldFESpace,
+  trial,
+  test,
   bulk_fields::TB,
   skeleton_fields::TS) where {TB <: Vector{<:Integer},TS <: Vector{<:Integer}}
 

@@ -37,4 +37,9 @@ include("HybridLinearSolvers.jl")
 include("GridapAPIExtensions.jl")
 include("GridapTmpModifications.jl")
 
+using GridapDistributed
+using PartitionedArrays
+include("Distributed/Skeleton.jl")
+include("Distributed/HybridAffineFEOperators.jl")
+
 end # module
