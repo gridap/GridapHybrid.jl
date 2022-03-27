@@ -379,6 +379,16 @@ function Base.:(∘)(a::Gridap.Fields.VectorBlock{<:Gridap.Fields.Field},
   Gridap.Fields.ArrayBlock(v,a.touched)
 end
 
+function Gridap.Arrays.return_value(
+  k::Gridap.Fields.IntegrationMap,
+  aq::Gridap.Fields.VectorBlock{A},
+  w::Gridap.Fields.VectorBlock{B},
+  jq::Gridap.Fields.VectorBlock{C}) where{A,B,C}
+  c=Gridap.Arrays.return_cache(k,aq,w,jq)
+  Gridap.Arrays.evaluate!(c,k,aq,w,jq)
+end
+
+
 function Gridap.Arrays.return_cache(
   k::Gridap.Fields.IntegrationMap,
   aq::Gridap.Fields.VectorBlock{A},
