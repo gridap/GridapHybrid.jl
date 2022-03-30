@@ -14,11 +14,10 @@ end
 function SkeletonTriangulation(portion::GridapDistributed.NoGhost,
                                model::GridapDistributed.DistributedDiscreteModel)
   dtrians=map_parts(model.models, model.gids.partition) do model, partition
-    #cell_to_parent_cell=
-    #  findall([partition.lid_to_part[cell]==partition.part
-    #             for cell=1:length(partition.lid_to_part)])
-    #modelp=DiscreteModelPortion(model, cell_to_parent_cell)
-    Skeleton(model)
+    cell_to_parent_cell=
+      findall([partition.lid_to_part[cell]==partition.part
+                 for cell=1:length(partition.lid_to_part)])
+    Skeleton(model,cell_to_parent_cell)
   end
   GridapDistributed.DistributedTriangulation(dtrians,model)
 end

@@ -1,9 +1,12 @@
-struct SkeletonCompressedVector{T,G<:Gridap.Geometry.FaceToCellGlue} <: AbstractVector{Gridap.Fields.VectorBlock{T}}
+struct SkeletonCompressedVector{T,
+                                R,
+                                G<:Gridap.Geometry.FaceToCellGlue} <: AbstractVector{Gridap.Fields.VectorBlock{T}}
   ctype_lface_pindex_to_value::Vector{Vector{Vector{T}}}
+  cell_grid::R
   glue::G
 end
 
-function _compressed_vector_from_glue(::Type{T}, glue) where T
+function _compressed_vector_from_glue(::Type{T}, glue, cell_grid) where T
   ctype_to_vector_block=
     Vector{Gridap.Fields.VectorBlock{T}}(undef,length(glue.ctype_to_lface_to_ftype))
   for ctype=1:length(glue.ctype_to_lface_to_ftype)
@@ -13,11 +16,11 @@ function _compressed_vector_from_glue(::Type{T}, glue) where T
      t.=true
      ctype_to_vector_block[ctype]=Gridap.Fields.ArrayBlock(v,t)
   end
-  Gridap.Arrays.CompressedArray(ctype_to_vector_block, glue.cell_to_ctype)
+  Gridap.Arrays.CompressedArray(ctype_to_vector_block, get_cell_type(cell_grid))
 end
 
 function Gridap.Arrays.array_cache(a::SkeletonCompressedVector{T}) where {T}
-   _compressed_vector_from_glue(T,a.glue)
+   _compressed_vector_from_glue(T,a.glue,a.cell_grid)
 end
 
 function Base.getindex(a::SkeletonCompressedVector,cell::Integer)
@@ -27,7 +30,7 @@ end
 
 function Gridap.Arrays.getindex!(cache,a::SkeletonCompressedVector,cell::Integer)
    vb=cache[cell]
-   ctype=a.glue.cell_to_ctype[cell]
+   ctype=get_cell_type(a.cell_grid)[cell]
    for lface=1:length(vb)
     p = a.glue.cell_to_lface_to_pindex.ptrs[cell]-1
     pindex = a.glue.cell_to_lface_to_pindex.data[p+lface]
@@ -36,13 +39,13 @@ function Gridap.Arrays.getindex!(cache,a::SkeletonCompressedVector,cell::Integer
    vb
 end
 
-Base.size(a::SkeletonCompressedVector) = (length(a.glue.cell_to_ctype),)
+Base.size(a::SkeletonCompressedVector) = (num_cells(a.cell_grid),)
 
 Base.IndexStyle(::Type{<:SkeletonCompressedVector}) = IndexLinear()
 
 function Gridap.Arrays.lazy_map(k::Gridap.Fields.LinearCombinationMap,
                   ::Type{T},b::SkeletonCompressedVector,c::Fill) where T
-  d = Gridap.Arrays.CompressedArray([c.value,],Fill(1,length(c)))
+  d = Gridap.Arrays.CompressedArray([c.value,],Fill(1,num_cells(b.cell_grid)))
   lazy_map(k,T,b,d)
 end
 
@@ -50,7 +53,7 @@ function Gridap.Arrays.lazy_map(k::Gridap.Fields.LinearCombinationMap,
                                 ::Type{T},
                                 b::SkeletonCompressedVector,
                                 c::Gridap.Arrays.CompressedArray{<:Gridap.Fields.VectorBlock}) where T
-  if c.ptrs === b.glue.cell_to_ctype || c.ptrs == b.glue.cell_to_ctype
+  if c.ptrs === get_cell_type(b.cell_grid) || c.ptrs == get_cell_type(b.cell_grid)
     ET=eltype(T)
     ctype_lface_pindex_to_r = Vector{Vector{Vector{ET}}}(undef,length(b.ctype_lface_pindex_to_value))
     for (ctype, lface_pindex_to_value) in enumerate(b.ctype_lface_pindex_to_value)
@@ -67,15 +70,11 @@ function Gridap.Arrays.lazy_map(k::Gridap.Fields.LinearCombinationMap,
       end
       ctype_lface_pindex_to_r[ctype] = lface_pindex_to_r
     end
-    SkeletonCompressedVector(ctype_lface_pindex_to_r,b.glue)
+    SkeletonCompressedVector(ctype_lface_pindex_to_r,b.cell_grid,b.glue)
   else
     Gridap.Helpers.@notimplemented
   end
 end
-
-
-
-
 
 function Gridap.Arrays.lazy_map(
   k::typeof(Gridap.Arrays.evaluate),
@@ -99,7 +98,7 @@ function Gridap.Arrays.lazy_map(
     end
     ctype_lface_pindex_to_r[ctype] = lface_pindex_to_r
   end
-  SkeletonCompressedVector(ctype_lface_pindex_to_r,b.glue)
+  SkeletonCompressedVector(ctype_lface_pindex_to_r,b.cell_grid,b.glue)
 end
 
 function Gridap.Arrays.lazy_map(
@@ -125,7 +124,7 @@ function Gridap.Arrays.lazy_map(
     end
     ctype_lface_pindex_to_r[ctype] = lface_pindex_to_r
   end
-  SkeletonCompressedVector(ctype_lface_pindex_to_r,b.glue)
+  SkeletonCompressedVector(ctype_lface_pindex_to_r,b.cell_grid,b.glue)
 end
 
 function Gridap.Arrays.lazy_map(
@@ -150,7 +149,7 @@ function Gridap.Arrays.lazy_map(
     end
     ctype_lface_pindex_to_r[ctype] = lface_pindex_to_r
   end
-  SkeletonCompressedVector(ctype_lface_pindex_to_r,b.glue)
+  SkeletonCompressedVector(ctype_lface_pindex_to_r,b.cell_grid,b.glue)
 end
 
 
@@ -280,24 +279,26 @@ function Gridap.Arrays.lazy_map(
 end
 
 
-struct SkeletonVectorFromCellVector{T,G,V} <: AbstractVector{Gridap.Fields.VectorBlock{T}}
+struct SkeletonVectorFromCellVector{T,G,R,V} <: AbstractVector{Gridap.Fields.VectorBlock{T}}
   glue::G
+  cell_grid::R
   cell_vector::V
-  function SkeletonVectorFromCellVector(glue,cell_vector)
+  function SkeletonVectorFromCellVector(glue,cell_grid,cell_vector)
     G=typeof(glue)
+    R=typeof(cell_grid)
     V=typeof(cell_vector)
     T=eltype(V)
-    new{T,G,V}(glue,cell_vector)
+    new{T,G,R,V}(glue,cell_grid,cell_vector)
   end
 end
 
-Base.size(a::SkeletonVectorFromCellVector) = (length(a.glue.cell_to_ctype),)
+Base.size(a::SkeletonVectorFromCellVector) = (num_cells(a.cell_grid),)
 
 Base.IndexStyle(::Type{<:SkeletonVectorFromCellVector}) = IndexLinear()
 
 function Gridap.Arrays.array_cache(a::SkeletonVectorFromCellVector{T}) where T
    cvc=array_cache(a.cell_vector)
-   vbc=_compressed_vector_from_glue(T,a.glue)
+   vbc=_compressed_vector_from_glue(T,a.glue,a.cell_grid)
    cvc,vbc
 end
 

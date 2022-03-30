@@ -32,14 +32,6 @@ function Gridap.FESpaces._collect_cell_matrix_and_vector(
   end
 end
 
-
-function _collect_cell_matrix_and_vector(trial, test, matvec, mat, vec)
-  matvecdata = _collect_cell_matvec(trial,test,matvec)
-  matdata = collect_cell_matrix(trial,test,mat)
-  vecdata = collect_cell_vector(test,vec)
-  (matvecdata, matdata, vecdata)
-end
-
 function _add_static_condensation(
    matvec::GridapDistributed.DistributedDomainContribution,
    bulk_fields, skeleton_fields)
@@ -69,11 +61,7 @@ function _compute_hybridizable_from_skeleton_free_dof_values(
     matvec               :: GridapDistributed.DistributedDomainContribution,
     bulk_fields, skeleton_fields)
 
-   values=map_parts(GridapDistributed.local_views(skeleton_fe_function),
-             GridapDistributed.local_views(trial_hybridizable),
-             GridapDistributed.local_views(test_hybridizable),
-             GridapDistributed.local_views(trial_skeleton),
-             GridapDistributed.local_views(matvec))  do skel_fe, trial_hyb, test_hyb, trial_skel, matvec
+    function f(skel_fe, trial_hyb, test_hyb, trial_skel, matvec)
       _compute_hybridizable_from_skeleton_free_dof_values(skel_fe,
                                                           trial_hyb,
                                                           test_hyb,
@@ -81,6 +69,16 @@ function _compute_hybridizable_from_skeleton_free_dof_values(
                                                           matvec,
                                                           bulk_fields,
                                                           skeleton_fields)
-   end
-   PVector(values,trial_hybridizable.gids)
+    end
+    # f(skeleton_fe_function.fields.parts[1],
+    #   trial_hybridizable.part_fe_space.parts[1],
+    #   test_hybridizable.part_fe_space.parts[1],
+    #   trial_skeleton.spaces.parts[1],
+    #   matvec.contribs.parts[1])
+    values=map_parts(f,GridapDistributed.local_views(skeleton_fe_function),
+             GridapDistributed.local_views(trial_hybridizable),
+             GridapDistributed.local_views(test_hybridizable),
+             GridapDistributed.local_views(trial_skeleton),
+             GridapDistributed.local_views(matvec))
+    PVector(values,trial_hybridizable.gids)
 end

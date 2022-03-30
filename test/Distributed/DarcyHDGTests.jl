@@ -11,7 +11,7 @@ using GridapHybrid
 
 function main(parts)
   partition = (0,1,0,1)
-  cells = (2,2)
+  cells = (4,4)
   model = CartesianDiscreteModel(parts,partition,cells)
   order=1
   solve_darcy_lhdg(model,order)
@@ -74,11 +74,18 @@ function solve_darcy_lhdg(model,order)
     yh = get_fe_basis(Y)
     xh = get_trial_fe_basis(X)
 
-    (uh,ph,lh) = xh
-    (vh,qh,mh) = yh
+    # (uh,ph,lh) = xh
+    # (vh,qh,mh) = yh
 
-    ∫( vh⋅uh - (∇⋅vh)*ph - ∇(qh)⋅uh )dΩ
-    ∫((vh⋅n)*lh)d∂K
+    # ∫( vh⋅uh - (∇⋅vh)*ph - ∇(qh)⋅uh )dΩ
+    # (vh⋅n)
+    # (vh⋅n)*lh
+    # ∫((vh⋅n)*lh)d∂K
+    # ∫(qh*(uh⋅n))d∂K
+    # ∫(τ*qh*ph*(n⋅nₒ))d∂K
+    # ∫(mh*(uh⋅n))d∂K
+    # ∫(τ*mh*ph*(n⋅nₒ))d∂K
+    # ∫(τ*mh*lh*(n⋅nₒ))d∂K
 
     a((uh,ph,lh),(vh,qh,mh)) = ∫( vh⋅uh - (∇⋅vh)*ph - ∇(qh)⋅uh )dΩ +
                               ∫((vh⋅n)*lh)d∂K +

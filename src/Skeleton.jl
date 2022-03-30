@@ -52,7 +52,7 @@ function SkeletonGrid(grid::Grid)
   C = typeof(ftype_freffe)
   E = typeof(cell_lface_ftype)
   P = typeof(grid)
-  new{D-1,Dp,P,A,B,C,E}(
+  SkeletonGrid{D-1,Dp,P,A,B,C,E}(
     grid,node_coord,cell_lface_nodes,ftype_freffe,cell_lface_ftype)
 end
 
@@ -99,7 +99,7 @@ function Gridap.Arrays.return_type(k::Reindex,i::VectorBlock{<:Vector{<:Integer}
   TR=eltype(k.values)
   VectorBlock{Vector{TR}}
 end
-# Default return_values fails because one(::VectorBlock{<:Vector{<:Integer}}) is NOT defined
+# Default return_value fails because one(::VectorBlock{<:Vector{<:Integer}}) is NOT defined
 # This justifies why I had to define the following function
 function Gridap.Arrays.return_value(k::Reindex,i::VectorBlock{<:Vector{<:Integer}})
   evaluate(k,i)
@@ -118,6 +118,15 @@ struct SkeletonTriangulation{Dc,Dp,A,B,C} <: Triangulation{Dc,Dp}
   glue::Gridap.Geometry.FaceToCellGlue
 end
 
+# Generate sign_flip
+# TO-DO: here I am reusing the machinery for global RT FE spaces.
+#        Sure there is a way to decouple this from global RT FE spaces.
+function _get_sign_flip(model)
+  basis,reffe_args,reffe_kwargs = ReferenceFE(raviart_thomas,Float64,0)
+  cell_reffe = ReferenceFE(model,basis,reffe_args...;reffe_kwargs...)
+  Gridap.FESpaces.get_sign_flip(model,cell_reffe)
+end
+
 function SkeletonTriangulation(model::DiscreteModel)
   A     = typeof(model)
   D     = num_cell_dims(model)
@@ -131,18 +140,84 @@ function SkeletonTriangulation(model::DiscreteModel)
   sgrid = SkeletonGrid(mgrid)
   B = typeof(sgrid)
 
-  # Generate sign_flip
-  # TO-DO: here I am reusing the machinery for global RT FE spaces.
-  #        Sure there is a way to decouple this from global RT FE spaces.
-  function _get_sign_flip(model)
-    basis,reffe_args,reffe_kwargs = ReferenceFE(raviart_thomas,Float64,0)
-    cell_reffe = ReferenceFE(model,basis,reffe_args...;reffe_kwargs...)
-    Gridap.FESpaces.get_sign_flip(model,cell_reffe)
-  end
   sign_flip=_get_sign_flip(model)
 
   C = typeof(sign_flip)
-  new{D-1,D,A,B,C}(model,sgrid,sign_flip,glue)
+  SkeletonTriangulation{D-1,D,A,B,C}(model,sgrid,sign_flip,glue)
+end
+
+function _find_faces_touched_by_cells(cell_to_parent_cell,
+                                      cells_to_facets::Table,
+                                      facets_to_cells::Table)
+
+    nfacets = 0
+    touched=Dict{Int,Bool}()
+    cache=array_cache(cell_to_parent_cell)
+    for i in eachindex(cell_to_parent_cell)
+      cell = getindex!(cache,cell_to_parent_cell,i)
+      a = cells_to_facets.ptrs[cell]
+      b = cells_to_facets.ptrs[cell+1]-1
+      for j=a:b
+         facet=cells_to_facets.data[j]
+         if !(facet in keys(touched))
+            touched[facet]=true
+            nfacets+=1
+         end
+      end
+    end
+    touched=Dict{Int,Bool}()
+    T = eltype(eltype(cells_to_facets))
+    ifacet_to_facet = zeros(T,nfacets)
+    facet_to_icell = ones(T,length(facets_to_cells))
+    nfacets = 0
+    for i in eachindex(cell_to_parent_cell)
+      cell = getindex!(cache,cell_to_parent_cell,i)
+      a = cells_to_facets.ptrs[cell]
+      b = cells_to_facets.ptrs[cell+1]-1
+      for j=a:b
+         facet=cells_to_facets.data[j]
+         if !(facet in keys(touched))
+            touched[facet]=true
+            nfacets+=1
+            ifacet_to_facet[nfacets]=facet
+            c = facets_to_cells.ptrs[facet]
+            d = facets_to_cells.ptrs[facet+1]
+            if ((d-c)==2)
+              if (facets_to_cells.data[d-1]==cell)
+                facet_to_icell[facet]=2
+              end
+            end
+         end
+      end
+    end
+    ifacet_to_facet, facet_to_icell
+end
+
+function SkeletonTriangulation(model::DiscreteModel{D},
+                               cell_to_parent_cell::AbstractVector{<:Integer}) where D
+  topo            = get_grid_topology(model)
+  cells_to_facets = Table(get_faces(topo,D,D-1))
+  facets_to_cells = Table(get_faces(topo,D-1,D))
+  ifacet_to_facet, facet_to_icell = _find_faces_touched_by_cells(cell_to_parent_cell,
+                                                                 cells_to_facets,
+                                                                 facets_to_cells)
+  facet_grid      = Grid(ReferenceFE{D-1},model)
+  cell_grid       = get_grid(model)
+  ifacet_grid     = view(facet_grid,ifacet_to_facet)
+
+  glue =  Gridap.Geometry.FaceToCellGlue(topo,
+                                         cell_grid,
+                                         ifacet_grid,
+                                         ifacet_to_facet,
+                                         facet_to_icell)
+  A = typeof(model)
+  cell_grid = view(cell_grid,cell_to_parent_cell)
+  sgrid = SkeletonGrid(cell_grid)
+  B     = typeof(sgrid)
+  sign_flip=_get_sign_flip(model)
+  sign_flip=lazy_map(Reindex(sign_flip),cell_to_parent_cell)
+  C = typeof(sign_flip)
+  SkeletonTriangulation{D-1,D,A,B,C}(model,sgrid,sign_flip,glue)
 end
 
 Skeleton(args...) = SkeletonTriangulation(args...)
@@ -232,15 +307,56 @@ end
 
 # TO-DO: dirty. I cannot check whether a===b, as a and b might be created from scratch
 #               along the process
+# TO-DO: fix current implementation of this function. It is nothing but a quick
+#        and dirty workaround. Possibly using TriangulationView and GridView.
 function Geometry.best_target(a::SkeletonTriangulation{Dc},
                               b::SkeletonTriangulation{Dc}) where {Dc}
-  a
+  agrid=a.grid.parent
+  bgrid=b.grid.parent
+  if (typeof(agrid)==typeof(bgrid))
+    a
+  elseif (isa(agrid,Gridap.Geometry.GridView))
+    a
+  elseif (isa(bgrid,Gridap.Geometry.GridView))
+    b
+  else
+    @notimplemented
+  end
+
 end
 
+# TO-DO: fix current implementation of this function. It is nothing but a quick
+#        and dirty workaround. Possibly using TriangulationView and GridView.
 function CellData.change_domain_ref_ref(a::CellField,
                                         ttrian::SkeletonTriangulation,
-                                        sglue::SkeletonGlue,tglue::SkeletonGlue)
-  a
+                                        sglue::SkeletonGlue,
+                                        tglue::SkeletonGlue)
+
+  sgrid=sglue.trian.grid.parent
+  tgrid=tglue.trian.grid.parent
+  @assert get_background_model(sglue.trian)===get_background_model(tglue.trian)
+  if (typeof(sgrid)==typeof(tgrid) && !isa(sgrid,Gridap.Geometry.GridView))
+     a
+  else
+     if (!isa(sgrid,Gridap.Geometry.GridView) &&
+          isa(tgrid,Gridap.Geometry.GridView))
+        cell_to_parent_cell=tgrid.cell_to_parent_cell
+        a_field = Gridap.CellData.get_data(a)
+        a_field_view = lazy_map(Reindex(a_field),cell_to_parent_cell)
+        Gridap.CellData.similar_cell_field(a,a_field_view,ttrian,ReferenceDomain())
+     elseif (isa(sgrid,Gridap.Geometry.GridView) &&
+              !isa(tgrid,Gridap.Geometry.GridView))
+        cell_to_parent_cell=sgrid.cell_to_parent_cell
+        a_field = Gridap.CellData.get_data(a)
+        a_field_view = lazy_map(Reindex(a_field),cell_to_parent_cell)
+        Gridap.CellData.similar_cell_field(a,a_field_view,ttrian,ReferenceDomain())
+     else
+        scell_to_parent_cell=sgrid.cell_to_parent_cell
+        tcell_to_parent_cell=tgrid.cell_to_parent_cell
+        @notimplementedif !all(scell_to_parent_cell==tcell_to_parent_cell)
+        a
+     end
+  end
 end
 
 function Geometry.get_glue(trian::SkeletonTriangulation{D},::Val{D}) where D
@@ -271,12 +387,17 @@ function Geometry.get_glue(trian::SkeletonTriangulation{d},::Val{D}) where {d,D}
     poly = get_polytope(reffe)
     num_faces(poly,d)
   end
-  # Avoid allocations here
-  tcell_lface_mface = lazy_map(cell_ctype,cell_cell) do ctype, cell
+  function f(ctype, cell)
     nlfaces = ctype_nlfaces[ctype]
     fill(cell,nlfaces)
   end
-  tcell_lface_mface_map = _setup_tcell_lface_mface_map(d,trian.model,trian.glue)
+  # Avoid allocations here
+  # TO-THINK. I am not 100% sure if tcell_lface_mface now
+  #           holds the data it was planned to hold.
+  #           It does not cause trouble as it turns out tcell_lface_mface
+  #           is not currently being used.
+  tcell_lface_mface = lazy_map(f,cell_ctype,cell_cell)
+  tcell_lface_mface_map = _setup_tcell_lface_mface_map(d,trian.model,trian.grid.parent,trian.glue)
   SkeletonGlue(trian,tcell_lface_mface,tcell_lface_mface_map)
 end
 
@@ -290,38 +411,42 @@ function CellData.change_domain_ref_ref(
 
   if isa(strian,Triangulation{D,D})
     b=_restrict_to_skeleton_cell_field(ttrian.model,
+                                       ttrian.grid.parent,
                                        ttrian.glue,
                                        tglue.tcell_lface_mface_map,
                                        a)
   elseif isa(strian,Triangulation{D-1,D})
-    b=_restrict_to_skeleton_facet_field(ttrian.model,ttrian.glue,a)
+    b=_restrict_to_skeleton_facet_field(ttrian.model,ttrian.grid.parent,ttrian.glue,a)
   end
   CellData.similar_cell_field(a,b,ttrian,ReferenceDomain())
 end
 
 function _restrict_to_skeleton_cell_field(model,
+                                          cell_grid,
                                           glue,
                                           tface_to_mface_map,
                                           cell_fe_basis::Gridap.CellData.CellField)
   D = num_cell_dims(model)
   Gridap.Helpers.@check isa(get_triangulation(cell_fe_basis),Triangulation{D,D})
-  cell_a_q = _transform_cell_to_cell_lface_array(glue,
+  cell_a_q = _transform_cell_to_cell_lface_array(glue,cell_grid,
          Gridap.CellData.get_data(cell_fe_basis);
          add_naive_innermost_block_level=true)
   lazy_map(Broadcasting(∘),cell_a_q,tface_to_mface_map)
 end
 
 function _transform_cell_to_cell_lface_array(glue,
-                                            cell_array::Fill;
-                                            add_naive_innermost_block_level=false)
-    d = Gridap.Arrays.CompressedArray([cell_array.value,],Fill(1,length(cell_array)))
-    _transform_cell_to_cell_lface_array(glue,d;add_naive_innermost_block_level=add_naive_innermost_block_level)
+                                             cell_grid,
+                                             cell_array::Fill;
+                                             add_naive_innermost_block_level=false)
+    d = Gridap.Arrays.CompressedArray([cell_array.value,],Fill(1,num_cells(cell_grid)))
+    _transform_cell_to_cell_lface_array(glue,cell_grid,d;add_naive_innermost_block_level=add_naive_innermost_block_level)
 end
 
 
 function _transform_cell_to_cell_lface_array(glue,
-                                            cell_array::Gridap.Arrays.CompressedArray;
-                                            add_naive_innermost_block_level=false)
+                                             cell_grid,
+                                             cell_array::Gridap.Arrays.CompressedArray;
+                                             add_naive_innermost_block_level=false)
   T=typeof(cell_array.values[1])
   ctype_to_vector_block=
     Vector{Gridap.Fields.VectorBlock{T}}(undef,length(glue.ctype_to_lface_to_ftype))
@@ -338,13 +463,14 @@ function _transform_cell_to_cell_lface_array(glue,
   if add_naive_innermost_block_level
     ctype_to_vector_block=collect(lazy_map(AddNaiveInnerMostBlockLevelMap(),ctype_to_vector_block))
   end
-  Gridap.Arrays.CompressedArray(ctype_to_vector_block,glue.cell_to_ctype)
+  Gridap.Arrays.CompressedArray(ctype_to_vector_block,get_cell_type(cell_grid))
 end
 
 function _transform_cell_to_cell_lface_array(glue,
+  cell_grid,
   cell_array::AbstractVector;
   add_naive_innermost_block_level=false)
-  ctype_to_vector_block=SkeletonVectorFromCellVector(glue,cell_array)
+  ctype_to_vector_block=SkeletonVectorFromCellVector(glue,cell_grid,cell_array)
   if add_naive_innermost_block_level
     ctype_to_vector_block=collect(lazy_map(AddNaiveInnerMostBlockLevelMap(),ctype_to_vector_block))
   end
@@ -361,6 +487,7 @@ function _transform_cell_to_cell_lface_array(
 end
 
 function _restrict_to_skeleton_facet_field(model,
+                                           cell_grid,
                                            glue,
                                            facet_fe_function::Gridap.FESpaces.SingleFieldFEFunction)
   D = num_cell_dims(model)
@@ -371,6 +498,7 @@ function _restrict_to_skeleton_facet_field(model,
 end
 
 function _restrict_to_skeleton_facet_field(model,
+                                           cell_grid,
                                            glue,
                                            facet_fe_basis::Gridap.CellData.CellField)
 
@@ -379,11 +507,13 @@ function _restrict_to_skeleton_facet_field(model,
 
   _transform_face_to_cell_lface_expanded_array(
     glue,
+    cell_grid,
     Gridap.CellData.get_data(facet_fe_basis))
 end
 
 function _transform_face_to_cell_lface_expanded_array(
   glue,
+  cell_grid,
   face_array::Gridap.Arrays.LazyArray{<:Fill{typeof(transpose)}})
   Gridap.Helpers.@check typeof(face_array.args[1]) <: Gridap.Arrays.CompressedArray
 
@@ -393,12 +523,13 @@ function _transform_face_to_cell_lface_expanded_array(
     v[i]=evaluate(transpose,face_array.args[1].values[i])
   end
   face_array_compressed=Gridap.Arrays.CompressedArray(v,face_array.args[1].ptrs)
-  _transform_face_to_cell_lface_expanded_array(glue,face_array_compressed)
+  _transform_face_to_cell_lface_expanded_array(glue,cell_grid,face_array_compressed)
 end
 
 
 function _transform_face_to_cell_lface_expanded_array(glue,
-                                                     face_array::Fill)
+                                                      cell_grid,
+                                                      face_array::Fill)
   T=typeof(face_array.value)
   ctype_to_vector_block=
     Vector{Gridap.Fields.VectorBlock{T}}(undef,length(glue.ctype_to_lface_to_ftype))
@@ -413,11 +544,12 @@ function _transform_face_to_cell_lface_expanded_array(glue,
      end
      ctype_to_vector_block[ctype]=Gridap.Fields.ArrayBlock(v,t)
   end
-  Gridap.Arrays.CompressedArray(ctype_to_vector_block,glue.cell_to_ctype)
+  Gridap.Arrays.CompressedArray(ctype_to_vector_block,get_cell_type(cell_grid))
 end
 
 function _transform_face_to_cell_lface_expanded_array(glue,
-                                                     face_array::Gridap.Arrays.CompressedArray)
+                                                      cell_grid,
+                                                      face_array::Gridap.Arrays.CompressedArray)
   ftype_to_block_layout=_get_block_layout(face_array.values)
   T=eltype(face_array.values[1])
   if length(ftype_to_block_layout[1][1]) == 1
@@ -471,7 +603,7 @@ function _transform_face_to_cell_lface_expanded_array(glue,
      end
      ctype_to_vector_block[ctype]=Gridap.Fields.ArrayBlock(vf1,tf1)
   end
-  Gridap.Arrays.CompressedArray(ctype_to_vector_block,glue.cell_to_ctype)
+  Gridap.Arrays.CompressedArray(ctype_to_vector_block,get_cell_type(cell_grid))
 end
 
 function _get_block_layout(fields_array::AbstractArray{<:AbstractArray{<:Gridap.Fields.Field}})
@@ -501,13 +633,12 @@ Returns a cell-wise array which, for each cell, and each facet within the cell,
 returns the unit outward normal to the boundary of the cell.
 """
 function get_cell_normal_vector(s::SkeletonTriangulation)
-  cell_lface_normal=_get_cell_normal_vector(s.model, s.glue, _cell_lface_to_nref)
+  cell_lface_normal=_get_cell_normal_vector(s.model, s.grid.parent, s.glue, _cell_lface_to_nref)
   GenericCellField(cell_lface_normal,s,ReferenceDomain())
 end
 
 function _cell_lface_to_nref(args...)
-  model,glue = args[1],first(args[2:end])
-  cell_grid = get_grid(model)
+  model, cell_grid, glue = args[1],args[2],first(args[3:end])
   ## Reference normal
   function f(r)
     p = Gridap.ReferenceFEs.get_polytope(r)
@@ -518,7 +649,7 @@ function _cell_lface_to_nref(args...)
     lface_pindex_to_n
   end
   ctype_lface_pindex_to_nref = map(f, get_reffes(cell_grid))
-  SkeletonCompressedVector(ctype_lface_pindex_to_nref,glue)
+  SkeletonCompressedVector(ctype_lface_pindex_to_nref,cell_grid,glue)
 end
 
 """
@@ -528,6 +659,7 @@ returns the unit outward normal to the boundary of the cell owner of the facet.
 function get_cell_owner_normal_vector(s::SkeletonTriangulation)
   cell_owner_lface_normal=_get_cell_normal_vector(
      s.model,
+     s.grid.parent,
      s.glue,
      _cell_lface_to_owner_nref,
      s.sign_flip)
@@ -535,25 +667,28 @@ function get_cell_owner_normal_vector(s::SkeletonTriangulation)
 end
 
 function _cell_lface_to_owner_nref(args...)
-  model,glue,sign_flip = args
-  cell_lface_to_nref=_cell_lface_to_nref(model,glue)
+  model,cell_grid,glue,sign_flip = args
+  cell_lface_to_nref=_cell_lface_to_nref(model,cell_grid,glue)
   SkeletonOwnerNref(cell_lface_to_nref,sign_flip)
 end
 
-function _get_cell_normal_vector(model,glue,cell_lface_to_nref::Function,sign_flip=nothing)
-  cell_grid = get_grid(model)
+function _get_cell_normal_vector(model,
+                                 cell_grid,
+                                 glue,
+                                 cell_lface_to_nref::Function,
+                                 sign_flip=nothing)
 
-  cell_lface_to_nref = cell_lface_to_nref(model,glue,sign_flip)
+  cell_lface_to_nref = cell_lface_to_nref(model,cell_grid,glue,sign_flip)
   cell_lface_s_nref = lazy_map(Gridap.Fields.constant_field,cell_lface_to_nref)
 
   # Inverse of the Jacobian transpose
   cell_q_x = get_cell_map(cell_grid)
   cell_q_Jt = lazy_map(∇,cell_q_x)
   cell_q_invJt = lazy_map(Operation(Gridap.Fields.pinvJt),cell_q_Jt)
-  cell_lface_q_invJt = _transform_cell_to_cell_lface_array(glue, cell_q_invJt)
+  cell_lface_q_invJt = _transform_cell_to_cell_lface_array(glue, cell_grid, cell_q_invJt)
 
   # Change of domain
-  cell_lface_s_q = _setup_tcell_lface_mface_map(num_cell_dims(model)-1,model,glue)
+  cell_lface_s_q = _setup_tcell_lface_mface_map(num_cell_dims(model)-1,model,cell_grid,glue)
 
   cell_lface_s_invJt = lazy_map(∘,cell_lface_q_invJt,cell_lface_s_q)
   #face_s_n =
@@ -563,16 +698,17 @@ function _get_cell_normal_vector(model,glue,cell_lface_to_nref::Function,sign_fl
   #Fields.MemoArray(face_s_n)
 end
 
-function _setup_tcell_lface_mface_map(d,model,glue)
-  ctype_to_lface_to_pindex_to_qcoords=Gridap.Geometry._compute_face_to_q_vertex_coords_body(d,model,glue)
-  cell_lface_to_q_vertex_coords = SkeletonCompressedVector(
-                                  ctype_to_lface_to_pindex_to_qcoords.ctype_lface_pindex_to_value,
-                                  glue)
+function _setup_tcell_lface_mface_map(d,model,cell_grid,glue)
+  ctype_to_lface_to_pindex_to_qcoords=
+     Gridap.Geometry._compute_face_to_q_vertex_coords_body(d,model,glue)
+  cell_lface_to_q_vertex_coords =
+    SkeletonCompressedVector(ctype_to_lface_to_pindex_to_qcoords.ctype_lface_pindex_to_value,
+                             cell_grid,
+                             glue)
   f(p) = Gridap.ReferenceFEs.get_shapefuns(
          Gridap.ReferenceFEs.LagrangianRefFE(Float64,Gridap.ReferenceFEs.get_polytope(p),1))
 
   ################ TO-IMPROVE
-  cell_grid = get_grid(model)
   D = num_cell_dims(model)
   ctype_reffe = get_reffes(cell_grid)
   Gridap.Helpers.@notimplementedif length(ctype_reffe) != 1
@@ -584,13 +720,14 @@ function _setup_tcell_lface_mface_map(d,model,glue)
 
   ftype_to_shapefuns = map( f,  ftrian_reffes)
   face_to_shapefuns = expand_cell_data(ftype_to_shapefuns,glue.face_to_ftype)
-  cell_to_lface_to_shapefuns = transform_face_to_cell_lface_array(glue,face_to_shapefuns)
+  cell_to_lface_to_shapefuns = transform_face_to_cell_lface_array(glue,cell_grid,face_to_shapefuns)
   lazy_map(Gridap.Fields.linear_combination,
            cell_lface_to_q_vertex_coords,
            cell_to_lface_to_shapefuns)
 end
 
 function transform_face_to_cell_lface_array(glue,
+                                            cell_grid,
                                             face_array::Gridap.Arrays.CompressedArray,
                                             f::Function=identity)
   T=typeof(f(face_array.values[1]))
@@ -607,7 +744,7 @@ function transform_face_to_cell_lface_array(glue,
      end
      ctype_to_vector_block[ctype]=Gridap.Fields.ArrayBlock(v,t)
   end
-  Gridap.Arrays.CompressedArray(ctype_to_vector_block,glue.cell_to_ctype)
+  Gridap.Arrays.CompressedArray(ctype_to_vector_block,get_cell_type(cell_grid))
 end
 
 function Gridap.ReferenceFEs.expand_cell_data(

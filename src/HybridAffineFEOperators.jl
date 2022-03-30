@@ -121,25 +121,40 @@ function _compute_hybridizable_from_skeleton_free_dof_values(skeleton_fe_functio
     cell_wise_facets = _get_cell_wise_facets(model)
     cells_around_facets = _get_cells_around_facets(model)
 
+    if (isa(Γ.grid.parent,Gridap.Geometry.GridView))
+      cell_to_parent_cell = Γ.grid.parent.cell_to_parent_cell
+      ifacet_to_facet, facet_to_icell =
+       _find_faces_touched_by_cells(cell_to_parent_cell,
+          cell_wise_facets,
+          cells_around_facets)
+      #cells_around_facets=lazy_map(Reindex(cells_around_facets),ifacet_to_facet)
+    end
+
     nfields = length(bulk_fields) + length(skeleton_fields)
     m = Gridap.Fields.BlockMap(nfields, skeleton_fields)
     L = Gridap.FESpaces.get_fe_space(skeleton_fe_function)
+    L_cell_dof_ids = get_cell_dof_ids(L)
+    if (isa(Γ.grid.parent,Gridap.Geometry.GridView))
+      L_cell_dof_ids=lazy_map(Reindex(L_cell_dof_ids),ifacet_to_facet)
+    end
+
     lhₑ = lazy_map(m,
                  convert_cell_wise_dofs_array_to_facet_dofs_array(
                  cells_around_facets,
                  cell_wise_facets,
                  lhₖ,
-                 get_cell_dof_ids(L))...)
+                 L_cell_dof_ids)...)
 
     assem = SparseMatrixAssembler(trial_hybridizable, test_hybridizable)
-    lhₑ_dofs = get_cell_dof_ids(trial_hybridizable, get_triangulation(L))
+    Ltrian=get_triangulation(L)
+    if (isa(Γ.grid.parent,Gridap.Geometry.GridView))
+      Ltrian=view(Ltrian,ifacet_to_facet)
+    end
+    lhₑ_dofs = get_cell_dof_ids(trial_hybridizable, Ltrian)
     lhₑ_dofs = lazy_map(m, lhₑ_dofs.args[skeleton_fields]...)
 
-    Ω = trial_hybridizable[first(bulk_fields)]
-    Ω = get_triangulation(Ω)
-
     m = Gridap.Fields.BlockMap(length(bulk_fields), bulk_fields)
-    uhph_dofs = get_cell_dof_ids(trial_hybridizable, Ω)
+    uhph_dofs = get_cell_dof_ids(trial_hybridizable, Γ)
   # This last step is needed as get_cell_dof_ids(...) returns as many blocks
   # as fields in trial, regardless of the FEspaces defined on Ω or not
     uhph_dofs = lazy_map(m, uhph_dofs.args[bulk_fields]...)
@@ -188,9 +203,10 @@ function convert_cell_wise_dofs_array_to_facet_dofs_array(
       cells_around_facets,
       cell_wise_facets,
       cell_dofs::AbstractVector{<:AbstractVector{<:Real}},
-      facet_dofs_ids::AbstractVector{<:AbstractVector{<:Integer}})
-    glue = _generate_glue_among_facet_and_cell_wise_dofs_arrays(
-   cells_around_facets, cell_wise_facets, facet_dofs_ids)
+      facet_dofs_ids::AbstractVector{<:AbstractVector{<:Integer}},
+      ifacet_to_facet::AbstractVector{<:Integer}=IdentityVector(length(facet_dofs_ids)))
+   glue = _generate_glue_among_facet_and_cell_wise_dofs_arrays(
+   cells_around_facets, cell_wise_facets, facet_dofs_ids, ifacet_to_facet)
     k = ExtractFacetDofsFromCellDofsMap(cell_dofs)
     [lazy_map(k, glue)]
 end
@@ -198,30 +214,36 @@ end
 function _generate_glue_among_facet_and_cell_wise_dofs_arrays(
   cells_around_facets,
   cell_wise_facets,
-  facet_dof_ids::AbstractVector{<:AbstractVector{<:Integer}})
+  facet_dof_ids::AbstractVector{<:AbstractVector{<:Integer}},
+  ifacet_to_facet::AbstractVector{<:Integer}=IdentityVector(length(facet_dof_ids)))
 
-    c1 = array_cache(cells_around_facets)
-    c2 = array_cache(cell_wise_facets)
-    c3 = array_cache(facet_dof_ids)
+  @check length(ifacet_to_facet) == length(facet_dof_ids)
 
-    result = Vector{NTuple{3,Int}}(undef, length(facet_dof_ids))
-    current = 1
-    ndofs = 0
-    for facet_gid = 1:length(cells_around_facets)
-        cell_gid = Gridap.Arrays.getindex!(c1, cells_around_facets, facet_gid)[1]
-        current_cell_facets = Gridap.Arrays.getindex!(c2, cell_wise_facets, cell_gid)
-        pos = 1
-        for facet_gid_in_cell in current_cell_facets
-            ndofs = length(Gridap.Arrays.getindex!(c3, facet_dof_ids, facet_gid_in_cell))
-            if (facet_gid == facet_gid_in_cell)
-                break
-            else
-                pos = pos + ndofs
-            end
-        end
-        result[facet_gid] = (cell_gid, pos, ndofs)
-    end
-    result
+  facet_to_ifacet=Dict([facet=>ifacet for (ifacet,facet) in enumerate(ifacet_to_facet)])
+  
+  c1 = array_cache(cells_around_facets)
+  c2 = array_cache(cell_wise_facets)
+  c3 = array_cache(facet_dof_ids)
+
+  result = Vector{NTuple{3,Int}}(undef, length(facet_dof_ids))
+  current = 1
+  ndofs = 0
+  for (ifacet,facet_gid) in enumerate(ifacet_to_facet)
+      cell_gid = Gridap.Arrays.getindex!(c1, cells_around_facets, facet_gid)[1]
+      current_cell_facets = Gridap.Arrays.getindex!(c2, cell_wise_facets, cell_gid)
+      pos = 1
+      for facet_gid_in_cell in current_cell_facets
+          ndofs = length(Gridap.Arrays.getindex!(c3, facet_dof_ids, facet_gid_in_cell))
+
+          if (facet_gid == facet_gid_in_cell)
+              break
+          else
+              pos = pos + ndofs
+          end
+      end
+      result[ifacet] = (cell_gid, pos, ndofs)
+  end
+  result
 end
 
 function convert_cell_wise_dofs_array_to_facet_dofs_array(
@@ -362,10 +384,18 @@ function Gridap.FESpaces.get_cell_fe_data(
   tglue::SkeletonGlue) where Dc
     model = tglue.trian.model
     if Dc == num_cell_dims(model)
-        sface_to_data
+      if (isa(tglue.trian.grid.parent,Gridap.Geometry.GridView))
+        cell_to_parent_cell=tglue.trian.grid.parent.cell_to_parent_cell
+        sface_to_data = lazy_map(Reindex(sface_to_data),cell_to_parent_cell)
+      end
+      sface_to_data
     else
         @assert Dc == num_cell_dims(model) - 1
         cell_wise_facets = _get_cell_wise_facets(model)
+        if (isa(tglue.trian.grid.parent,Gridap.Geometry.GridView))
+          cell_to_parent_cell=tglue.trian.grid.parent.cell_to_parent_cell
+          cell_wise_facets = lazy_map(Reindex(cell_wise_facets),cell_to_parent_cell)
+        end
         restrict_facet_dof_ids_to_cell_boundary(cell_wise_facets, sface_to_data)
     end
 end
