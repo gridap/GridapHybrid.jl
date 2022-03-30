@@ -73,7 +73,7 @@ end
 
 function Gridap.FESpaces.solve!(uh, solver::LinearFESolver, op::HybridAffineFEOperator, cache)
   # Solve linear system defined on the skeleton
-    lh = solve(op.skeleton_op)
+    lh = solve(solver,op.skeleton_op)
 
   # Invoke weak form of the hybridizable system
     u = get_trial_fe_basis(op.trial)
