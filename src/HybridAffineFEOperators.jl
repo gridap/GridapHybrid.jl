@@ -27,6 +27,8 @@ function HybridAffineFEOperator(
   # Pair LHS and RHS terms associated to SkeletonTriangulation
     matvec, mat, vec = Gridap.FESpaces._pair_contribution_when_possible(obiform, oliform)
 
+
+
   # Add StaticCondensationMap to matvec terms
     matvec = _add_static_condensation(matvec, bulk_fields, skeleton_fields)
 
@@ -127,7 +129,6 @@ function _compute_hybridizable_from_skeleton_free_dof_values(skeleton_fe_functio
        _find_faces_touched_by_cells(cell_to_parent_cell,
           cell_wise_facets,
           cells_around_facets)
-      #cells_around_facets=lazy_map(Reindex(cells_around_facets),ifacet_to_facet)
     end
 
     nfields = length(bulk_fields) + length(skeleton_fields)
@@ -220,7 +221,7 @@ function _generate_glue_among_facet_and_cell_wise_dofs_arrays(
   @check length(ifacet_to_facet) == length(facet_dof_ids)
 
   facet_to_ifacet=Dict([facet=>ifacet for (ifacet,facet) in enumerate(ifacet_to_facet)])
-  
+
   c1 = array_cache(cells_around_facets)
   c2 = array_cache(cell_wise_facets)
   c3 = array_cache(facet_dof_ids)
@@ -471,7 +472,12 @@ end
 function Gridap.FESpaces.get_cell_fe_data(
   fun::typeof(Gridap.FESpaces.get_cell_is_dirichlet),sface_to_data,sglue::FaceToFaceGlue,tglue::SkeletonGlue)
     model = tglue.trian.model
+    grid  = tglue.trian.grid.parent
     cell_wise_facets = _get_cell_wise_facets(model)
+    if (isa(grid,Gridap.Geometry.GridView))
+      cell_to_parent_cell = grid.cell_to_parent_cell
+      cell_wise_facets=lazy_map(Reindex(cell_wise_facets),cell_to_parent_cell)
+    end
     fdofscb = restrict_facet_dof_ids_to_cell_boundary(cell_wise_facets, sface_to_data)
     _generate_cell_is_dirichlet(fdofscb)
 end

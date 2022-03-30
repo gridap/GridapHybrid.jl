@@ -127,7 +127,8 @@ function _get_sign_flip(model)
   Gridap.FESpaces.get_sign_flip(model,cell_reffe)
 end
 
-function SkeletonTriangulation(model::DiscreteModel)
+function SkeletonTriangulation(model::DiscreteModel,
+                               sign_flip=_get_sign_flip(model))
   A     = typeof(model)
   D     = num_cell_dims(model)
   mgrid = get_grid(model)
@@ -139,8 +140,6 @@ function SkeletonTriangulation(model::DiscreteModel)
                                          Fill(Int8(1),num_facets(model)))
   sgrid = SkeletonGrid(mgrid)
   B = typeof(sgrid)
-
-  sign_flip=_get_sign_flip(model)
 
   C = typeof(sign_flip)
   SkeletonTriangulation{D-1,D,A,B,C}(model,sgrid,sign_flip,glue)
@@ -194,7 +193,8 @@ function _find_faces_touched_by_cells(cell_to_parent_cell,
 end
 
 function SkeletonTriangulation(model::DiscreteModel{D},
-                               cell_to_parent_cell::AbstractVector{<:Integer}) where D
+                               cell_to_parent_cell::AbstractVector{<:Integer},
+                               sign_flip=_get_sign_flip(model)) where D
   topo            = get_grid_topology(model)
   cells_to_facets = Table(get_faces(topo,D,D-1))
   facets_to_cells = Table(get_faces(topo,D-1,D))
@@ -214,7 +214,6 @@ function SkeletonTriangulation(model::DiscreteModel{D},
   cell_grid = view(cell_grid,cell_to_parent_cell)
   sgrid = SkeletonGrid(cell_grid)
   B     = typeof(sgrid)
-  sign_flip=_get_sign_flip(model)
   sign_flip=lazy_map(Reindex(sign_flip),cell_to_parent_cell)
   C = typeof(sign_flip)
   SkeletonTriangulation{D-1,D,A,B,C}(model,sgrid,sign_flip,glue)

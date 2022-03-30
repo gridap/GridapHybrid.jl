@@ -65,14 +65,11 @@ function solve_darcy_lhdg(model,order)
     # FE formulation params
     τ = 1.0 # HDG stab parameter
 
-    degree = 2*(order+1)
+    degree = 2*order+1
     dΩ     = Measure(Ω,degree)
     n      = get_cell_normal_vector(∂K)
     nₒ     = get_cell_owner_normal_vector(∂K)
     d∂K    = Measure(∂K,degree)
-
-    yh = get_fe_basis(Y)
-    xh = get_trial_fe_basis(X)
 
     # (uh,ph,lh) = xh
     # (vh,qh,mh) = yh

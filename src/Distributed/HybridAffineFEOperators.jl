@@ -46,7 +46,8 @@ function Gridap.FESpaces._attach_dirichlet(
   mat   :: GridapDistributed.DistributedDomainContribution,
   uhd)
   dmv,dm=map_parts(matvec.contribs,mat.contribs,uhd.fields) do matvec, mat, uhd
-    Gridap.FESpaces._attach_dirichlet(matvec,mat, uhd)
+    m,v=Gridap.FESpaces._attach_dirichlet(matvec,mat, uhd)
+    m,v
   end
   GridapDistributed.DistributedDomainContribution(dmv),
       GridapDistributed.DistributedDomainContribution(dm)
