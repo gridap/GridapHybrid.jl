@@ -494,7 +494,7 @@ function _restrict_to_skeleton_facet_field(model,
   Gridap.Helpers.@check isa(get_triangulation(facet_fe_function),Triangulation{D-1,D})
   facet_field_array=Gridap.CellData.get_data(facet_fe_function)
   cell_wise_facets_ids=_get_cell_wise_facets(model)
-  SkeletonVectorFromFacetVector(glue,cell_wise_facets_ids,facet_field_array)
+  SkeletonVectorFromFacetVector(glue,cell_grid,cell_wise_facets_ids,facet_field_array)
 end
 
 function _restrict_to_skeleton_facet_field(model,
@@ -617,7 +617,7 @@ end
 
 function CellData.change_domain_phys_phys(
   a::CellField,ttrian::SkeletonTriangulation,sglue::FaceToFaceGlue,tglue::SkeletonGlue)
-  sface_to_field = get_data(a)
+  sface_to_field = Gridap.CellData.get_data(a)
   mface_to_sface = sglue.mface_to_tface
   tcell_lface_mface = tglue.tcell_lface_mface
   mface_to_field = extend(sface_to_field,mface_to_sface)

@@ -302,11 +302,12 @@ function Gridap.Arrays.evaluate!(cache,
 end
 
 function _generate_cell_lface_dofs_from_cell_dofs(glue,
+                                                  cell_grid,
                                                   cell_wise_facets,
                                                   cell_values_field,
                                                   facets_dofs_ids)
   facet_sizes=lazy_map(x->length(x),facets_dofs_ids)
-  cell_wise_facet_sizes=SkeletonVectorFromFacetVector(glue,cell_wise_facets,facet_sizes)
+  cell_wise_facet_sizes=SkeletonVectorFromFacetVector(glue,cell_grid,cell_wise_facets,facet_sizes)
   m=SkeletonVectorFromNonBlockedSkeletonVector(cell_wise_facet_sizes)
   lazy_map(m,cell_values_field,collect(1:length(cell_values_field)))
 end
@@ -335,13 +336,15 @@ function Gridap.FESpaces._change_argument(
         cell_lface_dof_values =
          _generate_cell_lface_dofs_from_cell_dofs(
             trian.glue,
+            trian.grid.parent,
             cell_wise_facets,
             cell_values_field,
             get_cell_dof_ids(Ui))
         Ui_basis = get_fe_basis(Ui)
-        Ui_basis_data = get_data(Ui_basis)
+        Ui_basis_data = Gridap.CellData.get_data(Ui_basis)
         Ui_basis_cell_lface_data = SkeletonVectorFromFacetVector(
           trian.glue,
+          trian.grid.parent,
           cell_wise_facets,
           Ui_basis_data)
         cell_field = lazy_map(linear_combination, cell_lface_dof_values, Ui_basis_cell_lface_data)

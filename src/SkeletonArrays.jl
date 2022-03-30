@@ -154,28 +154,30 @@ end
 
 
 
-struct SkeletonVectorFromFacetVector{T,G,C,V} <: AbstractVector{Gridap.Fields.VectorBlock{T}}
+struct SkeletonVectorFromFacetVector{T,G,F,C,V} <: AbstractVector{Gridap.Fields.VectorBlock{T}}
   glue::G
+  cell_grid::F
   cell_wise_facets_ids::C
   facet_vector::V
-  function SkeletonVectorFromFacetVector(glue,cell_wise_facets_ids,facet_vector)
+  function SkeletonVectorFromFacetVector(glue,cell_grid,cell_wise_facets_ids,facet_vector)
     G=typeof(glue)
+    F=typeof(cell_grid)
     C=typeof(cell_wise_facets_ids)
     V=typeof(facet_vector)
     T=eltype(V)
-    new{T,G,C,V}(glue,cell_wise_facets_ids,facet_vector)
+    new{T,G,F,C,V}(glue,cell_grid,cell_wise_facets_ids,facet_vector)
   end
 end
 
-Base.size(a::SkeletonVectorFromFacetVector) = (length(a.glue.cell_to_ctype),)
+Base.size(a::SkeletonVectorFromFacetVector) = (length(get_cell_type(a.cell_grid)),)
 
 Base.IndexStyle(::Type{<:SkeletonVectorFromFacetVector}) = IndexLinear()
 
 function Gridap.Arrays.array_cache(a::SkeletonVectorFromFacetVector{T}) where T
    fvc=array_cache(a.facet_vector)
    cwfc=array_cache(a.cell_wise_facets_ids)
-   vbc=_compressed_vector_from_glue(T,a.glue)
-   fvc=_compressed_vector_from_glue(typeof(fvc),a.glue)
+   vbc=_compressed_vector_from_glue(T,a.glue,a.cell_grid)
+   fvc=_compressed_vector_from_glue(typeof(fvc),a.glue,a.cell_grid)
    for ctype=1:length(a.glue.ctype_to_lface_to_ftype)
     num_facets=length(a.glue.ctype_to_lface_to_ftype[ctype])
     for lface=1:num_facets
@@ -239,7 +241,7 @@ function Gridap.Arrays.lazy_map(
   af=_cell_lfacet_vector_to_facet_vector(b.glue,a)
   bf=b.facet_vector
   bfx=lazy_map(evaluate,bf,af)
-  SkeletonVectorFromFacetVector(b.glue,b.cell_wise_facets_ids,bfx)
+  SkeletonVectorFromFacetVector(b.glue,b.cell_grid,b.cell_wise_facets_ids,bfx)
 end
 
 function _cell_lfacet_vector_to_facet_vector(
@@ -275,7 +277,7 @@ function Gridap.Arrays.lazy_map(
   ::typeof(∇),
   b::SkeletonVectorFromFacetVector)
   ∇bf=lazy_map(∇,b.cell_vector)
-  SkeletonVectorFromFacetVector(b.glue,b.cell_wise_facets_ids,∇bf)
+  SkeletonVectorFromFacetVector(b.glue,b.cell_grid,b.cell_wise_facets_ids,∇bf)
 end
 
 
