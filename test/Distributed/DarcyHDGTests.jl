@@ -10,21 +10,21 @@ using Gridap.Geometry
 using GridapHybrid
 
 function main(parts)
-  partition = (0,1,0,1)
-  cells = (4,4)
+  partition = (0,1,0,1,0,1)
+  cells = (2,2,2)
   model = CartesianDiscreteModel(parts,partition,cells)
   order=1
   solve_darcy_lhdg(model,order)
 end
 
-u(x) = VectorValue(1+x[1],1+x[2])
-Gridap.divergence(::typeof(u)) = (x) -> 2
+u2(x) = VectorValue(1+x[1],1+x[2])
+Gridap.divergence(::typeof(u2)) = (x) -> 2
 p(x) = -3.14
-∇p(x) = VectorValue(0,0)
+∇p2(x) = VectorValue(0,0,0)
 Gridap.∇(::typeof(p)) = ∇p
-f(x) = u(x) + ∇p(x)
+f2(x) = u2(x) + ∇p2(x)
 # Normal component of u(x) on Neumann boundary
-function g(x)
+function g2(x)
   tol=1.0e-14
   if (abs(x[2])<tol)
     return -x[2] #-x[1]-x[2]
@@ -34,9 +34,41 @@ function g(x)
   Gridap.Helpers.@check false
 end
 
+
+#3D problem
+u3(x) = VectorValue(1+x[1],1+x[2],1+x[3])
+Gridap.divergence(::typeof(u3)) = (x) -> 3
+∇p3(x) = VectorValue(0,0,0)
+f3(x) = u3(x) + ∇p3(x)
+function g3(x) # Normal component of u(x) on Neumann boundary
+  @assert false
+end
+
+function ufg(D::Int)
+   if (D==2)
+    u2,f2,g2
+   elseif (D==3)
+    u3,f3,g3
+   end
+end
+
+function dirichlet_tags(D::Int)
+  if (D==2)
+    collect(5:8)
+  elseif (D==3)
+    collect(21:26)
+  end
+end
+
+
+
 function solve_darcy_lhdg(model,order)
     # Geometry
     D = num_cell_dims(model)
+
+    dtags=dirichlet_tags(D)
+    u,f,_ = ufg(D)
+
     Ω = Triangulation(ReferenceFE{D},model)
     Γ = Triangulation(ReferenceFE{D-1},model)
     ∂K = GridapHybrid.Skeleton(model)
@@ -53,7 +85,7 @@ function solve_darcy_lhdg(model,order)
     M = TestFESpace(Γ,
                     reffeₗ;
                     conformity=:L2,
-                    dirichlet_tags=collect(5:8))
+                    dirichlet_tags=dtags)
     Y = MultiFieldFESpace([V,Q,M])
 
     # Define trial FEspaces
