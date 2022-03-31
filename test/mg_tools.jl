@@ -112,7 +112,7 @@ function nonnested_mg_2_level_v_cycle!(x, op1, A0, M0, dΩ, d∂K;
                                        rtol=1.0e-06, maxiter=10, smooth_iter=2)
   # TO-DO: - sign should not be here.
   #        for unknown reason, matrix is symmetric negative definite
-  A1 = op1.skeleton_op.op.matrix
+  A1 = -op1.skeleton_op.op.matrix ####
   b1 = op1.skeleton_op.op.vector
   M1 = op1.skeleton_op.test
 
