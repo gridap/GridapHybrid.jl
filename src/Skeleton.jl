@@ -395,7 +395,7 @@ function _transform_face_to_cell_lface_expanded_array(glue,
 end
 
 function _transform_face_to_cell_lface_expanded_array(glue,
-                                                     face_array::Gridap.Arrays.CompressedArray)
+              face_array::Gridap.Arrays.CompressedArray{<:ArrayBlock})
   ftype_to_block_layout=_get_block_layout(face_array.values)
   T=eltype(face_array.values[1])
   if length(ftype_to_block_layout[1][1]) == 1
@@ -460,6 +460,44 @@ function _get_block_layout(fields_array::AbstractArray{<:Gridap.Fields.ArrayBloc
   lazy_map(x->((size(x),findall(x.touched))),fields_array)
 end
 
+function _transform_face_to_cell_lface_expanded_array(glue,
+              face_array::Gridap.Arrays.CompressedArray{<:AbstractArray{<:Field}})
+
+  T  = eltype(face_array)
+  s  = length(size(face_array[1]))
+  if (s == 1)
+    TF = Gridap.Fields.VectorBlock{T}
+  else
+    TF = Gridap.Fields.MatrixBlock{T}
+  end
+  ctype_to_vector_block= #[c][f1][f2] or [c][f1][1,f2]
+    Vector{Gridap.Fields.VectorBlock{TF}}(undef,length(glue.ctype_to_lface_to_ftype))
+  for ctype=1:length(glue.ctype_to_lface_to_ftype)
+     num_facets=length(glue.ctype_to_lface_to_ftype[ctype])
+     vf1=Vector{TF}(undef,num_facets)
+     tf1=Vector{Bool}(undef,num_facets)
+     tf1.=true
+     for lface=1:num_facets
+       ftype=glue.ctype_to_lface_to_ftype[ctype][lface]
+       if (s==1)
+          vf2 = Vector{T}(undef,num_facets)
+          tf2 = Vector{Bool}(undef,num_facets)
+          tf2.= false
+          tf2[lface]=true
+          vf2[lface]=face_array.values[ftype]
+       else
+          vf2 = Matrix{T}(undef,(1,num_facets))
+          tf2 = Matrix{Bool}(undef,(1,num_facets))
+          tf2.= false
+          tf2[1,lface]=true
+          vf2[1,lface]=face_array.values[ftype]
+       end
+       vf1[lface]=Gridap.Fields.ArrayBlock(vf2,tf2)
+     end
+     ctype_to_vector_block[ctype]=Gridap.Fields.ArrayBlock(vf1,tf1)
+  end
+  Gridap.Arrays.CompressedArray(ctype_to_vector_block,glue.cell_to_ctype)
+end
 
 function CellData.change_domain_phys_phys(
   a::CellField,ttrian::SkeletonTriangulation,sglue::FaceToFaceGlue,tglue::SkeletonGlue)
