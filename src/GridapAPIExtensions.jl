@@ -98,13 +98,13 @@ function Gridap.Arrays.return_cache(k::Gridap.Fields.LinearCombinationMap,
                                     fx::Gridap.Fields.ArrayBlock)
   i::Int = findfirst(fx.touched)
   fxi = fx.array[i]
-  li = return_cache(k,u,fxi)
+  li = Gridap.Arrays.return_cache(k,u,fxi)
   ufxi = evaluate!(li,k,u,fxi)
   l = Vector{typeof(li)}(undef,size(fx.array))
   g = Vector{typeof(ufxi)}(undef,size(fx.array))
   for i in eachindex(fx.array)
     if fx.touched[i]
-      l[i] = return_cache(k,u,fx.array[i])
+      l[i] = Gridap.Arrays.return_cache(k,u,fx.array[i])
     end
   end
   ArrayBlock(g,fx.touched),l
@@ -144,13 +144,13 @@ function Gridap.Arrays.return_cache(k::Gridap.Fields.LinearCombinationMap,
                                     fx::Gridap.Fields.ArrayBlock)
   i::Int = findfirst(fx.touched)
   fxi = fx.array[i]
-  li = return_cache(k,u[i],fxi)
+  li = Gridap.Arrays.return_cache(k,u[i],fxi)
   ufxi = evaluate!(li,k,u[i],fxi)
   l = Vector{typeof(li)}(undef,size(fx.array))
   g = Vector{typeof(ufxi)}(undef,size(fx.array))
   for i in eachindex(fx.array)
     if fx.touched[i]
-      l[i] = return_cache(k,u[i],fx.array[i])
+      l[i] = Gridap.Arrays.return_cache(k,u[i],fx.array[i])
     end
   end
   ArrayBlock(g,fx.touched),l
@@ -510,7 +510,7 @@ function Gridap.Arrays.return_cache(
   k::typeof(setup_bulk_to_skeleton_l2_projected_fields),
   A::Array,
   B::AbstractArray{<:Gridap.Fields.Field})
-  return_cache(Gridap.Fields.linear_combination,A,B)
+  Gridap.Arrays.return_cache(Gridap.Fields.linear_combination,A,B)
 end
 
 function Gridap.Arrays.evaluate!(
@@ -527,7 +527,7 @@ function Gridap.Arrays.return_cache(
   B::Transpose{T,<:AbstractArray{<:Gridap.Fields.Field}}) where T
   c=return_cache(k,A,B.parent)
   v=evaluate!(c,k,A,B.parent)
-  return_cache(transpose,v), c
+  Gridap.Arrays.return_cache(transpose,v), c
 end
 
 function Gridap.Arrays.evaluate!(
@@ -825,4 +825,35 @@ end
 # facets of the underlying background model.
 function Gridap.FESpaces._compute_cell_ids(uh,ttrian::SkeletonTriangulation)
   collect(1:num_cells(ttrian))
+end
+
+# Required by LocalFEProjector
+function Gridap.Arrays.return_cache(::typeof(\),a::AbstractArray{<:Number},b::AbstractArray{<:Number})
+  c = a\b
+  Gridap.Arrays.CachedArray(c)
+end
+
+# Required by LocalFEProjector
+function Gridap.Arrays.evaluate!(cache,::typeof(\),a::AbstractMatrix{<:Number},b::AbstractVector{<:Number})
+  m = size(a,1)
+  Gridap.Arrays.setsize!(cache,(m,))
+  c = cache.array
+  c .= a\b
+  c
+end
+
+# Required by LocalFEProjector
+function Gridap.Arrays.evaluate!(cache,::typeof(\),a::AbstractMatrix{<:Number},b::AbstractMatrix{<:Number})
+  m = size(a,1)
+  n = size(b,2)
+  Gridap.Arrays.setsize!(cache,(m,n))
+  c = cache.array
+  c .= a\b
+  c
+end
+
+function Gridap.Arrays.evaluate!(cache,
+                   k::Gridap.Fields.DensifyInnerMostBlockLevelMap,
+                   a::Array{T}) where {T<:Number}
+   a
 end

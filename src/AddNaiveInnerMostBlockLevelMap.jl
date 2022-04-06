@@ -9,18 +9,18 @@ function Gridap.Arrays.return_cache(
   ai=testitem(a.array)
 
   # 2. Generate cache of k applied to ai
-  ci=return_cache(k,ai)
+  ci=Gridap.Arrays.return_cache(k,ai)
 
   # 3. Generate array of caches
   cache_array=Array{typeof(ci),length(size(a.array))}(undef,size(a.array))
   for i in eachindex(a.array)
     if a.touched[i]
-      cache_array[i]=return_cache(k,a.array[i])
+      cache_array[i]=Gridap.Arrays.return_cache(k,a.array[i])
     end
   end
 
   # 4. Generate ArrayBlock with the output entries
-  bi       = evaluate!(ci,k,ai)
+  bi       = Gridap.Arrays.evaluate!(ci,k,ai)
   barray   = Array{typeof(bi),length(size(a.array))}(undef,size(a.array))
   btouched = copy(a.touched)
   b=Gridap.Fields.ArrayBlock(barray,btouched)
@@ -38,7 +38,7 @@ function Gridap.Arrays.evaluate!(
   Gridap.Helpers.@check b.touched == a.touched
   for i in eachindex(a.array)
     if a.touched[i]
-      b.array[i]=evaluate!(cache_array[i],k,a.array[i])
+      b.array[i]=Gridap.Arrays.evaluate!(cache_array[i],k,a.array[i])
     end
   end
   b

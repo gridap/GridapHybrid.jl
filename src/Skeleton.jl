@@ -89,8 +89,8 @@ function Gridap.Arrays.evaluate!(cache,k::Reindex,i::VectorBlock{<:Vector{<:Inte
   r
 end
 function Gridap.Arrays.evaluate(k::Reindex,i::VectorBlock{<:Vector{<:Integer}})
-  cache=return_cache(k,i)
-  evaluate!(cache,k,i)
+  cache=Gridap.Arrays.return_cache(k,i)
+  Gridap.Arrays.evaluate!(cache,k,i)
 end
 # Default return_type fails because one(::VectorBlock{<:Vector{<:Integer}}) is NOT defined
 # This justifies why I had to define the following function
@@ -101,7 +101,7 @@ end
 # Default return_values fails because one(::VectorBlock{<:Vector{<:Integer}}) is NOT defined
 # This justifies why I had to define the following function
 function Gridap.Arrays.return_value(k::Reindex,i::VectorBlock{<:Vector{<:Integer}})
-  evaluate(k,i)
+  Gridap.Arrays.evaluate(k,i)
 end
 
 function Geometry.get_cell_map(trian::SkeletonGrid)

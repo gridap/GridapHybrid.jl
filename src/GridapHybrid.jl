@@ -33,8 +33,23 @@ export HybridFEOperator
 
 include("HybridLinearSolvers.jl")
 
-
 include("GridapAPIExtensions.jl")
 include("GridapTmpModifications.jl")
+
+# HHO-methods specific components
+include("OrthogonalBasisRefFEs.jl")
+include("OrthogonalBasisFESpaces.jl")
+export OrthogonalBasisRefFE
+export orthogonal_basis
+
+include("MonomialBasisRefFEs.jl")
+export MonomialBasisRefFE
+export monomial_basis
+
+include("LocalFEOperators.jl")
+export LocalFEOperator
+
+
+
 
 end # module
