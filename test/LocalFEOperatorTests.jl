@@ -79,4 +79,10 @@ module LocalFEOperatorTests
   # dc=∫((∇(v_nc)⋅nK)*u∂K)d∂K
   # dc=∫(∇(v_nc)⋅∇(u_zm))dΩ + ∫(∇(v_nc)⋅∇(u_nzm))dΩ + ∫(v_c*u_nzm)dΩ
   # dc=∫(v_c*u_zm)dΩ
+
+  reduction_op=setup_reduction_operator(UK_U∂K,VK_V∂K,dΩ,d∂K)
+  x=reduction_op(get_trial_fe_basis(UK))
+  uhk=FEFunction(UK,rand(num_free_dofs(UK)))
+  y=reduction_op(uhk)
+
 end
