@@ -8,5 +8,8 @@ module Tests
   @testset "DarcyRTHTests" begin include("DarcyRTHTests.jl") end
   @testset "DarcyHDGTests" begin include("DarcyHDGTests.jl") end
   @testset "LinearElasticityHDGTests" begin include("LinearElasticityHDGTests.jl") end
-  @testset "MultiFieldLagrangeMultipliersTests" begin include("MultiFieldLagrangeMultipliersTests.jl") end
+  @testset "MultiFieldLagrangeMultipliersTests" begin include("MultiFieldLagrangeMultipliersTests.jl")
+  @testset "LocalFEOperatorTests" begin include("LocalFEOperatorTests.jl")
+
+  end
 end # module
