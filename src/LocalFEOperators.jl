@@ -204,8 +204,11 @@ function (op::LocalFEOperator)(v::Union{Gridap.FESpaces.FEBasis,
   _generate_image_space_span(op,cell_dofs,basis_style)
 end
 
-function (op::LocalFEOperator)(v::Union{Gridap.MultiField.MultiFieldFEFunction,
-                                        Gridap.FESpaces.SingleFieldFEFunction})
+# We want to be as general as possible with the type of objects
+# that can appear in place of v. In principle, a given v is valid
+# if and only if it is legal to be passed as an argument to
+# evaluate_forms
+function (op::LocalFEOperator)(v)
   LHSf,RHSf = _evaluate_forms(op,v)
   cell_dofs = _compute_cell_dofs(LHSf,RHSf)
   _generate_fe_function(op,cell_dofs)

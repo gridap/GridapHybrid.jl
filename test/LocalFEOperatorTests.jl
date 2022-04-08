@@ -10,6 +10,30 @@ module LocalFEOperatorTests
     LocalFEOperator((m,n),UK_U∂K,VK_V∂K)
   end
 
+  function setup_l2_projection_operator(UK_U∂K,VK_V∂K,dΩ,d∂K)
+    m((uK,u∂K)  , (vK,v∂K)) = ∫(vK*uK)dΩ  + ∫(v∂K*u∂K)d∂K
+    n((uhK,uh∂K), (vK,v∂K)) = ∫(vK*uhK)dΩ + ∫(v∂K*uh∂K)d∂K
+    LocalFEOperator((m,n),UK_U∂K,VK_V∂K)
+  end
+
+  function setup_cell_difference_operator(l2_projection_op,reconstruction_op)
+     function _op(uK_u∂K)
+        u_rec=reconstruction_op(uK_u∂K)
+        uhK,uh∂K=uK_u∂K
+        l2_projection_op((u_rec-uhK,u_rec-uh∂K))
+     end
+     return _op
+  end
+
+  function setup_skeleton_difference_operator(reduction_op,reconstruction_op)
+    function _op(uK_u∂K)
+       uK,u∂K=uK_u∂K
+       u_rec=reconstruction_op(uK_u∂K)
+       reduction_op((u_rec-uK))
+    end
+    return _op
+ end
+
   function setup_reconstruction_operator(model, order, dΩ, d∂K)
     T         = Float64
     nK        = get_cell_normal_vector(d∂K.quad.trian)
@@ -99,4 +123,10 @@ module LocalFEOperatorTests
   uh_reconstructed = reconstruction_op(uh_reduced)
   eh = uh_reconstructed-uh
   @test sum(∫(eh*eh)dΩ) < 1.0e-12
+
+  l2_projection_op=setup_l2_projection_operator(UK_U∂K,VK_V∂K,dΩ,d∂K)
+
+  diff_op=setup_difference_operator(l2_projection_op,reconstruction_op)
+  δK,δ∂K=diff_op(uhK_uh∂K)
+
 end
