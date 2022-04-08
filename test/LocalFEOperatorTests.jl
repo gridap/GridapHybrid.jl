@@ -16,7 +16,7 @@ module LocalFEOperatorTests
     LocalFEOperator((m,n),UK_U∂K,VK_V∂K)
   end
 
-  function setup_cell_difference_operator(l2_projection_op,reconstruction_op)
+  function setup_difference_operator(l2_projection_op,reconstruction_op)
      function _op(uK_u∂K)
         u_rec=reconstruction_op(uK_u∂K)
         uhK,uh∂K=uK_u∂K
