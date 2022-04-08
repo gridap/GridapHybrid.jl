@@ -44,9 +44,9 @@ module LocalFEOperatorTests
   model=CartesianDiscreteModel((0,1,0,1),(2,2))
 
   # Geometry
-  D = num_cell_dims(model)
-  Ω = Triangulation(ReferenceFE{D},model)
-  Γ = Triangulation(ReferenceFE{D-1},model)
+  D  = num_cell_dims(model)
+  Ω  = Triangulation(ReferenceFE{D},model)
+  Γ  = Triangulation(ReferenceFE{D-1},model)
   ∂K = GridapHybrid.Skeleton(model)
 
   # Reference FEs
@@ -63,6 +63,7 @@ module LocalFEOperatorTests
 
   degree = 2*order+1
   dΩ     = Measure(Ω,degree)
+  dΓ     = Measure(Γ,degree)
   nK     = get_cell_normal_vector(∂K)
   d∂K    = Measure(∂K,degree)
 
@@ -85,4 +86,17 @@ module LocalFEOperatorTests
   uhk=FEFunction(UK,rand(num_free_dofs(UK)))
   y=reduction_op(uhk)
 
+  # Check that the result of applying the reconstruction operator to the
+  # the result of applyting the reduction operator to P_K^{k+1} is P_K^{k+1}
+  # itself
+  reffeᵤ     = ReferenceFE(lagrangian,Float64,order+1)
+  VH1        = TestFESpace(Ω, reffeᵤ; conformity=:H1)
+  UH1        = TrialFESpace(VH1)
+  free_dofs  = rand(num_free_dofs(UH1))
+  uh         = FEFunction(UH1, free_dofs)
+  uh_reduced = reduction_op(uh)
+
+  uh_reconstructed = reconstruction_op(uh_reduced)
+  eh = uh_reconstructed-uh
+  @test sum(∫(eh*eh)dΩ) < 1.0e-12
 end
