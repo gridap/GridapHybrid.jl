@@ -48,8 +48,7 @@ export monomial_basis
 
 include("LocalFEOperators.jl")
 export LocalFEOperator
-
-
-
+export SingleValued
+export MultiValued
 
 end # module

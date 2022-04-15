@@ -48,17 +48,29 @@ function Gridap.Arrays.return_cache(
   k::AddNaiveInnerMostBlockLevelMap,
   a::Gridap.Fields.ArrayBlock{T}) where T
 
+  n = length(size(a.array))
+  Gridap.Helpers.@check n==1 || n==2
+
   # Generate an ArrayBlock with the same rank/shape as "a"
   # but 1x1 blocks instead of scalar entries
-  ba_array=Array{VectorBlock{T}}(undef,size(a.array))
+  if n==1
+    ba_array=Array{VectorBlock{T}}(undef,size(a.array))
+  else
+    ba_array=Array{MatrixBlock{T}}(undef,size(a.array))
+  end
   ba_touched=copy(a.touched)
   ba=Gridap.Fields.ArrayBlock(ba_array,ba_touched)
 
   # Generate 1x1 Naive ArrayBlocks
   for i in eachindex(ba_array)
     if ba_touched[i]
-      sb_array=Vector{T}(undef,1)
-      sb_touched=Vector{Bool}(undef,1)
+      if n==1
+        sb_array=Vector{T}(undef,1)
+        sb_touched=Vector{Bool}(undef,1)
+      else
+        sb_array=Matrix{T}(undef,1,1)
+        sb_touched=Matrix{Bool}(undef,1,1)
+      end
       sb_touched[1]=true
       sb=Gridap.Fields.ArrayBlock(sb_array,sb_touched)
       ba_array[i]=sb

@@ -123,10 +123,4 @@ module LocalFEOperatorTests
   uh_reconstructed = reconstruction_op(uh_reduced)
   eh = uh_reconstructed-uh
   @test sum(∫(eh*eh)dΩ) < 1.0e-12
-
-  l2_projection_op=setup_l2_projection_operator(UK_U∂K,VK_V∂K,dΩ,d∂K)
-
-  diff_op=setup_difference_operator(l2_projection_op,reconstruction_op)
-  δK,δ∂K=diff_op(uhK_uh∂K)
-
 end
