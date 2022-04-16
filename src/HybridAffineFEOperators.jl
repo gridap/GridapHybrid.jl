@@ -70,8 +70,14 @@ function Gridap.FESpaces.solve(op::HybridAffineFEOperator)
 end
 
 function Gridap.FESpaces.solve!(uh, solver::LinearFESolver, op::HybridAffineFEOperator, cache)
-  # Solve linear system defined on the skeleton
+   # Solve linear system defined on the skeleton.
+   # Some solvers do not support 0x0 matrices. Avoid
+   # calling solve in such an scenario.
+   if (size(op.skeleton_op.op.matrix) != (0,0))
     lh = solve(op.skeleton_op)
+   else
+    lh = FEFunction(op.skeleton_op.trial,zeros(num_free_dofs(op.skeleton_op.trial)))
+   end
 
   # Invoke weak form of the hybridizable system
     u = get_trial_fe_basis(op.trial)

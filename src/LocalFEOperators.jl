@@ -267,46 +267,6 @@ function _generate_image_space_span(op::LocalFEOperator,
   Gridap.MultiField.MultiFieldCellField(all_febases)
 end
 
-# TO-DO: to study re-use opportunities among the following function and
-# function Gridap.FESpaces._change_argument(
-#  op::typeof(jacobian),f,trian::SkeletonTriangulation,uh::Gridap.MultiField.MultiFieldFEFunction)
-# function _generate_image_space_span(O::Gridap.FESpaces.SingleFieldFESpace,
-#                                     v::Gridap.MultiField.MultiFieldCellField,
-#                                     cell_dofs,
-#                                     basis_style,
-#                                     skeleton::SkeletonTriangulation)
-
-#   fields_on_O_triangulation=_generate_image_space_span(O,
-#                                                        v,
-#                                                        cell_dofs,
-#                                                        basis_style,
-#                                                        get_triangulation(O))
-#   nfields=length(v.single_fields)
-#   single_fields = Gridap.CellData.CellField[]
-#   for i=1:nfields
-#     du_i_b = fields_on_O_triangulation.single_fields[i]
-#     vi     = v.single_fields[i].single_field
-#     if (_is_on_skeleton(vi))
-#       m = get_background_model(get_triangulation(vi))
-#       cell_wise_facets = _get_cell_wise_facets(m)
-#       cell_vector=Gridap.CellData.get_data(du_i_b)
-#       cell_vector_split=_cell_vector_facets_split(vi)
-#       trian = skeleton
-#       sglue = Gridap.Geometry.get_glue(trian,Val(num_cell_dims(m)))
-#       cell_field=SkeletonExpandedVectorFromSplitCellVector(trian.glue,
-#                                                            cell_wise_facets,
-#                                                            cell_vector,
-#                                                            cell_vector_split)
-#       cell_field=lazy_map(Broadcasting(∘),cell_field,sglue.tcell_lface_mface_map)
-#       cf = Gridap.CellData.GenericCellField(cell_field, trian, DomainStyle(du_i_b))
-#     else
-#       cf = v.single_fields[i]
-#     end
-#     push!(single_fields, cf)
-#   end
-#   Gridap.MultiField.MultiFieldCellField(single_fields)
-# end
-
 function _compute_cell_dofs_field_offsets(U::Gridap.MultiField.MultiFieldFESpace)
   nfields = length(U.spaces)
   cell_dofs_field_offsets=Vector{Int}(undef,nfields+1)
@@ -328,7 +288,7 @@ end
 
 function _generate_image_space_span(op::LocalFEOperator{<:SingleValued},
                                     O::Gridap.MultiField.MultiFieldFESpace,
-                                    v::Gridap.MultiField.MultiFieldCellField,
+                                    v::Gridap.CellData.CellField,
                                     cell_dofs,
                                     basis_style) where N
   cell_dofs_field_offsets=_compute_cell_dofs_field_offsets(O)
@@ -392,6 +352,7 @@ function _generate_image_space_span(op::LocalFEOperator{<:MultiValued},
         cell_field=lazy_map(linear_combination,skel_facet_dofs,skel_facet_shapefuns)
         cf = Gridap.CellData.GenericCellField(cell_field, tskel, DomainStyle(mf_basis[i]))
         push!(single_fields,cf)
+        sj=ej+1
       end
       multi_field=Gridap.MultiField.MultiFieldCellField(single_fields)
     else

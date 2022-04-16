@@ -4,24 +4,6 @@ module PoissonHHOTests
   using Test
   using LinearAlgebra
 
-  function setup_reduction_operator(UK_U∂K,VK_V∂K,dΩ,d∂K)
-    m( (uK,u∂K), (vK,v∂K) ) = ∫(vK*uK)dΩ  + ∫(v∂K*u∂K)d∂K
-    n( uhK     , (vK,v∂K) ) = ∫(vK*uhK)dΩ + ∫(v∂K*uhK)d∂K
-    LocalFEOperator((m,n),UK_U∂K,VK_V∂K; field_type_at_common_faces=SingleValued())
-  end
-
-  function setup_difference_operator(UK_U∂K,VK_V∂K,R,dΩ,d∂K)
-    m((uK,u∂K)  , (vK,v∂K)) = ∫(vK*uK)dΩ + ∫(v∂K*u∂K)d∂K
-    function n(uK_u∂K, (vK,v∂K))
-      uK_u∂K_rec     = R(uK_u∂K)
-      uK,u∂K         = uK_u∂K
-      uK_rec,u∂K_rec = uK_u∂K_rec
-      ∫(vK *uK_rec)dΩ  + ∫(vK*u∂K_rec)dΩ   - ∫(vK *uK)dΩ +
-      ∫(v∂K*uK_rec)d∂K + ∫(v∂K*u∂K_rec)d∂K - ∫(v∂K*u∂K)d∂K
-    end
-    LocalFEOperator((m,n),UK_U∂K,VK_V∂K; field_type_at_common_faces=MultiValued())
-   end
-
   function setup_reconstruction_operator(model, order, dΩ, d∂K)
     T         = Float64
     nK        = get_cell_normal_vector(d∂K.quad.trian)
@@ -53,10 +35,22 @@ module PoissonHHOTests
                     test_space_ds_decomp=VKR_DS_DECOMP)
   end
 
-  u(x)=x[1]+2*x[2]
+  function setup_difference_operator(UK_U∂K,VK_V∂K,R,dΩ,d∂K)
+    m((uK,u∂K)  , (vK,v∂K)) = ∫(vK*uK)dΩ + ∫(v∂K*u∂K)d∂K
+    function n(uK_u∂K, (vK,v∂K))
+      uK_u∂K_rec     = R(uK_u∂K)
+      uK,u∂K         = uK_u∂K
+      uK_rec,u∂K_rec = uK_u∂K_rec
+      ∫(vK *uK_rec)dΩ  + ∫(vK*u∂K_rec)dΩ   - ∫(vK *uK)dΩ +
+      ∫(v∂K*uK_rec)d∂K + ∫(v∂K*u∂K_rec)d∂K - ∫(v∂K*u∂K)d∂K
+    end
+    LocalFEOperator((m,n),UK_U∂K,VK_V∂K; field_type_at_common_faces=MultiValued())
+   end
+
+  u(x)=x[1]+x[2]
   f(x)=-Δ(u)(x)
 
-  model=CartesianDiscreteModel((0,1,0,1),(4,4))
+  model=CartesianDiscreteModel((0,1,0,1),(2,2))
 
   # Geometry
   D  = num_cell_dims(model)
@@ -84,75 +78,6 @@ module PoissonHHOTests
   R=setup_reconstruction_operator(model, order, dΩ, d∂K)
   diff_op=setup_difference_operator(UK_U∂K,VK_V∂K,R,dΩ,d∂K)
 
-  v=get_fe_basis(VK_V∂K)
-  ub=get_trial_fe_basis(UK_U∂K)
-
-  vK,v∂K=v
-  uK,u∂K=ub
-
-  # Test L2-projection term for the bulk
-  xΩ=Gridap.CellData.get_cell_points(dΩ.quad)
-  v_rec=R(v)
-  v_rec1,v_rec2=v_rec
-
-  ub_rec=R(ub)
-  ub_rec1,ub_rec2=ub_rec
-  xΩ=Gridap.CellData.get_cell_points(dΩ.quad)
-  x∂K=Gridap.CellData.get_cell_points(d∂K.quad)
-
-  v_rec=R(v)
-  v_rec1,v_rec2=v_rec
-  v_rec1_d∂K=Gridap.CellData.change_domain(v_rec1,d∂K.quad.trian,Gridap.CellData.ReferenceDomain())
-  v_rec1_d∂K(x∂K)[1][4][1][1]
-  v_rec2_d∂K=Gridap.CellData.change_domain(v_rec2,d∂K.quad.trian,Gridap.CellData.ReferenceDomain())
-  v_rec2_d∂K(x∂K)[1][3][2][1]
-
-  uK_u∂K_rec     = R(ub)
-  uK,u∂K         = ub
-  uK_rec,u∂K_rec = uK_u∂K_rec
-  dc=∫(vK *uK_rec)dΩ  + ∫(vK*u∂K_rec)dΩ   - ∫(vK *uK)dΩ +
-     ∫(v∂K*uK_rec)d∂K + ∫(v∂K*u∂K_rec)d∂K - ∫(v∂K*u∂K)d∂K
-
-
-  δvK,δv∂K=diff_op(v)
-  δuK,δu∂K=diff_op(ub)
-
-  δv∂K_K,δv∂K_∂K=δv∂K
-  δu∂K_K,δu∂K_∂K=δu∂K
-
-  δv∂K_K(x∂K)[1][1][1]
-  δv∂K_K(x∂K)[1][2][1]
-  δv∂K_K(x∂K)[1][3][1]
-  δv∂K_K(x∂K)[1][4][1]
-  δv∂K_∂K(x∂K)[1][1][2]
-  δv∂K_∂K(x∂K)[1][2][2]
-  δv∂K_∂K(x∂K)[1][3][2]
-  δv∂K_∂K(x∂K)[1][4][2]
-
-  (δv∂K_K*δu∂K_K)(x∂K)[1][4][1,1]
-  (δv∂K_K*δu∂K_∂K)(x∂K)[1][4][1,2]
-  (δv∂K_∂K*δu∂K_K)(x∂K)[1][4][2,1]
-  (δv∂K_∂K*δu∂K_∂K)(x∂K)[1][4][2,2]
-
-  dc=∫(δv∂K_K*δu∂K_K +
-      δv∂K_K*δu∂K_∂K+
-       δv∂K_∂K*δu∂K_K+
-         δv∂K_∂K*δu∂K_∂K)d∂K
-
-  get_array(dc)[1][1,1]
-  δvK_K,δvK_∂K=δvK
-  δuK_K,δuK_∂K=δuK
-
-  dc=∫(δvK_K*δuK_K)dΩ+
-       ∫(δvK_K*δuK_∂K)dΩ+
-         ∫(δvK_∂K*δuK_K)dΩ+
-           ∫(δvK_∂K*δuK_∂K)dΩ
-
-  get_array(dc)[1][1,1]
-  get_array(dc)[1][1,2]
-  get_array(dc)[1][2,1]
-  get_array(dc)[1][2,2]
-
   function r(u,v)
     uK,u∂K=R(u)
     vK,v∂K=R(v)
@@ -167,7 +92,9 @@ module PoissonHHOTests
     δv∂K_K,δv∂K_∂K=δv∂K
     δu∂K_K,δu∂K_∂K=δu∂K
     ∫(δvK_K*δuK_K)dΩ+∫(δvK_K*δuK_∂K)dΩ+∫(δvK_∂K*δuK_K)dΩ+∫(δvK_∂K*δuK_∂K)dΩ+
-    ∫(δv∂K_K*δu∂K_K)d∂K+∫(δv∂K_K*δu∂K_∂K)d∂K+∫(δv∂K_∂K*δu∂K_K)d∂K+∫(δv∂K_∂K*δu∂K_∂K)d∂K
+    # All these terms are zero numerically
+    #∫(δv∂K_K*δu∂K_K)d∂K+∫(δv∂K_K*δu∂K_∂K)d∂K+∫(δv∂K_∂K*δu∂K_K)d∂K+
+    ∫(δv∂K_∂K*δu∂K_∂K)d∂K
   end
 
   a(u,v)=r(u,v)+s(u,v)
@@ -176,8 +103,7 @@ module PoissonHHOTests
   op=HybridAffineFEOperator((u,v)->(a(u,v),l(v)), UK_U∂K, VK_V∂K, [1], [2])
   xh=solve(op)
 
-  uh,_=xh
-  e = u -uh
-  @test_broken sqrt(sum(∫(e⋅e)dΩ)) < 1.0e-12
-
+  uhK,uh∂K=xh
+  e = u -uhK
+  @test sqrt(sum(∫(e⋅e)dΩ)) < 1.0e-12
 end
