@@ -11,7 +11,7 @@ Hybrid discretisation methods in Julia (HDG, HHO, VEM, etc)
 
 ## Purpose
 
-TBD
+GridapHybrid.jl is fresh approach, based on Julia, towards  a unified computational framework that supports R\&D in hybrid discretization methods on general polytopal meshes, including HDG (Hybridizable Discontinuous Galerking), HHO (Hybrid High Order), and VEM (Virtual Element Method), and highly scalable parallel preconditioning techniques (based, e.g., on hybrid multiscale ideas) tailored to these discretization techniques.
 
 ## Example
 
