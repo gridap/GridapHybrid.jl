@@ -44,7 +44,7 @@ module PoissonHHOTests
     LocalFEOperator((m,n),UK_U∂K,VK_V∂K; field_type_at_common_faces=MultiValued())
    end
 
-   p = 3
+   p = 1
    u(x) = x[1]^p+x[2]^p
    f(x)=-Δ(u)(x)
 
@@ -136,7 +136,7 @@ module PoissonHHOTests
   end
 
   ns=[8,16,32,64,128]
-  order=1
+  order=0
   el, hs = conv_test(ns,order)
   println("Slope L2-norm u: $(slope(hs,el))")
   slopek  =[Float64(ni)^(-(order)) for ni in ns]
