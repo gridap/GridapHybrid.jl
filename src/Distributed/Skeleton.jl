@@ -22,9 +22,10 @@ end
 
 function SkeletonTriangulation(portion::GridapDistributed.NoGhost,
                                model::GridapDistributed.DistributedDiscreteModel)
+  cell_gids=get_cell_gids(model)
   dtrians=map_parts(model.models,
                     _sign_flips(model),
-                    model.gids.partition) do model, sign_flip, partition
+                    cell_gids.partition) do model, sign_flip, partition
     cell_to_parent_cell=
       findall([partition.lid_to_part[cell]==partition.part
                  for cell=1:length(partition.lid_to_part)])
