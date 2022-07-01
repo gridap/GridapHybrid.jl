@@ -117,9 +117,10 @@ struct SkeletonTriangulation{Dc,Dp,A,B,C} <: Triangulation{Dc,Dp}
   glue::Gridap.Geometry.FaceToCellGlue
   function SkeletonTriangulation(model::DiscreteModel)
     A     = typeof(model)
-    D     = num_cell_dims(model)
+    Dc    = num_cell_dims(model)
+    Dp    = num_point_dims(model)
     mgrid = get_grid(model)
-    fgrid = Grid(ReferenceFE{D-1},model)
+    fgrid = Grid(ReferenceFE{Dc-1},model)
     glue =  Gridap.Geometry.FaceToCellGlue(get_grid_topology(model),
                                            mgrid,
                                            fgrid,
@@ -139,7 +140,7 @@ struct SkeletonTriangulation{Dc,Dp,A,B,C} <: Triangulation{Dc,Dp}
     sign_flip=_get_sign_flip(model)
 
     C = typeof(sign_flip)
-    new{D-1,D,A,B,C}(model,sgrid,sign_flip,glue)
+    new{Dc-1,Dp,A,B,C}(model,sgrid,sign_flip,glue)
   end
 end
 
@@ -261,17 +262,18 @@ end
 function CellData.change_domain_ref_ref(
   a::CellField,ttrian::SkeletonTriangulation,sglue::FaceToFaceGlue,tglue::SkeletonGlue)
 
-  D = num_cell_dims(ttrian.model)
+  Dc = num_cell_dims(ttrian.model)
+  Dp = num_point_dims(ttrian.model)
   strian = get_triangulation(a)
 
-  @notimplementedif !(isa(strian,Triangulation{D-1,D}) || isa(strian,Triangulation{D,D}))
+  @notimplementedif !(isa(strian,Triangulation{Dc-1,Dp}) || isa(strian,Triangulation{Dc,Dp}))
 
-  if isa(strian,Triangulation{D,D})
+  if isa(strian,Triangulation{Dc,Dp})
     b=_restrict_to_skeleton_cell_field(ttrian.model,
                                        ttrian.glue,
                                        tglue.tcell_lface_mface_map,
                                        a)
-  elseif isa(strian,Triangulation{D-1,D})
+  elseif isa(strian,Triangulation{Dc-1,Dp})
     b=_restrict_to_skeleton_facet_field(ttrian.model,ttrian.glue,a)
   end
   CellData.similar_cell_field(a,b,ttrian,ReferenceDomain())
@@ -281,8 +283,9 @@ function _restrict_to_skeleton_cell_field(model,
                                           glue,
                                           tface_to_mface_map,
                                           cell_fe_basis::Gridap.CellData.CellField)
-  D = num_cell_dims(model)
-  Gridap.Helpers.@check isa(get_triangulation(cell_fe_basis),Triangulation{D,D})
+  Dc = num_cell_dims(model)
+  Dp = num_point_dims(model)
+  Gridap.Helpers.@check isa(get_triangulation(cell_fe_basis),Triangulation{Dc,Dp})
   cell_a_q = _transform_cell_to_cell_lface_array(glue,
          Gridap.CellData.get_data(cell_fe_basis);
          add_naive_innermost_block_level=true)
@@ -341,8 +344,9 @@ end
 function _restrict_to_skeleton_facet_field(model,
                                            glue,
                                            facet_fe_function::Gridap.FESpaces.SingleFieldFEFunction)
-  D = num_cell_dims(model)
-  Gridap.Helpers.@check isa(get_triangulation(facet_fe_function),Triangulation{D-1,D})
+  Dc = num_cell_dims(model)
+  Dp = num_point_dims(model)
+  Gridap.Helpers.@check isa(get_triangulation(facet_fe_function),Triangulation{Dc-1,Dp})
   facet_field_array=Gridap.CellData.get_data(facet_fe_function)
   cell_wise_facets_ids=_get_cell_wise_facets(model)
   SkeletonVectorFromFacetVector(glue,cell_wise_facets_ids,facet_field_array)
@@ -352,8 +356,9 @@ function _restrict_to_skeleton_facet_field(model,
                                            glue,
                                            facet_fe_basis::Gridap.CellData.CellField)
 
-  D = num_cell_dims(model)
-  Gridap.Helpers.@check isa(get_triangulation(facet_fe_basis),Triangulation{D-1,D})
+  Dc = num_cell_dims(model)
+  Dp = num_point_dims(model)
+  Gridap.Helpers.@check isa(get_triangulation(facet_fe_basis),Triangulation{Dc-1,Dp})
 
   _transform_face_to_cell_lface_expanded_array(
     glue,
