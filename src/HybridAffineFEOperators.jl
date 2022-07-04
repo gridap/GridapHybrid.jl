@@ -322,7 +322,7 @@ end
 
 function _find_bulk(D, dc::DomainContribution)
     [trian for trian in keys(dc.dict)
-     if isa(trian, Triangulation{D,D}) && !(isa(trian, SkeletonTriangulation))]
+     if isa(trian, Triangulation{D}) && !(isa(trian, SkeletonTriangulation))]
 end
 
 function _find_boundary(dc::DomainContribution)
