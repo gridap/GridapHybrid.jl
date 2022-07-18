@@ -130,7 +130,7 @@ function Gridap.ReferenceFEs._evaluate_lagr_dof!(c::AbstractVector,
   ndofs,
   ncomps)
 
-  setsize!(c,(ndofs,))
+  Gridap.Arrays.setsize!(c,(ndofs,))
   r = c.array
   for node in LinearIndices(node_and_comp_to_dof)
     comp_to_dof = node_and_comp_to_dof[node]
