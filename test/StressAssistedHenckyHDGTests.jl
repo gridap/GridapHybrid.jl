@@ -165,31 +165,16 @@ function solve_stress_assisted_diffusion_hencky_hdg(cells,order;write_results=fa
     MuΓ_TR = TrialFESpace(MuΓ,u₀)
     Y_TR   = MultiFieldFESpace([W_TR, W_TR, Ψ_TR, S_TR, S_TR, V_TR, MϕΓ_TR, MuΓ_TR])
 
-    # FE formulation params
-    degree = 2 * (order + 1) # TO-DO: To think which is the minimum degree required
-    dΩ = Measure(Ω, degree)
-    n = get_cell_normal_vector(∂K)
+    # Integration
+    degree = 2 * (order + 1)
+    dΩ  = Measure(Ω, degree)
     d∂K = Measure(∂K, degree)
 
-    # Stabilization operator (solute concentration)
-    τρΓ = 1.0 # To be defined???
+    # Outer normal, cell boundary
+    n = get_cell_normal_vector(∂K)
+
     # Stabilization operator (displacements)
-    τuΓ = Float64(cells[1]) # To be defined???
-
-    println("h=$(1.0/cells[1]) τuΓ=$(τuΓ) τρΓ=$(τρΓ)")
-
-    Y_basis    = get_fe_basis(Y)
-    Y_TR_basis = get_trial_fe_basis(Y_TR)
-    (_,_,_,_,_,_,_,uhΓ_basis) = Y_TR_basis
-
-    # # Testing for correctness of Pₘ projection
-    # xh              = FEFunction(Y_TR,rand(num_free_dofs(Y_TR)))
-    # _,_,_,_,_,_,_,μ = Y_basis
-    # _, uh, _, _ = xh
-    # dc=∫(μ⋅(uh-Pₘ(uh, uhΓ_basis, μ, d∂K)))d∂K
-    # for k in dc.dict[d∂K.quad.trian]
-    #   @test all(k[8] .< 1.0e-14)
-    # end
+    τuΓ = Float64(cells[1])
 
     # Residual
     # current_iterate  => (ωh,ρh,ϕh,th,σh,uh,ϕhΓ,uhΓ)
@@ -207,16 +192,7 @@ function solve_stress_assisted_diffusion_hencky_hdg(cells,order;write_results=fa
       ∫( μh⋅(σh⋅n) )d∂K - ∫( τuΓ*μh⋅Pm_uh)d∂K + ∫( τuΓ*μh⋅uhΓ )d∂K
     end
 
-    # free_values = zeros(num_free_dofs(Y_TR))
-    # xh          = FEFunction(Y_TR,free_values)
-    # (ωh,ρh,ϕh,th,σh,uh,ϕhΓ,uhΓ) = xh
-    # (rh,nh,ψh,sh,τh,vh,ηh,μh)   = Y_basis
-    # dc=residual((ωh,ρh,ϕh,th,σh,uh,ϕhΓ,uhΓ),(rh,nh,ψh,sh,τh,vh,ηh,μh))
-    # res=assemble_vector(dc,Y)
-    # dc=jacobian(x->residual(x,Y_basis),xh)
-    # A=assemble_matrix(dc,Y_TR,Y)
     @time op=HybridFEOperator(residual,Y_TR,Y,collect(1:6),[7,8])
-    # op=FEOperator(residual,Y_TR,Y)
 
     nls = NLSolver(show_trace=true, method=:newton, ftol=1.0e-14)
     solver = FESolver(nls)
@@ -259,8 +235,6 @@ function solve_stress_assisted_diffusion_hencky_hdg(cells,order;write_results=fa
      end
 
      norm2_ω,norm2_ρ,norm2_t,norm2_ϕ,norm2_σ,norm2_u
-    #@test sqrt(sum(∫(eu ⋅ eu)dΩ)) < 1.0e-12
-    #@test sqrt(sum(∫(eσ ⊙ eσ)dΩ)) < 1.0e-12
   end
 
 
