@@ -2,6 +2,7 @@ module PoissonHHOTests
   using Gridap
   using GridapHybrid
   using Test
+  using Plots
 
   function setup_reconstruction_operator(model, order, dΩ, d∂K)
     nK        = get_cell_normal_vector(d∂K.quad.trian)
@@ -44,8 +45,9 @@ module PoissonHHOTests
     LocalFEOperator((m,n),UK_U∂K,VK_V∂K; field_type_at_common_faces=MultiValued())
    end
 
-   p = 1
-   u(x) = x[1]^p+x[2]^p
+   p = 2
+   u(x) = x[1]^p+x[2]^p                         # Ex 1
+  #  u(x) = x[1]*(x[1]-1)^p*x[2]*(x[2]-1)^p         # Ex 2
    f(x)=-Δ(u)(x)
 
    #u(x)=x[1]+x[2]
@@ -62,7 +64,8 @@ module PoissonHHOTests
       reffeᵤ    = ReferenceFE(lagrangian,Float64,order  ;space=:P)
 
       VK     = TestFESpace(Ω  , reffeᵤ; conformity=:L2)
-      V∂K    = TestFESpace(Γ  , reffeᵤ; conformity=:L2,dirichlet_tags=collect(5:8))
+      V∂K    = TestFESpace(Γ  , reffeᵤ; conformity=:L2,dirichlet_tags=collect(5:8))  # Ex 1
+      # V∂K    = TestFESpace(Γ  , reffeᵤ; conformity=:L2,dirichlet_tags="boundary")   # Ex 2
       UK     = TrialFESpace(VK)
       U∂K    = TrialFESpace(V∂K,u)
       VK_V∂K = MultiFieldFESpace([VK,V∂K])
@@ -125,7 +128,7 @@ module PoissonHHOTests
       push!(hs,h)
     end
     println(el2)
-    el2
+    el2, hs
   end
 
   function slope(hs,errors)
@@ -135,16 +138,17 @@ module PoissonHHOTests
     linreg[2]
   end
 
-  ns=[8,16,32,64,128]
-  order=0
+  # ns=[8,16,32,64,128]
+  ns=[8,16,32,64]
+  order=1
   el, hs = conv_test(ns,order)
   println("Slope L2-norm u: $(slope(hs,el))")
   slopek  =[Float64(ni)^(-(order)) for ni in ns]
   slopekp1=[Float64(ni)^(-(order+1)) for ni in ns]
   slopekp2=[Float64(ni)^(-(order+2)) for ni in ns]
-  plot(hs,[el slopek slopekp1 slopekp2],
+  display(plot(hs,[el slopek slopekp1 slopekp2],
     xaxis=:log, yaxis=:log,
     label=["L2u (measured)" "slope k" "slope k+1" "slope k+2"],
     shape=:auto,
-    xlabel="h",ylabel="L2 error",legend=:bottomright)
+    xlabel="h",ylabel="L2 error",legend=:bottomright))
 end
