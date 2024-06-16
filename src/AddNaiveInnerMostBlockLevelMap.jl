@@ -31,7 +31,7 @@ end
 function Gridap.Arrays.evaluate!(
   cache,
   k::AddNaiveInnerMostBlockLevelMap,
-  a::Gridap.Fields.ArrayBlock{<:ArrayBlock}) where{A}
+  a::Gridap.Fields.ArrayBlock{<:ArrayBlock})
 
   b,cache_array=cache
   Gridap.Helpers.@check size(cache_array) == size(a.array)

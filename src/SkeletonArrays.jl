@@ -211,6 +211,12 @@ struct SkeletonVectorFromSplitDoFsCellVector{T,A,B,C,D,E} <: AbstractVector{Grid
                                                  col_dofs_split)
 
     Gridap.Helpers.@check length(row_dofs_split)  == length(cell_wise_facets_ids[1])
+    Gridap.Helpers.@check isa(col_dofs_split,UnitRange) || isa(col_dofs_split,AbstractVector{<:UnitRange}) 
+    
+    if isa(col_dofs_split,AbstractVector{<:UnitRange})
+      Gridap.Helpers.@check length(col_dofs_split) == length(cell_wise_facets_ids[1])
+    end 
+    
     Gridap.Helpers.@check length(glue.cell_to_ctype) == length(cell_vector_dofs)
 
     T=typeof(view(cell_vector_dofs[1],1:1,1:1))
@@ -261,7 +267,11 @@ function Gridap.Arrays.getindex!(cache,a::SkeletonVectorFromSplitDoFsCellVector,
   cwf=getindex!(cwfc,a.cell_wise_facets_ids,cell)
   dofs=getindex!(cvdc,a.cell_vector_dofs,cell)
   for (lfacet,gfacet) in enumerate(cwf)
-    fdofs=view(dofs,a.row_dofs_split[lfacet],a.col_dofs_split)
+    if (isa(a.col_dofs_split,UnitRange))
+      fdofs=view(dofs,a.row_dofs_split[lfacet], a.col_dofs_split)
+    else
+      fdofs=view(dofs,a.row_dofs_split[lfacet], a.col_dofs_split[lfacet])
+    end
     result.array[lfacet]=fdofs
   end
   result

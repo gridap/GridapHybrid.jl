@@ -317,6 +317,14 @@ function _generate_image_space_span(op::LocalFEOperator{<:MultiValued},
     mf_basis=get_fe_basis(O)
   end
   multi_fields = Gridap.MultiField.MultiFieldCellField[]
+  
+  col_stride=0
+  for i=1:nfields
+    field=v.single_fields[i].single_field
+    n = _num_funs_x_cell(field)
+    col_stride+=n 
+  end 
+  
   s=1
   for i=1:nfields
     field=v.single_fields[i].single_field
@@ -329,14 +337,27 @@ function _generate_image_space_span(op::LocalFEOperator{<:MultiValued},
       cell_wise_facets_ids = _get_cell_wise_facets(m)
       tskel = Skeleton(m)
 
-
       row_dofs_split=[ (s-1).+i for i in _cell_vector_facets_split(field)]
-      sj=1
+      
+      sj=(i-1)*col_stride+1
       for j=1:nfields
         field=v.single_fields[j].single_field
         nj = _num_funs_x_cell(field)
         ej = sj + nj - 1
-        col_dofs_split=sj:ej
+
+        if (_is_on_skeleton(field))
+          stride=sum([length(k) for k in _cell_vector_facets_split(field)])
+          col_dofs_split=UnitRange{Int64}[]
+          cs = sj 
+          for k=1:length(_cell_vector_facets_split(field))
+            ce = cs+stride-1
+            push!(col_dofs_split,cs:ce)
+            cs=cs+col_stride
+          end
+        else 
+          col_dofs_split=sj:ej
+        end 
+        
         skel_facet_dofs=SkeletonVectorFromSplitDoFsCellVector(tskel.glue,
                                               cell_wise_facets_ids,
                                               cell_dofs,
