@@ -5,23 +5,21 @@ abstract type FieldTypeAtCommonFaces end;
 struct SingleValued <: FieldTypeAtCommonFaces end;
 struct MultiValued  <: FieldTypeAtCommonFaces end;
 
-struct LocalFEOperator{FT<:FieldTypeAtCommonFaces,T1,T2,T3,T4,T5,T6,T7} <: GridapType
+struct LocalFEOperator{FT<:FieldTypeAtCommonFaces,T1,T2,T3,T4,T5,T6} <: GridapType
   LHS_form               :: T1
   RHS_form               :: T2
-  image_trial_space      :: T3
-  image_test_space       :: T4
-  domain_test_space      :: T5 
-  trial_space_ds_decomp  :: T6 # Direct sum decomposition of trial space (optional)
-  test_space_ds_decomp   :: T7 # Direct sum decomposition of test space  (optional)
+  trial_space            :: T3
+  test_space             :: T4
+  trial_space_ds_decomp  :: T5 # Direct sum decomposition of trial space (optional)
+  test_space_ds_decomp   :: T6 # Direct sum decomposition of test space  (optional)
   LHS_contribs           :: Gridap.CellData.DomainContribution
 
   function LocalFEOperator(weakform,
-                           image_trial_space :: A,
-                           image_test_space  :: B,
-                           domain_test_space :: C;
+                           trial_space :: A,
+                           test_space  :: B;
                            trial_space_ds_decomp :: Union{Nothing,<:MultiFieldFESpace}=nothing,
                            test_space_ds_decomp  :: Union{Nothing,<:MultiFieldFESpace}=nothing,
-                           field_type_at_common_faces::FieldTypeAtCommonFaces=SingleValued()) where {A,B,C}
+                           field_type_at_common_faces::FieldTypeAtCommonFaces=SingleValued()) where {A,B}
 
     if trial_space_ds_decomp != nothing
       Gridap.Helpers.@check test_space_ds_decomp != nothing
@@ -29,8 +27,8 @@ struct LocalFEOperator{FT<:FieldTypeAtCommonFaces,T1,T2,T3,T4,T5,T6,T7} <: Grida
     end
 
     if (trial_space_ds_decomp == nothing)
-        us = get_trial_fe_basis(image_trial_space)
-        vs = get_fe_basis(image_test_space)
+        us = get_trial_fe_basis(trial_space)
+        vs = get_fe_basis(test_space)
     else
         us = get_trial_fe_basis(trial_space_ds_decomp)
         vs = get_fe_basis(test_space_ds_decomp)
@@ -42,32 +40,26 @@ struct LocalFEOperator{FT<:FieldTypeAtCommonFaces,T1,T2,T3,T4,T5,T6,T7} <: Grida
      FT=typeof(field_type_at_common_faces)
      T1=typeof(LHS_form)
      T2=typeof(RHS_form)
-     T3=typeof(image_trial_space)
-     T4=typeof(image_test_space)
-     T5=typeof(domain_test_space)
-     T6=typeof(trial_space_ds_decomp)
-     T7=typeof(test_space_ds_decomp)
-     new{FT,T1,T2,T3,T4,T5,T6,T7}(LHS_form,
-                                  RHS_form,
-                                  image_trial_space,
-                                  image_test_space,
-                                  domain_test_space,
-                                  trial_space_ds_decomp,
-                                  test_space_ds_decomp,
-                                  LHS_contribs)
+     T3=typeof(trial_space)
+     T4=typeof(test_space)
+     T5=typeof(trial_space_ds_decomp)
+     T6=typeof(test_space_ds_decomp)
+     new{FT,T1,T2,T3,T4,T5,T6}(LHS_form,
+                      RHS_form,
+                      trial_space,
+                      test_space,
+                      trial_space_ds_decomp,
+                      test_space_ds_decomp,
+                      LHS_contribs)
   end
 end
 
-function _get_image_test_fe_basis(op::LocalFEOperator{FT,A,B,C,D,E,Nothing}) where {FT,A,B,C,D,E}
-  get_fe_basis(op.image_test_space)
+function _get_test_fe_basis(op::LocalFEOperator{FT,A,B,C,D,Nothing}) where {FT,A,B,C,D}
+  get_fe_basis(op.test_space)
 end
 
-function _get_domain_test_fe_basis(op::LocalFEOperator{FT,A,B,C,D,E,Nothing}) where {FT,A,B,C,D,E}
-  get_fe_basis(op.domain_test_space)
-end
-
-function _get_image_test_fe_basis(op::LocalFEOperator{FT,A,B,C,D,E,<:MultiFieldFESpace}) where {FT,A,B,C,D,E}
-  @notimplemented
+function _get_test_fe_basis(op::LocalFEOperator{FT,A,B,C,D,<:MultiFieldFESpace}) where {FT,A,B,C,D}
+  get_fe_basis(op.test_space_ds_decomp)
 end
 
 function _to_trial_basis(v)
@@ -115,7 +107,7 @@ function _evaluate_forms(op::LocalFEOperator,v)
     Gridap.Helpers.@check length(lhs_skeleton)==0
     LHS_contribs = op.LHS_contribs
   end
-  vs = _get_image_test_fe_basis(op)
+  vs = _get_test_fe_basis(op)
   RHS_contribs = op.RHS_form(_to_trial_basis(v),vs)
   rhs_skeleton=GridapHybrid._find_skeleton(RHS_contribs)
   if length(rhs_skeleton)==1
@@ -298,7 +290,7 @@ function _generate_image_space_span(op::LocalFEOperator{<:SingleValued},
                                     O::Gridap.MultiField.MultiFieldFESpace,
                                     v::Gridap.CellData.CellField,
                                     cell_dofs,
-                                    basis_style)
+                                    basis_style) where N
   cell_dofs_field_offsets=_compute_cell_dofs_field_offsets(O)
   all_febases = Gridap.MultiField.MultiFieldFEBasisComponent[]
   nfields = length(O.spaces)
@@ -312,37 +304,11 @@ function _generate_image_space_span(op::LocalFEOperator{<:SingleValued},
   Gridap.MultiField.MultiFieldCellField(all_febases)
 end
 
-# Required to implement the below statement 
-#   cell_field=lazy_map(linear_combination,skel_facet_dofs,skel_facet_shapefuns) 
-# in the case in which skel_facet_shapefuns comes from the restriction of a trial 
-# basis to the SkeletonTriangulation 
-function Gridap.Fields.linear_combination(u::AbstractArray,
-                                          f::Gridap.Fields.MatrixBlock)
-  @notimplementedif size(f)[1]!=1
-  n2=size(f)[2]
-  array   = reshape(f.array,(n2,))
-  touched = reshape(f.touched,(n2,))
-  fv = ArrayBlock(array,touched)
-  lcfv=Gridap.Fields.linear_combination(u,fv)
-  Transpose(lcfv)
-end
-
-function Gridap.Fields.linear_combination(u::AbstractArray,
-                                          f::Gridap.Fields.Matrix)
-  @notimplementedif size(f)[1]!=1
-  n2=size(f)[2]
-  fv   = reshape(f,(n2,))
-  lcfv=Gridap.Fields.linear_combination(u,fv)
-  Transpose(lcfv)
-end
-
 function _generate_image_space_span(op::LocalFEOperator{<:SingleValued},
                                     image_space::Gridap.MultiField.MultiFieldFESpace,
                                     v::Gridap.MultiField.MultiFieldCellField,
                                     cell_dofs,
                                     basis_style)
-
-                                   
 
   cell_dofs_field_offsets=_compute_cell_dofs_field_offsets(image_space)
   all_febases = Vector{Gridap.MultiField.MultiFieldFEBasisComponent}(undef,2)
@@ -366,71 +332,22 @@ function _generate_image_space_span(op::LocalFEOperator{<:SingleValued},
   du_i_2=_generate_image_space_span(image_space.spaces[1],cell_dofs_current_field_2,basis_style)
   du_i_b_2 = Gridap.MultiField.MultiFieldFEBasisComponent(du_i_2,2,nfields)
   all_febases[2]=du_i_b_2
-
-  res1=Gridap.MultiField.MultiFieldCellField(all_febases)
-  m = get_background_model(get_triangulation(v.single_fields[2].single_field))
-  cell_wise_facets_ids = _get_cell_wise_facets(m)
-  tskel = Skeleton(m)
-
-  if basis_style==Gridap.FESpaces.TrialBasis()
-    isb=get_trial_fe_basis(image_space)
-  else
-    isb=get_fe_basis(image_space)
-  end
-  row_dofs_split=1:_num_funs_x_cell(isb.single_fields[1].single_field)
-  println(row_dofs_split)
-  s = _num_funs_x_cell(v.single_fields[1].single_field)
-  col_dofs_split=[ s.+i for i in _cell_vector_facets_split(v.single_fields[2].single_field)]
-
-  skel_facet_dofs=SkeletonVectorFromSplitDoFsCellVector(tskel.glue,
-                                                        cell_wise_facets_ids,
-                                                        cell_dofs,
-                                                        row_dofs_split,
-                                                        col_dofs_split)
-
-
-                                                      
-  
-
-  isb_bulk_to_second_block=
-     Gridap.MultiField.MultiFieldFEBasisComponent(isb.single_fields[1].single_field,2,nfields)
-
-  reconstructed_trace_facet=
-     change_domain(isb_bulk_to_second_block,tskel,ReferenceDomain())
-
-  skel_facet_shapefuns=Gridap.CellData.get_data(reconstructed_trace_facet)
-  
-  # We needed the two overloads above of linear_combination in order for this 
-  # statement to work whenever skel_facet_shapefuns comes from the restriction
-  # of a trial basis to the SkeletonTriangulation
-  cell_field=lazy_map(linear_combination,skel_facet_dofs,skel_facet_shapefuns)
-  
-  res2 = Gridap.CellData.GenericCellField(cell_field, 
-                                         tskel, 
-                                         ReferenceDomain())
-   res1,res2                                
+  Gridap.MultiField.MultiFieldCellField(all_febases)  
 end
 
 function _generate_image_space_span(op::LocalFEOperator{<:MultiValued},
-                                    image_space::Gridap.MultiField.MultiFieldFESpace,
+                                    O::Gridap.MultiField.MultiFieldFESpace,
                                     v::Gridap.MultiField.MultiFieldCellField,
                                     cell_dofs,
-                                    basis_style)
+                                    basis_style) where N
 
-  nfields = length(image_space.spaces)
+  nfields = length(O.spaces)
   if (basis_style==Gridap.FESpaces.TrialBasis())
-    mf_basis=get_trial_fe_basis(image_space)
+    mf_basis=get_trial_fe_basis(O)
   else
-    mf_basis=get_fe_basis(image_space)
+    mf_basis=get_fe_basis(O)
   end
   multi_fields = Gridap.MultiField.MultiFieldCellField[]
-  
-  col_stride=0
-  for i=1:nfields
-    field=v.single_fields[i].single_field
-    n = _num_funs_x_cell(field)
-    col_stride+=n 
-  end 
   
   s=1
   for i=1:nfields
@@ -444,27 +361,14 @@ function _generate_image_space_span(op::LocalFEOperator{<:MultiValued},
       cell_wise_facets_ids = _get_cell_wise_facets(m)
       tskel = Skeleton(m)
 
+
       row_dofs_split=[ (s-1).+i for i in _cell_vector_facets_split(field)]
-      
-      sj=(i-1)*col_stride+1
+      sj=1
       for j=1:nfields
         field=v.single_fields[j].single_field
         nj = _num_funs_x_cell(field)
         ej = sj + nj - 1
-
-        if (_is_on_skeleton(field))
-          stride=sum([length(k) for k in _cell_vector_facets_split(field)])
-          col_dofs_split=UnitRange{Int64}[]
-          cs = sj 
-          for k=1:length(_cell_vector_facets_split(field))
-            ce = cs+stride-1
-            push!(col_dofs_split,cs:ce)
-            cs=cs+col_stride
-          end
-        else 
-          col_dofs_split=sj:ej
-        end 
-        
+        col_dofs_split=sj:ej
         skel_facet_dofs=SkeletonVectorFromSplitDoFsCellVector(tskel.glue,
                                               cell_wise_facets_ids,
                                               cell_dofs,
@@ -492,7 +396,7 @@ function _generate_image_space_span(op::LocalFEOperator{<:MultiValued},
           ej = sj + nj - 1
           col_view_range=sj:ej
           cell_dofs_current_field=lazy_map(x->view(x,row_view_range,col_view_range),cell_dofs)
-          du_j = _generate_image_space_span(image_space.spaces[i],cell_dofs_current_field,basis_style)
+          du_j = _generate_image_space_span(O.spaces[i],cell_dofs_current_field,basis_style)
           du_j_b = Gridap.MultiField.MultiFieldFEBasisComponent(du_j,j,nfields)
           push!(single_fields,du_j_b)
           sj=ej+1
@@ -543,7 +447,7 @@ function _generate_fe_function(U::Gridap.MultiField.MultiFieldFESpace,cell_dofs)
 end
 
 function _generate_fe_function(op::LocalFEOperator,cell_dofs)
-  U = op.image_trial_space
+  U = op.trial_space
   _generate_fe_function(U,cell_dofs)
 end
 
@@ -555,8 +459,8 @@ function (op::LocalFEOperator)(v::Union{Gridap.MultiField.MultiFieldCellField,
   cell_dofs= _compute_cell_dofs(LHSf,RHSf)
   # We get the test space so that we don't deal with
   # the transpose underlying the trial basis
-  ispace = op.image_test_space
-  _generate_image_space_span(op,ispace,v,cell_dofs,basis_style)
+  O = op.test_space
+  _generate_image_space_span(op,O,v,cell_dofs,basis_style)
 end
 
 # We want to be as general as possible with the type of objects

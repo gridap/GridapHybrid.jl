@@ -35,7 +35,7 @@
     m( (u,u_c), (v,v_c) ) = ∫(∇(v)⋅∇(u))dΩ + ∫(v_c*u)dΩ + ∫(v*u_c)dΩ
     n( (uK,u∂K), (v,v_c) ) = ∫(∇(v)⋅∇(uK))dΩ + ∫(v_c*uK)dΩ + ∫((∇(v)⋅nK)*u∂K)d∂K - ∫((∇(v)⋅nK)*uK)d∂K 
 
-    LocalFEOperator((m,n), U, V, VK_V∂K)
+    LocalFEOperator((m,n), U, V)
 
     # LocalFEOperator((m,n),UKR,VKR;
     #                 trial_space_ds_decomp=UKR_DS_DECOMP,
@@ -45,15 +45,13 @@
   function setup_difference_operator(UK_U∂K,VK_V∂K,R,dΩ,d∂K)
     m((uK,u∂K)  , (vK,v∂K)) = ∫(vK*uK)dΩ + ∫(v∂K*u∂K)d∂K
     function n(uK_u∂K, (vK,v∂K))
-      urK_ur∂K, ur∂KF = R(uK_u∂K)
+      urK_ur∂K = R(uK_u∂K)
       urK,ur∂K = urK_ur∂K
-      uK,u∂K    = uK_u∂K
-      #println((v∂K*ur∂KF)(get_cell_points(d∂K.quad))[1][1][2,2][1,1])
-      println(size(ur∂KF(get_cell_points(d∂K.quad))[1][2][1,2][1]))
-      xxx
-      ∫(vK*(urK-uK))dΩ-∫(vK*ur∂K)dΩ-∫(v∂K*urK)d∂K-∫(v∂K*(u∂K-ur∂KF))d∂K
+      uK,u∂K   = uK_u∂K
+      ∫(vK*(urK-uK))dΩ-∫(vK*ur∂K)dΩ -                 # bulk projection terms
+         ∫(v∂K*urK)d∂K+∫(v∂K*u∂K)d∂K-∫(v∂K*ur∂K)d∂K   # skeleton projection terms
     end
-    LocalFEOperator((m,n),UK_U∂K,VK_V∂K,VK_V∂K; field_type_at_common_faces=MultiValued())
+    LocalFEOperator((m,n),UK_U∂K,VK_V∂K; field_type_at_common_faces=MultiValued())
    end
 
    p = 0
@@ -75,8 +73,7 @@
       reffeᵤ    = ReferenceFE(lagrangian,Float64,order  ;space=:P)
 
       VK     = TestFESpace(Ω  , reffeᵤ; conformity=:L2)
-      V∂K    = TestFESpace(Γ  , reffeᵤ; conformity=:L2,dirichlet_tags=collect(5:8))  # Ex 1
-      # V∂K    = TestFESpace(Γ  , reffeᵤ; conformity=:L2,dirichlet_tags="boundary")   # Ex 2
+      V∂K    = TestFESpace(Γ  , reffeᵤ; conformity=:L2,dirichlet_tags=collect(5:8))
       UK     = TrialFESpace(VK)
       U∂K    = TrialFESpace(V∂K,u)
       VK_V∂K = MultiFieldFESpace([VK,V∂K])
@@ -91,8 +88,8 @@
       diff_op=setup_difference_operator(UK_U∂K,VK_V∂K,R,dΩ,d∂K)
 
       function r(u,v)
-        uK_u∂K,_=R(u)
-        vK_v∂K,_=R(v)
+        uK_u∂K=R(u)
+        vK_v∂K=R(v)
         uK,u∂K = uK_u∂K
         vK,v∂K = vK_v∂K 
         ∫(∇(vK)⋅∇(uK))dΩ + ∫(∇(vK)⋅∇(u∂K))dΩ +
@@ -104,17 +101,25 @@
         h_T_1=1.0/h_T
         h_T_2=1.0/(h_T*h_T)
 
-        δuK,δu∂K=diff_op(u)
-        δvK,δv∂K=diff_op(v)
-        # δvK_K,δvK_∂K=δvK
-        # δuK_K,δuK_∂K=δuK
-        # δv∂K_K,δv∂K_∂K=δv∂K
-        # δu∂K_K,δu∂K_∂K=δu∂K
-        # ∫(h_T_2*δvK_K*δuK_K)dΩ+
-        #   ∫(h_T_2*δvK_K*δuK_∂K)dΩ+
-        #      ∫(h_T_2*δvK_∂K*δuK_K)dΩ+
-        #        ∫(h_T_2*δvK_∂K*δuK_∂K)dΩ+
-        # ∫(h_T_1*δv∂K_∂K*δu∂K_∂K)d∂K
+        # Currently, I cannot use this CellField in the integrand of the skeleton integrals below.
+        # I think we need to develop a specific version for _transform_face_to_cell_lface_expanded_array
+        # I will be using h_T_1 in the meantime
+        h_F=CellField(get_array(∫(1)dΓ),Γ)
+        h_F=1.0/h_F
+
+        uK_u∂K_ΠK,uK_u∂K_Π∂K=diff_op(u)
+        vK_v∂K_ΠK,vK_v∂K_Π∂K=diff_op(v)
+
+        uK_ΠK  , u∂K_ΠK  = uK_u∂K_ΠK
+        uK_Π∂K , u∂K_Π∂K = uK_u∂K_Π∂K
+        
+        vK_ΠK  , v∂K_ΠK  = vK_v∂K_ΠK
+        vK_Π∂K , v∂K_Π∂K = vK_v∂K_Π∂K
+
+        ∫(h_T_1*(vK_Π∂K-vK_ΠK)*(uK_Π∂K-uK_ΠK))d∂K + 
+           ∫(h_T_1*(v∂K_Π∂K-v∂K_ΠK)*(u∂K_Π∂K-u∂K_ΠK))d∂K +
+            ∫(h_T_1*(vK_Π∂K-vK_ΠK)*(u∂K_Π∂K-u∂K_ΠK))d∂K + 
+             ∫(h_T_1*(v∂K_Π∂K-v∂K_ΠK)*(uK_Π∂K-uK_ΠK))d∂K
       end
 
       a(u,v)=r(u,v)+s(u,v)
@@ -125,8 +130,6 @@
       xh=solve(op)
 
       uhK,uh∂K=xh
-
-      println(get_free_dof_values(uhK))
 
       e = u -uhK
       # @test sqrt(sum(∫(e⋅e)dΩ)) < 1.0e-12
@@ -158,7 +161,7 @@
 
   # ns=[8,16,32,64,128]
   ns=[8,16,32,64]
-  order=1
+  order=0
   el, hs = conv_test(ns,order)
   println("Slope L2-norm u: $(slope(hs,el))")
   slopek  =[Float64(ni)^(-(order)) for ni in ns]
