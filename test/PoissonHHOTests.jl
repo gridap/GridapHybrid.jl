@@ -1,10 +1,10 @@
-module PoissonHHOTests
+# module PoissonHHOTests
   using Gridap
   using GridapHybrid
   using Test
   using Plots
 
-  function setup_reconstruction_operator(model, order, dΩ, d∂K)
+  function setup_reconstruction_operator(model, order, dΩ, d∂K, VK_V∂K)
     nK        = get_cell_normal_vector(d∂K.quad.trian)
     refferecᵤ = ReferenceFE(orthogonal_basis, Float64, order+1)
     reffe_nzm = ReferenceFE(orthogonal_basis, Float64, order+1; subspace=:NonZeroMean)
@@ -16,36 +16,47 @@ module PoissonHHOTests
 
     VKR     = TestFESpace(Ω  , refferecᵤ; conformity=:L2)
     UKR     = TrialFESpace(VKR)
-    UKR_NZM = TrialFESpace(TestFESpace(Ω, reffe_nzm; conformity=:L2))
-    UKR_ZM  = TrialFESpace(TestFESpace(Ω, reffe_zm; conformity=:L2))
+    # UKR_NZM = TrialFESpace(TestFESpace(Ω, reffe_nzm; conformity=:L2))
+    # UKR_ZM  = TrialFESpace(TestFESpace(Ω, reffe_zm; conformity=:L2))
     VKR_C   = TestFESpace(Ω, reffe_c ; conformity=:L2, vector_type=Vector{Float64})
-    VKR_NC  = TestFESpace(Ω, reffe_nc; conformity=:L2, vector_type=Vector{Float64})
+    UKR_C   = TrialFESpace(VKR_C)
+    # VKR_NC  = TestFESpace(Ω, reffe_nc; conformity=:L2, vector_type=Vector{Float64})
 
-    VKR_DS_DECOMP = MultiFieldFESpace([VKR_C,VKR_NC])
-    UKR_DS_DECOMP = MultiFieldFESpace([UKR_NZM,UKR_ZM])
+    # VKR_DS_DECOMP = MultiFieldFESpace([VKR_C,VKR_NC])
+    # UKR_DS_DECOMP = MultiFieldFESpace([UKR_NZM,UKR_ZM])
 
-    m( (u_nzm,u_zm), (v_c,v_nc) ) = ∫(∇(v_nc)⋅∇(u_zm))dΩ + ∫(∇(v_nc)⋅∇(u_nzm))dΩ +
-                                    ∫(v_c*u_nzm)dΩ
-    n( (uK,u∂K), (v_c,v_nc)     ) = ∫(-Δ(v_nc)*uK)dΩ + ∫(v_c*uK)dΩ + ∫((∇(v_nc)⋅nK)*u∂K)d∂K
+    V = MultiFieldFESpace([VKR,VKR_C])
+    U = MultiFieldFESpace([UKR,UKR_C])
 
-    LocalFEOperator((m,n),UKR,VKR;
-                    trial_space_ds_decomp=UKR_DS_DECOMP,
-                    test_space_ds_decomp=VKR_DS_DECOMP)
+    # m( (u_nzm,u_zm), (v_c,v_nc) ) = ∫(∇(v_nc)⋅∇(u_zm))dΩ + ∫(∇(v_nc)⋅∇(u_nzm))dΩ +
+    #                                ∫(v_c*u_nzm)dΩ
+    # n( (uK,u∂K), (v_c,v_nc)     ) = ∫(-Δ(v_nc)*uK)dΩ + ∫(v_c*uK)dΩ + ∫((∇(v_nc)⋅nK)*u∂K)d∂K
+
+    m( (u,u_c), (v,v_c) ) = ∫(∇(v)⋅∇(u))dΩ + ∫(v_c*u)dΩ + ∫(v*u_c)dΩ
+    n( (uK,u∂K), (v,v_c) ) = ∫(∇(v)⋅∇(uK))dΩ + ∫(v_c*uK)dΩ + ∫((∇(v)⋅nK)*u∂K)d∂K - ∫((∇(v)⋅nK)*uK)d∂K 
+
+    LocalFEOperator((m,n), U, V, VK_V∂K)
+
+    # LocalFEOperator((m,n),UKR,VKR;
+    #                 trial_space_ds_decomp=UKR_DS_DECOMP,
+    #                 test_space_ds_decomp=VKR_DS_DECOMP)
   end
 
   function setup_difference_operator(UK_U∂K,VK_V∂K,R,dΩ,d∂K)
     m((uK,u∂K)  , (vK,v∂K)) = ∫(vK*uK)dΩ + ∫(v∂K*u∂K)d∂K
     function n(uK_u∂K, (vK,v∂K))
-      uK_u∂K_rec     = R(uK_u∂K)
-      uK,u∂K         = uK_u∂K
-      uK_rec,u∂K_rec = uK_u∂K_rec
-      ∫(vK *uK_rec)dΩ  + ∫(vK*u∂K_rec)dΩ   - ∫(vK *uK)dΩ +
-      ∫(v∂K*uK_rec)d∂K + ∫(v∂K*u∂K_rec)d∂K - ∫(v∂K*u∂K)d∂K
+      urK_ur∂K, ur∂KF = R(uK_u∂K)
+      urK,ur∂K = urK_ur∂K
+      uK,u∂K    = uK_u∂K
+      #println((v∂K*ur∂KF)(get_cell_points(d∂K.quad))[1][1][2,2][1,1])
+      println(size(ur∂KF(get_cell_points(d∂K.quad))[1][2][1,2][1]))
+      xxx
+      ∫(vK*(urK-uK))dΩ-∫(vK*ur∂K)dΩ-∫(v∂K*urK)d∂K-∫(v∂K*(u∂K-ur∂KF))d∂K
     end
-    LocalFEOperator((m,n),UK_U∂K,VK_V∂K; field_type_at_common_faces=MultiValued())
+    LocalFEOperator((m,n),UK_U∂K,VK_V∂K,VK_V∂K; field_type_at_common_faces=MultiValued())
    end
 
-   p = 2
+   p = 0
    u(x) = x[1]^p+x[2]^p                         # Ex 1
   #  u(x) = x[1]*(x[1]-1)^p*x[2]*(x[2]-1)^p         # Ex 2
    f(x)=-Δ(u)(x)
@@ -76,14 +87,16 @@ module PoissonHHOTests
       dΓ     = Measure(Γ,degree)
       d∂K    = Measure(∂K,degree)
 
-      R=setup_reconstruction_operator(model, order, dΩ, d∂K)
+      R=setup_reconstruction_operator(model, order, dΩ, d∂K, VK_V∂K)
       diff_op=setup_difference_operator(UK_U∂K,VK_V∂K,R,dΩ,d∂K)
 
       function r(u,v)
-        uK,u∂K=R(u)
-        vK,v∂K=R(v)
+        uK_u∂K,_=R(u)
+        vK_v∂K,_=R(v)
+        uK,u∂K = uK_u∂K
+        vK,v∂K = vK_v∂K 
         ∫(∇(vK)⋅∇(uK))dΩ + ∫(∇(vK)⋅∇(u∂K))dΩ +
-          ∫(∇(v∂K)⋅∇(uK))dΩ + ∫(∇(v∂K)⋅∇(u∂K))dΩ
+           ∫(∇(v∂K)⋅∇(uK))dΩ + ∫(∇(v∂K)⋅∇(u∂K))dΩ
       end
 
       function s(u,v)
@@ -93,25 +106,28 @@ module PoissonHHOTests
 
         δuK,δu∂K=diff_op(u)
         δvK,δv∂K=diff_op(v)
-        δvK_K,δvK_∂K=δvK
-        δuK_K,δuK_∂K=δuK
-        δv∂K_K,δv∂K_∂K=δv∂K
-        δu∂K_K,δu∂K_∂K=δu∂K
-        ∫(h_T_2*δvK_K*δuK_K)dΩ+
-          ∫(h_T_2*δvK_K*δuK_∂K)dΩ+
-             ∫(h_T_2*δvK_∂K*δuK_K)dΩ+
-               ∫(h_T_2*δvK_∂K*δuK_∂K)dΩ+
-        ∫(h_T_1*δv∂K_∂K*δu∂K_∂K)d∂K
+        # δvK_K,δvK_∂K=δvK
+        # δuK_K,δuK_∂K=δuK
+        # δv∂K_K,δv∂K_∂K=δv∂K
+        # δu∂K_K,δu∂K_∂K=δu∂K
+        # ∫(h_T_2*δvK_K*δuK_K)dΩ+
+        #   ∫(h_T_2*δvK_K*δuK_∂K)dΩ+
+        #      ∫(h_T_2*δvK_∂K*δuK_K)dΩ+
+        #        ∫(h_T_2*δvK_∂K*δuK_∂K)dΩ+
+        # ∫(h_T_1*δv∂K_∂K*δu∂K_∂K)d∂K
       end
 
       a(u,v)=r(u,v)+s(u,v)
       l((vK,))=∫(vK*f)dΩ
 
 
-      @time op=HybridAffineFEOperator((u,v)->(a(u,v),l(v)), UK_U∂K, VK_V∂K, [1], [2])
-      @time xh=solve(op)
+      op=HybridAffineFEOperator((u,v)->(a(u,v),l(v)), UK_U∂K, VK_V∂K, [1], [2])
+      xh=solve(op)
 
       uhK,uh∂K=xh
+
+      println(get_free_dof_values(uhK))
+
       e = u -uhK
       # @test sqrt(sum(∫(e⋅e)dΩ)) < 1.0e-12
       return sqrt(sum(∫(e⋅e)dΩ))
@@ -137,6 +153,8 @@ module PoissonHHOTests
     linreg = hcat(fill!(similar(x), 1), x) \ y
     linreg[2]
   end
+
+  solve_hho((2,2),0)
 
   # ns=[8,16,32,64,128]
   ns=[8,16,32,64]
