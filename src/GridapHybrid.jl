@@ -46,8 +46,12 @@ include("MonomialBasisRefFEs.jl")
 export MonomialBasisRefFE
 export monomial_basis
 
-include("LocalFEOperators.jl")
+include("LocalFEOperatorsTools.jl")
+include("ReconstructionFEOperators.jl")
+include("ProjectionFEOperators.jl")
 export LocalFEOperator
+export ReconstructionFEOperator
+export ProjectionFEOperator
 export SingleValued
 export MultiValued
 

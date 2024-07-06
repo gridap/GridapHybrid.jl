@@ -7,10 +7,11 @@
   function setup_reconstruction_operator(model, order, dΩ, d∂K, VK_V∂K)
     nK        = get_cell_normal_vector(d∂K.quad.trian)
     refferecᵤ = ReferenceFE(orthogonal_basis, Float64, order+1)
-    reffe_nzm = ReferenceFE(orthogonal_basis, Float64, order+1; subspace=:NonZeroMean)
-    reffe_zm  = ReferenceFE(orthogonal_basis, Float64, order+1; subspace=:ZeroMean)
+    
+    # reffe_nzm = ReferenceFE(orthogonal_basis, Float64, order+1; subspace=:NonZeroMean)
+    # reffe_zm  = ReferenceFE(orthogonal_basis, Float64, order+1; subspace=:ZeroMean)
     reffe_c   = ReferenceFE(monomial_basis  , Float64, order+1; subspace=:OnlyConstant)
-    reffe_nc  = ReferenceFE(monomial_basis  , Float64, order+1; subspace=:ExcludeConstant)
+    # reffe_nc  = ReferenceFE(monomial_basis  , Float64, order+1; subspace=:ExcludeConstant)
 
     Ω = dΩ.quad.trian
 
@@ -35,14 +36,14 @@
     m( (u,u_c), (v,v_c) ) = ∫(∇(v)⋅∇(u))dΩ + ∫(v_c*u)dΩ + ∫(v*u_c)dΩ
     n( (uK,u∂K), (v,v_c) ) = ∫(∇(v)⋅∇(uK))dΩ + ∫(v_c*uK)dΩ + ∫((∇(v)⋅nK)*u∂K)d∂K - ∫((∇(v)⋅nK)*uK)d∂K 
 
-    LocalFEOperator((m,n), U, V)
+    ReconstructionFEOperator((m,n), U, V)
 
     # LocalFEOperator((m,n),UKR,VKR;
     #                 trial_space_ds_decomp=UKR_DS_DECOMP,
     #                 test_space_ds_decomp=VKR_DS_DECOMP)
   end
 
-  function setup_difference_operator(UK_U∂K,VK_V∂K,R,dΩ,d∂K)
+  function setup_projection_operator(UK_U∂K,VK_V∂K,R,dΩ,d∂K)
     m((uK,u∂K)  , (vK,v∂K)) = ∫(vK*uK)dΩ + ∫(v∂K*u∂K)d∂K
     function n(uK_u∂K, (vK,v∂K))
       urK_ur∂K = R(uK_u∂K)
@@ -51,10 +52,10 @@
       ∫(vK*(urK-uK))dΩ-∫(vK*ur∂K)dΩ -                 # bulk projection terms
          ∫(v∂K*urK)d∂K+∫(v∂K*u∂K)d∂K-∫(v∂K*ur∂K)d∂K   # skeleton projection terms
     end
-    LocalFEOperator((m,n),UK_U∂K,VK_V∂K; field_type_at_common_faces=MultiValued())
+    ProjectionFEOperator((m,n),UK_U∂K,VK_V∂K)
    end
 
-   p = 0
+   p = 1
    u(x) = x[1]^p+x[2]^p                         # Ex 1
   #  u(x) = x[1]*(x[1]-1)^p*x[2]*(x[2]-1)^p         # Ex 2
    f(x)=-Δ(u)(x)
@@ -62,7 +63,9 @@
    #u(x)=x[1]+x[2]
    #f(x)=-Δ(u)(x)
 
-  function solve_hho(cells,order)
+  # function solve_hho(cells,order)
+      cells=(1,1)
+      order=0
       partition = (0,1,0,1)
       model = CartesianDiscreteModel(partition, cells)
       D  = num_cell_dims(model)
@@ -85,7 +88,7 @@
       d∂K    = Measure(∂K,degree)
 
       R=setup_reconstruction_operator(model, order, dΩ, d∂K, VK_V∂K)
-      diff_op=setup_difference_operator(UK_U∂K,VK_V∂K,R,dΩ,d∂K)
+      projection_op=setup_projection_operator(UK_U∂K,VK_V∂K,R,dΩ,d∂K)
 
       function r(u,v)
         uK_u∂K=R(u)
@@ -107,8 +110,8 @@
         h_F=CellField(get_array(∫(1)dΓ),Γ)
         h_F=1.0/h_F
 
-        uK_u∂K_ΠK,uK_u∂K_Π∂K=diff_op(u)
-        vK_v∂K_ΠK,vK_v∂K_Π∂K=diff_op(v)
+        uK_u∂K_ΠK,uK_u∂K_Π∂K=projection_op(u)
+        vK_v∂K_ΠK,vK_v∂K_Π∂K=projection_op(v)
 
         uK_ΠK  , u∂K_ΠK  = uK_u∂K_ΠK
         uK_Π∂K , u∂K_Π∂K = uK_u∂K_Π∂K
