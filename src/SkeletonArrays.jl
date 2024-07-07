@@ -211,8 +211,10 @@ struct SkeletonVectorFromSplitDoFsCellVector{T,A,B,C,D,E} <: AbstractVector{Grid
                                                  col_dofs_split)
 
     Gridap.Helpers.@check isa(row_dofs_split,UnitRange) || isa(row_dofs_split,AbstractVector{<:UnitRange}) 
-    Gridap.Helpers.@check isa(col_dofs_split,UnitRange) || isa(col_dofs_split,AbstractVector{<:UnitRange}) 
-    
+    Gridap.Helpers.@check isa(col_dofs_split,UnitRange) || 
+                       isa(col_dofs_split,AbstractVector{<:UnitRange}) ||
+                          isa(col_dofs_split,Integer)
+                                              
     if isa(row_dofs_split,AbstractVector{<:UnitRange})
       Gridap.Helpers.@check length(row_dofs_split) == length(cell_wise_facets_ids[1])
     end 
@@ -223,7 +225,11 @@ struct SkeletonVectorFromSplitDoFsCellVector{T,A,B,C,D,E} <: AbstractVector{Grid
     
     Gridap.Helpers.@check length(glue.cell_to_ctype) == length(cell_vector_dofs)
 
-    T=typeof(view(cell_vector_dofs[1],1:1,1:1))
+    if (isa(col_dofs_split,Integer))
+      T=typeof(view(cell_vector_dofs[1],1:1,1))
+    else
+      T=typeof(view(cell_vector_dofs[1],1:1,1:1))
+    end
     A=typeof(glue)
     B=typeof(cell_wise_facets_ids)
     C=typeof(cell_vector_dofs)
@@ -271,17 +277,26 @@ function Gridap.Arrays.getindex!(cache,a::SkeletonVectorFromSplitDoFsCellVector,
   cwf=getindex!(cwfc,a.cell_wise_facets_ids,cell)
   dofs=getindex!(cvdc,a.cell_vector_dofs,cell)
   for (lfacet,gfacet) in enumerate(cwf)
-    if (isa(a.col_dofs_split,UnitRange))
-      col_range=a.col_dofs_split
-    else
-      col_range=a.col_dofs_split[lfacet]
+    if (isa(a.col_dofs_split,Integer))
+      if (isa(a.row_dofs_split,UnitRange))
+        row_range=a.row_dofs_split
+      else
+        row_range=a.row_dofs_split[lfacet]
+      end
+      fdofs=view(dofs,row_range,a.col_dofs_split)  
+    else 
+      if (isa(a.col_dofs_split,UnitRange))
+        col_range=a.col_dofs_split
+      else
+        col_range=a.col_dofs_split[lfacet]
+      end
+      if (isa(a.row_dofs_split,UnitRange))
+        row_range=a.row_dofs_split
+      else
+        row_range=a.row_dofs_split[lfacet]
+      end
+      fdofs=view(dofs,row_range,col_range)
     end
-    if (isa(a.row_dofs_split,UnitRange))
-      row_range=a.row_dofs_split
-    else
-      row_range=a.row_dofs_split[lfacet]
-    end
-    fdofs=view(dofs,row_range,col_range)
     result.array[lfacet]=fdofs
   end
   result

@@ -36,7 +36,7 @@ function _generate_image_space_span(op::ProjectionFEOperator,
                                     O::Gridap.MultiField.MultiFieldFESpace,
                                     v::Gridap.MultiField.MultiFieldCellField,
                                     cell_dofs,
-                                    basis_style) where N
+                                    basis_style)
 
   nfields = length(O.spaces)
   if (basis_style==Gridap.FESpaces.TrialBasis())
@@ -106,47 +106,56 @@ function _generate_image_space_span(op::ProjectionFEOperator,
   multi_fields
 end
 
-function _generate_fe_function(U::Gridap.FESpaces.SingleFieldFESpace,cell_dofs)
+function _generate_cell_field(field_id, nfields, U::Gridap.FESpaces.SingleFieldFESpace,cell_dofs)
   t  = get_triangulation(U)
   m  = get_background_model(t)
   Dt = num_cell_dims(t)
   Dm = num_cell_dims(m)
+  skel=Skeleton(m)
   if (Dt!=Dm)
     @notimplementedif (Dt+1) != Dm
-    
-    #cell_wise_facets = _get_cell_wise_facets(m)
-    #cells_around_facets = _get_cells_around_facets(m)
-    #cell_dofs=convert_cell_wise_dofs_array_to_facet_dofs_array(
-    #             cells_around_facets,
-    #             cell_wise_facets,
-    #             cell_dofs,
-    #             get_cell_dof_ids(U))[1]
+    # facet_dofs=_convert_cell_dofs_to_facet_dofs(U,cell_dofs)
+    # skel_facet_dofs=SkeletonVectorFromFacetVector(skel.glue,cell_wise_facets_ids,facet_dofs)
+
+    cell_wise_facets_ids = _get_cell_wise_facets(m)
+
+    basis=get_fe_basis(U)
+    facet_shapefuns=Gridap.CellData.get_data(basis)
+    row_dofs_split=_cell_vector_facets_split(basis)
+    col_dofs_split=1
+
+    skel_facet_dofs=SkeletonVectorFromSplitDoFsCellVector(skel.glue,
+                                      cell_wise_facets_ids,
+                                      cell_dofs,
+                                      row_dofs_split,
+                                      col_dofs_split)
+
+    skel_facet_shapefuns=_transform_face_to_cell_lface_array(skel.glue,facet_shapefuns;
+                                                             add_naive_innermost_block_level=true)
+
+    cell_field=lazy_map(linear_combination,skel_facet_dofs,skel_facet_shapefuns)
+    cf = Gridap.CellData.GenericCellField(cell_field, skel, DomainStyle(get_fe_basis(U)))
+  else 
+    free_dofs = Gridap.FESpaces.gather_free_values(U,cell_dofs)
+    cell_field = Gridap.CellData.get_data(FEFunction(U,free_dofs))
+    cf = Gridap.CellData.GenericCellField(cell_field, t, ReferenceDomain())
   end
-  free_dofs = Gridap.FESpaces.gather_free_values(U,cell_dofs)
-  FEFunction(U,free_dofs)
+  cf
 end
 
-function _generate_fe_function(U::Gridap.MultiField.MultiFieldFESpace,cell_dofs)
-  cell_dofs_field_offsets=_compute_cell_dofs_field_offsets(U)
-  # TO-DO: extract eltype from U, instead of a hard-coded Float64
-  free_values = Vector{Float64}(undef,num_free_dofs(U))
-  nfields = length(U.spaces)
-  s=1
-  for i=1:nfields
-    Ui=U.spaces[i]
-    e = s + (num_free_dofs(Ui)-1)
-    view_range=cell_dofs_field_offsets[i]:cell_dofs_field_offsets[i+1]-1
-    cell_dofs_current_field=lazy_map(x->view(x,view_range),cell_dofs)
-    du_i=_generate_fe_function(U.spaces[i],cell_dofs_current_field)
-    free_values[s:e] .= get_free_dof_values(du_i)
-    s=e+1
-  end
-  FEFunction(U, free_values)
-end
-
-function _generate_fe_function(op::ProjectionFEOperator,cell_dofs)
+function _generate_cell_field(op::ProjectionFEOperator,cell_dofs)
   U = op.trial_space
-  _generate_fe_function(U,cell_dofs)
+  cell_dofs_field_offsets=_compute_cell_dofs_field_offsets(U)
+  single_fields = Gridap.CellData.GenericCellField[]
+  nfields = length(U.spaces)
+  for i=1:nfields
+      Ui=U.spaces[i]
+      view_range=cell_dofs_field_offsets[i]:cell_dofs_field_offsets[i+1]-1
+      cell_dofs_current_field=lazy_map(x->view(x,view_range),cell_dofs)
+      du_i=_generate_cell_field(i, nfields, U.spaces[i],cell_dofs_current_field)
+      push!(single_fields,du_i)
+   end
+   Gridap.MultiField.MultiFieldCellField(single_fields)
 end
 
 function (op::ProjectionFEOperator)(v::Union{Gridap.MultiField.MultiFieldCellField,
@@ -168,5 +177,5 @@ end
 function (op::ProjectionFEOperator)(v::FEFunction)
   LHSf,RHSf = _evaluate_forms(op,v)
   cell_dofs = _compute_cell_dofs(LHSf,RHSf)
-  _generate_fe_function(op,cell_dofs)
+  _generate_cell_field(op,cell_dofs)
 end

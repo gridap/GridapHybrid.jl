@@ -1,6 +1,3 @@
-# TO-DO: better names?
-# TO-DO: different implementation strategy? Traits versus ...
-
 struct ReconstructionFEOperator{T1,T2,T3,T4,T5,T6} <: GridapType
   LHS_form               :: T1
   RHS_form               :: T2
@@ -87,46 +84,31 @@ function _generate_image_space_span(op::ReconstructionFEOperator,
   Gridap.MultiField.MultiFieldCellField(all_febases)  
 end
 
-function _generate_fe_function(U::Gridap.FESpaces.SingleFieldFESpace,cell_dofs)
-  t  = get_triangulation(U)
-  m  = get_background_model(t)
-  Dt = num_cell_dims(t)
-  Dm = num_cell_dims(m)
-  if (Dt!=Dm)
-    @notimplementedif (Dt+1) != Dm
-    cell_wise_facets = _get_cell_wise_facets(m)
-    cells_around_facets = _get_cells_around_facets(m)
-    cell_dofs=convert_cell_wise_dofs_array_to_facet_dofs_array(
-                 cells_around_facets,
-                 cell_wise_facets,
-                 cell_dofs,
-                 get_cell_dof_ids(U))[1]
-  end
-  free_dofs = Gridap.FESpaces.gather_free_values(U,cell_dofs)
-  FEFunction(U,free_dofs)
-end
-
-function _generate_fe_function(U::Gridap.MultiField.MultiFieldFESpace,cell_dofs)
-  cell_dofs_field_offsets=_compute_cell_dofs_field_offsets(U)
-  # TO-DO: extract eltype from U, instead of a hard-coded Float64
-  free_values = Vector{Float64}(undef,num_free_dofs(U))
-  nfields = length(U.spaces)
-  s=1
-  for i=1:nfields
-    Ui=U.spaces[i]
-    e = s + (num_free_dofs(Ui)-1)
-    view_range=cell_dofs_field_offsets[i]:cell_dofs_field_offsets[i+1]-1
+function _generate_cell_field(op::ReconstructionFEOperator,cell_dofs)
+    U=op.trial_space
+    all_components = Vector{GenericCellField}(undef,2)
+    cell_dofs_field_offsets=_compute_cell_dofs_field_offsets(U)
+    view_range=cell_dofs_field_offsets[1]:cell_dofs_field_offsets[2]-1
     cell_dofs_current_field=lazy_map(x->view(x,view_range),cell_dofs)
-    du_i=_generate_fe_function(U.spaces[i],cell_dofs_current_field)
-    free_values[s:e] .= get_free_dof_values(du_i)
-    s=e+1
-  end
-  FEFunction(U, free_values)
-end
+    free_dofs = Gridap.FESpaces.gather_free_values(U[1],cell_dofs_current_field)
+    uh=FEFunction(U[1],free_dofs)
 
-function _generate_fe_function(op::ReconstructionFEOperator,cell_dofs)
-  U = op.trial_space
-  _generate_fe_function(U,cell_dofs)
+    # Replicate the reconstructed function in both blocks
+    # To some extent, in my view, this is quite dirty and may be
+    # an indication that the current approach that we chose to implement 
+    # HHO might rot.
+    data=lazy_map(BlockMap(2,1),Gridap.CellData.get_data(uh))
+    cf = Gridap.CellData.GenericCellField(data, 
+                                          get_triangulation(U[1]), 
+                                          ReferenceDomain())
+    all_components[1]=cf
+
+    data=lazy_map(BlockMap(2,2),Gridap.CellData.get_data(uh))
+    cf = Gridap.CellData.GenericCellField(data, 
+                                          get_triangulation(U[1]), 
+                                          ReferenceDomain())
+    all_components[2]=cf
+    Gridap.MultiField.MultiFieldCellField(all_components)
 end
 
 function (op::ReconstructionFEOperator)(v::Union{Gridap.MultiField.MultiFieldCellField,
@@ -148,5 +130,5 @@ end
 function (op::ReconstructionFEOperator)(v::FEFunction)
   LHSf,RHSf = _evaluate_forms(op,v)
   cell_dofs = _compute_cell_dofs(LHSf,RHSf)
-  _generate_fe_function(op,cell_dofs)
+  _generate_cell_field(op,cell_dofs)
 end

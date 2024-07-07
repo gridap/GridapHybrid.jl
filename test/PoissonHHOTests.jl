@@ -49,23 +49,25 @@
       urK_ur∂K = R(uK_u∂K)
       urK,ur∂K = urK_ur∂K
       uK,u∂K   = uK_u∂K
-      ∫(vK*(urK-uK))dΩ-∫(vK*ur∂K)dΩ -                 # bulk projection terms
+      ∫(vK*(urK-uK))dΩ+∫(vK*ur∂K)dΩ -                 # bulk projection terms
          ∫(v∂K*urK)d∂K+∫(v∂K*u∂K)d∂K-∫(v∂K*ur∂K)d∂K   # skeleton projection terms
+    end
+    function n(uK_u∂K::Gridap.MultiField.MultiFieldFEFunction, (vK,v∂K))
+      uK,u∂K = uK_u∂K
+      urK1,urK2 = R(uK_u∂K)
+      ∫(vK*(urK1-uK))dΩ +      # bulk projection terms
+        ∫(v∂K*(urK2-u∂K))d∂K   # skeleton projection terms
     end
     ProjectionFEOperator((m,n),UK_U∂K,VK_V∂K)
    end
 
-   p = 1
-   u(x) = x[1]^p+x[2]^p                         # Ex 1
-  #  u(x) = x[1]*(x[1]-1)^p*x[2]*(x[2]-1)^p         # Ex 2
-   f(x)=-Δ(u)(x)
 
-   #u(x)=x[1]+x[2]
-   #f(x)=-Δ(u)(x)
+  function solve_hho(cells,order)
+    p = order
+    u(x) = x[1]^p+x[2]^p                         # Ex 1
+    #  u(x) = x[1]*(x[1]-1)^p*x[2]*(x[2]-1)^p         # Ex 2
+    f(x)=-Δ(u)(x)
 
-  # function solve_hho(cells,order)
-      cells=(1,1)
-      order=0
       partition = (0,1,0,1)
       model = CartesianDiscreteModel(partition, cells)
       D  = num_cell_dims(model)
@@ -90,6 +92,7 @@
       R=setup_reconstruction_operator(model, order, dΩ, d∂K, VK_V∂K)
       projection_op=setup_projection_operator(UK_U∂K,VK_V∂K,R,dΩ,d∂K)
 
+      # Definition of r bilinear form whenever u is a TrialBasis
       function r(u,v)
         uK_u∂K=R(u)
         vK_v∂K=R(v)
@@ -97,6 +100,14 @@
         vK,v∂K = vK_v∂K 
         ∫(∇(vK)⋅∇(uK))dΩ + ∫(∇(vK)⋅∇(u∂K))dΩ +
            ∫(∇(v∂K)⋅∇(uK))dΩ + ∫(∇(v∂K)⋅∇(u∂K))dΩ
+      end
+
+      # Definition of r bilinear form for the particular case in which u is a FEFunction
+      function r(u::Gridap.FESpaces.FEFunction,v)
+        uKr1,uKr2=R(u)
+        vK_v∂K=R(v)
+        vK,v∂K = vK_v∂K
+        ∫(∇(vK)⋅∇(uKr1))dΩ + ∫(∇(v∂K)⋅∇(uKr2))dΩ
       end
 
       function s(u,v)
@@ -120,20 +131,48 @@
         vK_Π∂K , v∂K_Π∂K = vK_v∂K_Π∂K
 
         ∫(h_T_1*(vK_Π∂K-vK_ΠK)*(uK_Π∂K-uK_ΠK))d∂K + 
-           ∫(h_T_1*(v∂K_Π∂K-v∂K_ΠK)*(u∂K_Π∂K-u∂K_ΠK))d∂K +
-            ∫(h_T_1*(vK_Π∂K-vK_ΠK)*(u∂K_Π∂K-u∂K_ΠK))d∂K + 
-             ∫(h_T_1*(v∂K_Π∂K-v∂K_ΠK)*(uK_Π∂K-uK_ΠK))d∂K
+            ∫(h_T_1*(v∂K_Π∂K-v∂K_ΠK)*(u∂K_Π∂K-u∂K_ΠK))d∂K +
+             ∫(h_T_1*(vK_Π∂K-vK_ΠK)*(u∂K_Π∂K-u∂K_ΠK))d∂K + 
+              ∫(h_T_1*(v∂K_Π∂K-v∂K_ΠK)*(uK_Π∂K-uK_ΠK))d∂K
+      end
+
+      function s(u::FEFunction,v)
+        h_T=CellField(get_array(∫(1)dΩ),Ω)
+        h_T_1=1.0/h_T
+        h_T_2=1.0/(h_T*h_T)
+
+        # Currently, I cannot use this CellField in the integrand of the skeleton integrals below.
+        # I think we need to develop a specific version for _transform_face_to_cell_lface_expanded_array
+        # I will be using h_T_1 in the meantime
+        h_F=CellField(get_array(∫(1)dΓ),Γ)
+        h_F=1.0/h_F
+
+        # The resulting MultiFieldCellField from applying the projection op has two CellFields.
+        # However, these CellFields are not blocked, i.e.,  ur_ΠK does not go to block 1 and 
+        # ur_Π∂K to block 2. This is required in order to correctly evaluate the s operator 
+        # in the integrals below
+        ur_ΠK,ur_Π∂K=projection_op(u)
+        vK_v∂K_ΠK,vK_v∂K_Π∂K=projection_op(v)
+        
+        vK_ΠK  , v∂K_ΠK  = vK_v∂K_ΠK
+        vK_Π∂K , v∂K_Π∂K = vK_v∂K_Π∂K
+
+        ∫(h_T_1*(vK_Π∂K-vK_ΠK)*(ur_Π∂K-ur_ΠK))d∂K + 
+           ∫(h_T_1*(v∂K_Π∂K-v∂K_ΠK)*(ur_Π∂K-ur_ΠK))d∂K
       end
 
       a(u,v)=r(u,v)+s(u,v)
       l((vK,))=∫(vK*f)dΩ
+
+      uh = interpolate(UK_U∂K,[u,u])
+      vh = get_fe_basis(VK_V∂K)
+      assemble_vector(a(uh,vh)-l(vh),VK_V∂K)
 
 
       op=HybridAffineFEOperator((u,v)->(a(u,v),l(v)), UK_U∂K, VK_V∂K, [1], [2])
       xh=solve(op)
 
       uhK,uh∂K=xh
-
       e = u -uhK
       # @test sqrt(sum(∫(e⋅e)dΩ)) < 1.0e-12
       return sqrt(sum(∫(e⋅e)dΩ))
