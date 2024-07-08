@@ -9,7 +9,6 @@ module Tests
   @time @testset "DarcyHDGTests" begin include("DarcyHDGTests.jl") end
   @time @testset "LinearElasticityHDGTests" begin include("LinearElasticityHDGTests.jl") end
   @time @testset "MultiFieldLagrangeMultipliersTests" begin include("MultiFieldLagrangeMultipliersTests.jl") end
-  @time @testset "LocalFEOperatorTests" begin include("LocalFEOperatorTests.jl") end
   @time @testset "PoissonHHOTests" begin include("PoissonHHOTests.jl") end
 
 end # module

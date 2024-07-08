@@ -86,29 +86,11 @@ end
 
 function _generate_cell_field(op::ReconstructionFEOperator,cell_dofs)
     U=op.trial_space
-    all_components = Vector{GenericCellField}(undef,2)
     cell_dofs_field_offsets=_compute_cell_dofs_field_offsets(U)
     view_range=cell_dofs_field_offsets[1]:cell_dofs_field_offsets[2]-1
     cell_dofs_current_field=lazy_map(x->view(x,view_range),cell_dofs)
     free_dofs = Gridap.FESpaces.gather_free_values(U[1],cell_dofs_current_field)
-    uh=FEFunction(U[1],free_dofs)
-
-    # Replicate the reconstructed function in both blocks
-    # To some extent, in my view, this is quite dirty and may be
-    # an indication that the current approach that we chose to implement 
-    # HHO might rot.
-    data=lazy_map(BlockMap(2,1),Gridap.CellData.get_data(uh))
-    cf = Gridap.CellData.GenericCellField(data, 
-                                          get_triangulation(U[1]), 
-                                          ReferenceDomain())
-    all_components[1]=cf
-
-    data=lazy_map(BlockMap(2,2),Gridap.CellData.get_data(uh))
-    cf = Gridap.CellData.GenericCellField(data, 
-                                          get_triangulation(U[1]), 
-                                          ReferenceDomain())
-    all_components[2]=cf
-    Gridap.MultiField.MultiFieldCellField(all_components)
+    FEFunction(U[1],free_dofs)
 end
 
 function (op::ReconstructionFEOperator)(v::Union{Gridap.MultiField.MultiFieldCellField,

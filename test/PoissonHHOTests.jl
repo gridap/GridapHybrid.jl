@@ -1,4 +1,4 @@
-# module PoissonHHOTests
+module PoissonHHOTests
   using Gridap
   using GridapHybrid
   using Test
@@ -7,40 +7,22 @@
   function setup_reconstruction_operator(model, order, dΩ, d∂K, VK_V∂K)
     nK        = get_cell_normal_vector(d∂K.quad.trian)
     refferecᵤ = ReferenceFE(orthogonal_basis, Float64, order+1)
-    
-    # reffe_nzm = ReferenceFE(orthogonal_basis, Float64, order+1; subspace=:NonZeroMean)
-    # reffe_zm  = ReferenceFE(orthogonal_basis, Float64, order+1; subspace=:ZeroMean)
     reffe_c   = ReferenceFE(monomial_basis  , Float64, order+1; subspace=:OnlyConstant)
-    # reffe_nc  = ReferenceFE(monomial_basis  , Float64, order+1; subspace=:ExcludeConstant)
 
     Ω = dΩ.quad.trian
 
     VKR     = TestFESpace(Ω  , refferecᵤ; conformity=:L2)
     UKR     = TrialFESpace(VKR)
-    # UKR_NZM = TrialFESpace(TestFESpace(Ω, reffe_nzm; conformity=:L2))
-    # UKR_ZM  = TrialFESpace(TestFESpace(Ω, reffe_zm; conformity=:L2))
     VKR_C   = TestFESpace(Ω, reffe_c ; conformity=:L2, vector_type=Vector{Float64})
     UKR_C   = TrialFESpace(VKR_C)
-    # VKR_NC  = TestFESpace(Ω, reffe_nc; conformity=:L2, vector_type=Vector{Float64})
-
-    # VKR_DS_DECOMP = MultiFieldFESpace([VKR_C,VKR_NC])
-    # UKR_DS_DECOMP = MultiFieldFESpace([UKR_NZM,UKR_ZM])
 
     V = MultiFieldFESpace([VKR,VKR_C])
     U = MultiFieldFESpace([UKR,UKR_C])
-
-    # m( (u_nzm,u_zm), (v_c,v_nc) ) = ∫(∇(v_nc)⋅∇(u_zm))dΩ + ∫(∇(v_nc)⋅∇(u_nzm))dΩ +
-    #                                ∫(v_c*u_nzm)dΩ
-    # n( (uK,u∂K), (v_c,v_nc)     ) = ∫(-Δ(v_nc)*uK)dΩ + ∫(v_c*uK)dΩ + ∫((∇(v_nc)⋅nK)*u∂K)d∂K
 
     m( (u,u_c), (v,v_c) ) = ∫(∇(v)⋅∇(u))dΩ + ∫(v_c*u)dΩ + ∫(v*u_c)dΩ
     n( (uK,u∂K), (v,v_c) ) = ∫(∇(v)⋅∇(uK))dΩ + ∫(v_c*uK)dΩ + ∫((∇(v)⋅nK)*u∂K)d∂K - ∫((∇(v)⋅nK)*uK)d∂K 
 
     ReconstructionFEOperator((m,n), U, V)
-
-    # LocalFEOperator((m,n),UKR,VKR;
-    #                 trial_space_ds_decomp=UKR_DS_DECOMP,
-    #                 test_space_ds_decomp=VKR_DS_DECOMP)
   end
 
   function setup_projection_operator(UK_U∂K,VK_V∂K,R,dΩ,d∂K)
@@ -54,19 +36,16 @@
     end
     function n(uK_u∂K::Gridap.MultiField.MultiFieldFEFunction, (vK,v∂K))
       uK,u∂K = uK_u∂K
-      urK1,urK2 = R(uK_u∂K)
-      ∫(vK*(urK1-uK))dΩ +      # bulk projection terms
-        ∫(v∂K*(urK2-u∂K))d∂K   # skeleton projection terms
+      urK = R(uK_u∂K)
+      ∫(vK*(urK-uK))dΩ +      # bulk projection terms
+        ∫(v∂K*(urK-u∂K))d∂K   # skeleton projection terms
     end
     ProjectionFEOperator((m,n),UK_U∂K,VK_V∂K)
    end
 
 
-  function solve_hho(cells,order)
-    p = order
-    u(x) = x[1]^p+x[2]^p                         # Ex 1
-    #  u(x) = x[1]*(x[1]-1)^p*x[2]*(x[2]-1)^p         # Ex 2
-    f(x)=-Δ(u)(x)
+  function solve_hho(cells,order,u)
+      f(x)=-Δ(u)(x)
 
       partition = (0,1,0,1)
       model = CartesianDiscreteModel(partition, cells)
@@ -104,10 +83,10 @@
 
       # Definition of r bilinear form for the particular case in which u is a FEFunction
       function r(u::Gridap.FESpaces.FEFunction,v)
-        uKr1,uKr2=R(u)
+        uKr=R(u)
         vK_v∂K=R(v)
         vK,v∂K = vK_v∂K
-        ∫(∇(vK)⋅∇(uKr1))dΩ + ∫(∇(v∂K)⋅∇(uKr2))dΩ
+        ∫(∇(vK)⋅∇(uKr))dΩ
       end
 
       function s(u,v)
@@ -164,17 +143,16 @@
       a(u,v)=r(u,v)+s(u,v)
       l((vK,))=∫(vK*f)dΩ
 
-      uh = interpolate(UK_U∂K,[u,u])
-      vh = get_fe_basis(VK_V∂K)
-      assemble_vector(a(uh,vh)-l(vh),VK_V∂K)
-
+      # uh = interpolate(UK_U∂K,[u,u])
+      # vh = get_fe_basis(VK_V∂K)
+      # residual=assemble_vector(a(uh,vh)-l(vh),VK_V∂K)
+      # @test norm(residual) < 1.0e-10
 
       op=HybridAffineFEOperator((u,v)->(a(u,v),l(v)), UK_U∂K, VK_V∂K, [1], [2])
       xh=solve(op)
 
       uhK,uh∂K=xh
       e = u -uhK
-      # @test sqrt(sum(∫(e⋅e)dΩ)) < 1.0e-12
       return sqrt(sum(∫(e⋅e)dΩ))
   end
 
@@ -199,19 +177,23 @@
     linreg[2]
   end
 
-  solve_hho((2,2),0)
+   for p in [0,1,2,3]
+      u(x) = x[1]^p+x[2]^p
+      println(solve_hho((2,2),p,u))
+      @test solve_hho((2,2),p,u) < 1.0e-9
+   end 
 
-  # ns=[8,16,32,64,128]
-  ns=[8,16,32,64]
-  order=0
-  el, hs = conv_test(ns,order)
-  println("Slope L2-norm u: $(slope(hs,el))")
-  slopek  =[Float64(ni)^(-(order)) for ni in ns]
-  slopekp1=[Float64(ni)^(-(order+1)) for ni in ns]
-  slopekp2=[Float64(ni)^(-(order+2)) for ni in ns]
-  display(plot(hs,[el slopek slopekp1 slopekp2],
-    xaxis=:log, yaxis=:log,
-    label=["L2u (measured)" "slope k" "slope k+1" "slope k+2"],
-    shape=:auto,
-    xlabel="h",ylabel="L2 error",legend=:bottomright))
+  # # ns=[8,16,32,64,128]
+  # ns=[8,16,32,64]
+  # order=0
+  # el, hs = conv_test(ns,order)
+  # println("Slope L2-norm u: $(slope(hs,el))")
+  # slopek  =[Float64(ni)^(-(order)) for ni in ns]
+  # slopekp1=[Float64(ni)^(-(order+1)) for ni in ns]
+  # slopekp2=[Float64(ni)^(-(order+2)) for ni in ns]
+  # display(plot(hs,[el slopek slopekp1 slopekp2],
+  #   xaxis=:log, yaxis=:log,
+  #   label=["L2u (measured)" "slope k" "slope k+1" "slope k+2"],
+  #   shape=:auto,
+  #   xlabel="h",ylabel="L2 error",legend=:bottomright))
 end
