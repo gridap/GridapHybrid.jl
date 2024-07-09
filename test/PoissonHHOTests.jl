@@ -4,7 +4,7 @@ module PoissonHHOTests
   using Test
   using Plots
 
-  function setup_reconstruction_operator(model, order, dΩ, d∂K, VK_V∂K)
+  function setup_reconstruction_operator(model, order, dΩ, d∂K)
     nK        = get_cell_normal_vector(d∂K.quad.trian)
     refferecᵤ = ReferenceFE(orthogonal_basis, Float64, order+1)
     reffe_c   = ReferenceFE(monomial_basis  , Float64, order+1; subspace=:OnlyConstant)
@@ -68,7 +68,7 @@ module PoissonHHOTests
       dΓ     = Measure(Γ,degree)
       d∂K    = Measure(∂K,degree)
 
-      R=setup_reconstruction_operator(model, order, dΩ, d∂K, VK_V∂K)
+      R=setup_reconstruction_operator(model, order, dΩ, d∂K)
       projection_op=setup_projection_operator(UK_U∂K,VK_V∂K,R,dΩ,d∂K)
 
       # Definition of r bilinear form whenever u is a TrialBasis
@@ -109,10 +109,15 @@ module PoissonHHOTests
         vK_ΠK  , v∂K_ΠK  = vK_v∂K_ΠK
         vK_Π∂K , v∂K_Π∂K = vK_v∂K_Π∂K
 
-        ∫(h_T_1*(vK_Π∂K-vK_ΠK)*(uK_Π∂K-uK_ΠK))d∂K + 
-            ∫(h_T_1*(v∂K_Π∂K-v∂K_ΠK)*(u∂K_Π∂K-u∂K_ΠK))d∂K +
-             ∫(h_T_1*(vK_Π∂K-vK_ΠK)*(u∂K_Π∂K-u∂K_ΠK))d∂K + 
-              ∫(h_T_1*(v∂K_Π∂K-v∂K_ΠK)*(uK_Π∂K-uK_ΠK))d∂K
+        vK_Π∂K_vK_ΠK=vK_Π∂K-vK_ΠK
+        v∂K_Π∂K_v∂K_ΠK=v∂K_Π∂K-v∂K_ΠK
+        uK_Π∂K_uK_ΠK=uK_Π∂K-uK_ΠK
+        u∂K_Π∂K_u∂K_ΠK=u∂K_Π∂K-u∂K_ΠK
+
+        ∫(h_T_1*(vK_Π∂K_vK_ΠK)*(uK_Π∂K_uK_ΠK))d∂K + 
+            ∫(h_T_1*(v∂K_Π∂K_v∂K_ΠK)*(u∂K_Π∂K_u∂K_ΠK))d∂K +
+             ∫(h_T_1*(vK_Π∂K_vK_ΠK)*(u∂K_Π∂K_u∂K_ΠK))d∂K + 
+              ∫(h_T_1*(v∂K_Π∂K_v∂K_ΠK)*(uK_Π∂K_uK_ΠK))d∂K
       end
 
       function s(u::FEFunction,v)
