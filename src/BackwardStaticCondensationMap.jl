@@ -29,9 +29,9 @@ function Gridap.Arrays.return_cache(k::BackwardStaticCondensationMap{IFT,BFT},
   b::Gridap.Fields.VectorBlock{<:AbstractVector{T}},
   x::Gridap.Fields.VectorBlock{<:AbstractVector{T}}) where {IFT,BFT,T}
   m=DensifyInnerMostBlockLevelMap()
-  cm=return_cache(m,x)
+  cm=Gridap.Arrays.return_cache(m,x)
   mx=evaluate!(cm,m,x)
-  ck=return_cache(k,A,b,mx)
+  ck=Gridap.Arrays.return_cache(k,A,b,mx)
   (m,cm,ck)
 end
 

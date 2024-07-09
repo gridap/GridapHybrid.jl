@@ -89,8 +89,8 @@ function Gridap.Arrays.evaluate!(cache,k::Reindex,i::VectorBlock{<:Vector{<:Inte
   r
 end
 function Gridap.Arrays.evaluate(k::Reindex,i::VectorBlock{<:Vector{<:Integer}})
-  cache=return_cache(k,i)
-  evaluate!(cache,k,i)
+  cache=Gridap.Arrays.return_cache(k,i)
+  Gridap.Arrays.evaluate!(cache,k,i)
 end
 # Default return_type fails because one(::VectorBlock{<:Vector{<:Integer}}) is NOT defined
 # This justifies why I had to define the following function
@@ -101,7 +101,7 @@ end
 # Default return_values fails because one(::VectorBlock{<:Vector{<:Integer}}) is NOT defined
 # This justifies why I had to define the following function
 function Gridap.Arrays.return_value(k::Reindex,i::VectorBlock{<:Vector{<:Integer}})
-  evaluate(k,i)
+  Gridap.Arrays.evaluate(k,i)
 end
 
 function Geometry.get_cell_map(trian::SkeletonGrid)
@@ -202,12 +202,30 @@ function Gridap.FESpaces.get_cell_fe_data(
   sface_to_data
 end
 
-function Geometry.best_target(a::BodyFittedTriangulation{Dca},
-                              b::BodyFittedTriangulation{Dcb}) where {Dca,Dcb}
-  @assert Dca==Dcb-1 || Dca-1==Dcb
+function Geometry.best_target(a::BodyFittedTriangulation{1},
+                              b::BodyFittedTriangulation{2})
   @assert get_background_model(a)===get_background_model(b)
   Skeleton(get_background_model(a))
 end
+
+function Geometry.best_target(a::BodyFittedTriangulation{2},
+                              b::BodyFittedTriangulation{1})
+  @assert get_background_model(a)===get_background_model(b)
+  Skeleton(get_background_model(a))
+end
+
+function Geometry.best_target(a::BodyFittedTriangulation{2},
+                              b::BodyFittedTriangulation{3})
+  @assert get_background_model(a)===get_background_model(b)
+  Skeleton(get_background_model(a))
+end
+
+function Geometry.best_target(a::BodyFittedTriangulation{3},
+                              b::BodyFittedTriangulation{2})
+  @assert get_background_model(a)===get_background_model(b)
+  Skeleton(get_background_model(a))
+end
+
 
 # TO-DO: dirty. I cannot check whether a===b, as a and b might be created from scratch
 #               along the process
@@ -360,28 +378,32 @@ function _restrict_to_skeleton_facet_field(model,
   Dp = num_point_dims(model)
   Gridap.Helpers.@check isa(get_triangulation(facet_fe_basis),Triangulation{Dc-1,Dp})
 
+
   _transform_face_to_cell_lface_expanded_array(
     glue,
+    _get_cell_wise_facets(model),
     Gridap.CellData.get_data(facet_fe_basis))
 end
 
 function _transform_face_to_cell_lface_expanded_array(
   glue,
-  face_array::Gridap.Arrays.LazyArray{<:Fill{typeof(transpose)}})
-  Gridap.Helpers.@check typeof(face_array.args[1]) <: Gridap.Arrays.CompressedArray
-
+  cell_wise_facets,
+  face_array::Gridap.Arrays.LazyArray{<:Fill{typeof(transpose)},
+                                      ET,N,
+                                      <:Tuple{<:Gridap.Arrays.CompressedArray}}) where {ET,N}
   T = Gridap.Arrays.return_type(transpose,face_array.args[1].values[1])
   v = Vector{T}(undef,length(face_array.args[1].values))
   for i=1:length(face_array.args[1].values)
     v[i]=evaluate(transpose,face_array.args[1].values[i])
   end
   face_array_compressed=Gridap.Arrays.CompressedArray(v,face_array.args[1].ptrs)
-  _transform_face_to_cell_lface_expanded_array(glue,face_array_compressed)
+  _transform_face_to_cell_lface_expanded_array(glue,cell_wise_facets,face_array_compressed)
 end
 
 
 function _transform_face_to_cell_lface_expanded_array(glue,
-                                                     face_array::Fill)
+        cell_wise_facets,
+        face_array::Fill{<:Union{<:AbstractArray{<:Gridap.Fields.Field},<:Gridap.Fields.Field}})
   T=typeof(face_array.value)
   ctype_to_vector_block=
     Vector{Gridap.Fields.VectorBlock{T}}(undef,length(glue.ctype_to_lface_to_ftype))
@@ -400,7 +422,8 @@ function _transform_face_to_cell_lface_expanded_array(glue,
 end
 
 function _transform_face_to_cell_lface_expanded_array(glue,
-              face_array::Gridap.Arrays.CompressedArray{<:ArrayBlock})
+                                   cell_wise_facets,
+                                   face_array::Gridap.Arrays.CompressedArray{<:ArrayBlock})
   ftype_to_block_layout=_get_block_layout(face_array.values)
   T=eltype(face_array.values[1])
   if length(ftype_to_block_layout[1][1]) == 1
@@ -457,6 +480,12 @@ function _transform_face_to_cell_lface_expanded_array(glue,
   Gridap.Arrays.CompressedArray(ctype_to_vector_block,glue.cell_to_ctype)
 end
 
+# function _transform_face_to_cell_lface_expanded_array(glue,
+#               cell_wise_facets,
+#               face_array::Gridap.Arrays.AbstractArray{<:ArrayBlock})
+#     SkeletonExpandedVectorFromFacetVector(glue,cell_wise_facets,face_array)
+# end
+
 function _get_block_layout(fields_array::AbstractArray{<:AbstractArray{<:Gridap.Fields.Field}})
   Fill((1,1),length(fields_array))
 end
@@ -466,6 +495,7 @@ function _get_block_layout(fields_array::AbstractArray{<:Gridap.Fields.ArrayBloc
 end
 
 function _transform_face_to_cell_lface_expanded_array(glue,
+              cell_wise_facets,
               face_array::Gridap.Arrays.CompressedArray{<:AbstractArray{<:Field}})
 
   T  = eltype(face_array)
@@ -605,15 +635,24 @@ function _setup_tcell_lface_mface_map(d,model,glue)
 
   ftype_to_shapefuns = map( f,  ftrian_reffes)
   face_to_shapefuns = expand_cell_data(ftype_to_shapefuns,glue.face_to_ftype)
-  cell_to_lface_to_shapefuns = transform_face_to_cell_lface_array(glue,face_to_shapefuns)
+  cell_to_lface_to_shapefuns = _transform_face_to_cell_lface_array(glue,face_to_shapefuns)
   lazy_map(Gridap.Fields.linear_combination,
            cell_lface_to_q_vertex_coords,
            cell_to_lface_to_shapefuns)
 end
 
-function transform_face_to_cell_lface_array(glue,
+function _transform_face_to_cell_lface_array(glue,
+                                            face_array::Fill,
+                                            f::Function=identity;
+                                            add_naive_innermost_block_level=false)
+  @notimplemented
+end
+
+
+function _transform_face_to_cell_lface_array(glue,
                                             face_array::Gridap.Arrays.CompressedArray,
-                                            f::Function=identity)
+                                            f::Function=identity;
+                                            add_naive_innermost_block_level=false)
   T=typeof(f(face_array.values[1]))
   ctype_to_vector_block=
     Vector{Gridap.Fields.VectorBlock{T}}(undef,length(glue.ctype_to_lface_to_ftype))
@@ -628,7 +667,33 @@ function transform_face_to_cell_lface_array(glue,
      end
      ctype_to_vector_block[ctype]=Gridap.Fields.ArrayBlock(v,t)
   end
+  if add_naive_innermost_block_level
+    ctype_to_vector_block=collect(lazy_map(AddNaiveInnerMostBlockLevelMap(),ctype_to_vector_block))
+  end
   Gridap.Arrays.CompressedArray(ctype_to_vector_block,glue.cell_to_ctype)
+end
+
+function _transform_face_to_cell_lface_array(
+  glue,
+  face_array::Gridap.Arrays.LazyArray{<:Fill{typeof(transpose)},T,N,<:Tuple{<:Fill}},
+  f::Function=identity;
+  add_naive_innermost_block_level=false) where {T,N}
+  Gridap.Helpers.@check typeof(face_array.args[1]) <: Fill
+  facet_array_fill = Fill(evaluate(transpose,face_array.args[1].value),length(face_array))
+  _transform_cell_to_cell_lface_array(glue,facet_array_fill,f;
+        add_naive_innermost_block_level=add_naive_innermost_block_level)
+end
+
+function _transform_face_to_cell_lface_array(
+  glue,
+  face_array::Gridap.Arrays.LazyArray{<:Fill{typeof(transpose)},T,N,<:Tuple{<:CompressedArray}},
+  f::Function=identity;
+  add_naive_innermost_block_level=false) where {T,N}
+  Gridap.Helpers.@check typeof(face_array.args[1]) <: CompressedArray
+  v=[evaluate(transpose,e) for e in face_array.args[1].values]
+  facet_array_compressed=CompressedArray(v,face_array.args[1].ptrs)
+  _transform_face_to_cell_lface_array(glue,facet_array_compressed,f;
+     add_naive_innermost_block_level=add_naive_innermost_block_level)
 end
 
 function Gridap.ReferenceFEs.expand_cell_data(
@@ -756,7 +821,25 @@ function Gridap.CellData.change_domain(
   a::Gridap.MultiField.MultiFieldFEBasisComponent,
   ttrian::SkeletonTriangulation,
   tdomain::DomainStyle)
+
+  # a.cell_basis has already field-id blocks in it. We need to pass an array with
+  # the block info when generating the change_domain to the Skeleton
   cf_cell_basis=GenericCellField(a.cell_basis,get_triangulation(a),DomainStyle(a))
   b=change_domain(cf_cell_basis,ttrian,tdomain)
-  Gridap.MultiField.MultiFieldFEBasisComponent(Gridap.CellData.get_data(b),b,a.fieldid,a.nfields)
+
+  # TO-IMPROVE: I think this is a little bit dirty. The cell array we have inside
+  # the SingleFieldFEBasis has already blocks in it, and I am not sure if SingleFieldFEBasis
+  # was though to be leveraged like this.
+  single_field=Gridap.FESpaces.SingleFieldFEBasis(Gridap.CellData.get_data(b),
+                                  ttrian,
+                                  Gridap.FESpaces.BasisStyle(a.single_field),
+                                  tdomain)
+
+  # MultiFieldFEBasisComponent is designed such that an implicit
+  # precondition (not explicitly enforced when building it) is that
+  # its second argument should be an instance of SingleFieldFEBasis
+  Gridap.MultiField.MultiFieldFEBasisComponent(Gridap.CellData.get_data(b),
+                                               single_field,
+                                               a.fieldid,
+                                               a.nfields)
 end

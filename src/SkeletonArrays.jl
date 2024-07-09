@@ -73,10 +73,6 @@ function Gridap.Arrays.lazy_map(k::Gridap.Fields.LinearCombinationMap,
   end
 end
 
-
-
-
-
 function Gridap.Arrays.lazy_map(
   k::typeof(Gridap.Arrays.evaluate),
   ::Type{T},
@@ -198,6 +194,115 @@ function Gridap.Arrays.getindex!(cache,a::SkeletonVectorFromFacetVector,cell::In
 end
 
 function Base.getindex(a::SkeletonVectorFromFacetVector,cell::Integer)
+  c=array_cache(a)
+  Gridap.Arrays.getindex!(c,a,cell)
+end
+
+struct SkeletonVectorFromSplitDoFsCellVector{T,A,B,C,D,E} <: AbstractVector{Gridap.Fields.VectorBlock{T}}
+  glue::A
+  cell_wise_facets_ids::B
+  cell_vector_dofs::C
+  row_dofs_split::D
+  col_dofs_split::E
+  function SkeletonVectorFromSplitDoFsCellVector(glue,
+                                                 cell_wise_facets_ids,
+                                                 cell_vector_dofs,
+                                                 row_dofs_split,
+                                                 col_dofs_split)
+
+    Gridap.Helpers.@check isa(row_dofs_split,UnitRange) || isa(row_dofs_split,AbstractVector{<:UnitRange}) 
+    Gridap.Helpers.@check isa(col_dofs_split,UnitRange) || 
+                       isa(col_dofs_split,AbstractVector{<:UnitRange}) ||
+                          isa(col_dofs_split,Integer)
+                                              
+    if isa(row_dofs_split,AbstractVector{<:UnitRange})
+      Gridap.Helpers.@check length(row_dofs_split) == length(cell_wise_facets_ids[1])
+    end 
+
+    if isa(col_dofs_split,AbstractVector{<:UnitRange})
+      Gridap.Helpers.@check length(col_dofs_split) == length(cell_wise_facets_ids[1])
+    end 
+    
+    Gridap.Helpers.@check length(glue.cell_to_ctype) == length(cell_vector_dofs)
+
+    if (isa(col_dofs_split,Integer))
+      T=typeof(view(cell_vector_dofs[1],1:1,1))
+    else
+      T=typeof(view(cell_vector_dofs[1],1:1,1:1))
+    end
+    A=typeof(glue)
+    B=typeof(cell_wise_facets_ids)
+    C=typeof(cell_vector_dofs)
+    D=typeof(row_dofs_split)
+    E=typeof(col_dofs_split)
+    new{T,A,B,C,D,E}(glue,
+                     cell_wise_facets_ids,
+                     cell_vector_dofs,
+                     row_dofs_split,
+                     col_dofs_split)
+  end
+end
+
+Base.size(a::SkeletonVectorFromSplitDoFsCellVector) = (length(a.glue.cell_to_ctype),)
+
+Base.IndexStyle(::Type{<:SkeletonVectorFromSplitDoFsCellVector}) = IndexLinear()
+
+function _generate_skel_vec_from_split_dofs_cell_vec_cache(a::SkeletonVectorFromSplitDoFsCellVector{T}) where T
+
+  ctype_to_vector_block=
+       Vector{Gridap.Fields.VectorBlock{T}}(undef,length(a.glue.ctype_to_lface_to_ftype))
+
+  for ctype=1:length(a.glue.ctype_to_lface_to_ftype)
+     cell=findfirst(x->x==ctype,a.glue.cell_to_ctype)
+     num_facets=length(a.glue.ctype_to_lface_to_ftype[ctype])
+     vf=Vector{T}(undef,num_facets)
+     tf=Vector{Bool}(undef,num_facets)
+     tf.=true
+     ctype_to_vector_block[ctype]=Gridap.Fields.ArrayBlock(vf,tf)
+  end
+  Gridap.Arrays.CompressedArray(ctype_to_vector_block,a.glue.cell_to_ctype)
+end
+
+function Gridap.Arrays.array_cache(a::SkeletonVectorFromSplitDoFsCellVector{T}) where T
+  cvdc=array_cache(a.cell_vector_dofs)
+  cwfc=array_cache(a.cell_wise_facets_ids)
+  cea=_generate_skel_vec_from_split_dofs_cell_vec_cache(a)
+  cvdc,cwfc,cea
+end
+
+function Gridap.Arrays.getindex!(cache,a::SkeletonVectorFromSplitDoFsCellVector,cell::Integer)
+  cvdc,cwfc,cea=cache
+  ctype=a.glue.cell_to_ctype[cell]
+  result=cea.values[ctype]
+  cwf=getindex!(cwfc,a.cell_wise_facets_ids,cell)
+  dofs=getindex!(cvdc,a.cell_vector_dofs,cell)
+  for (lfacet,gfacet) in enumerate(cwf)
+    if (isa(a.col_dofs_split,Integer))
+      if (isa(a.row_dofs_split,UnitRange))
+        row_range=a.row_dofs_split
+      else
+        row_range=a.row_dofs_split[lfacet]
+      end
+      fdofs=view(dofs,row_range,a.col_dofs_split)  
+    else 
+      if (isa(a.col_dofs_split,UnitRange))
+        col_range=a.col_dofs_split
+      else
+        col_range=a.col_dofs_split[lfacet]
+      end
+      if (isa(a.row_dofs_split,UnitRange))
+        row_range=a.row_dofs_split
+      else
+        row_range=a.row_dofs_split[lfacet]
+      end
+      fdofs=view(dofs,row_range,col_range)
+    end
+    result.array[lfacet]=fdofs
+  end
+  result
+end
+
+function Base.getindex(a::SkeletonVectorFromSplitDoFsCellVector,cell::Integer)
   c=array_cache(a)
   Gridap.Arrays.getindex!(c,a,cell)
 end

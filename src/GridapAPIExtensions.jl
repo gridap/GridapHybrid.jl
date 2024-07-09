@@ -76,15 +76,25 @@ function Gridap.Arrays.lazy_map(
   lazy_map(Gridap.Fields.LinearCombinationMap(:),i_to_values,i_to_basis_x)
 end
 
+function Gridap.Arrays.lazy_map(
+  ::typeof(evaluate), a::Gridap.Arrays.LazyArray{<:Fill{typeof(Gridap.Fields.linear_combination)}},
+                      x::Fill{<:Gridap.Fields.VectorBlock})
+
+  i_to_values = a.args[1]
+  i_to_basis = a.args[2]
+  i_to_basis_x = lazy_map(evaluate,i_to_basis,x)
+  lazy_map(Gridap.Fields.LinearCombinationMap(:),i_to_values,i_to_basis_x)
+end
+
 # The following three function overloads are required in order to be able to
 # have a FE function in place of the trial operand in an integral over the
 # cell boundaries
-function Gridap.Fields.linear_combination(u::Vector,
+function Gridap.Fields.linear_combination(u::AbstractArray,
                                           f::Gridap.Fields.ArrayBlock)
-  i::Int = findfirst(f.touched)
+  i = findfirst(f.touched)
   fi = f.array[i]
   ufi = Gridap.Fields.linear_combination(u,fi)
-  g = Vector{typeof(ufi)}(undef,length(f.touched))
+  g = Array{typeof(ufi)}(undef,size(f.touched))
   for i in eachindex(f.touched)
     if f.touched[i]
       g[i] = Gridap.Fields.linear_combination(u,f.array[i])
@@ -94,17 +104,17 @@ function Gridap.Fields.linear_combination(u::Vector,
 end
 
 function Gridap.Arrays.return_cache(k::Gridap.Fields.LinearCombinationMap,
-                                    u::Vector,
+                                    u::AbstractArray,
                                     fx::Gridap.Fields.ArrayBlock)
-  i::Int = findfirst(fx.touched)
+  i = findfirst(fx.touched)
   fxi = fx.array[i]
-  li = return_cache(k,u,fxi)
+  li = Gridap.Arrays.return_cache(k,u,fxi)
   ufxi = evaluate!(li,k,u,fxi)
-  l = Vector{typeof(li)}(undef,size(fx.array))
-  g = Vector{typeof(ufxi)}(undef,size(fx.array))
+  l = Array{typeof(li)}(undef,size(fx.array))
+  g = Array{typeof(ufxi)}(undef,size(fx.array))
   for i in eachindex(fx.array)
     if fx.touched[i]
-      l[i] = return_cache(k,u,fx.array[i])
+      l[i] = Gridap.Arrays.return_cache(k,u,fx.array[i])
     end
   end
   ArrayBlock(g,fx.touched),l
@@ -112,7 +122,7 @@ end
 
 function Gridap.Arrays.evaluate!(cache,
                                  k::Gridap.Fields.LinearCombinationMap,
-                                 u::Vector,
+                                 u::AbstractArray,
                                  fx::Gridap.Fields.ArrayBlock)
   g,l = cache
   Gridap.Helpers.@check g.touched == fx.touched
@@ -144,13 +154,13 @@ function Gridap.Arrays.return_cache(k::Gridap.Fields.LinearCombinationMap,
                                     fx::Gridap.Fields.ArrayBlock)
   i::Int = findfirst(fx.touched)
   fxi = fx.array[i]
-  li = return_cache(k,u[i],fxi)
+  li = Gridap.Arrays.return_cache(k,u[i],fxi)
   ufxi = evaluate!(li,k,u[i],fxi)
   l = Vector{typeof(li)}(undef,size(fx.array))
   g = Vector{typeof(ufxi)}(undef,size(fx.array))
   for i in eachindex(fx.array)
     if fx.touched[i]
-      l[i] = return_cache(k,u[i],fx.array[i])
+      l[i] = Gridap.Arrays.return_cache(k,u[i],fx.array[i])
     end
   end
   ArrayBlock(g,fx.touched),l
@@ -252,7 +262,7 @@ end
 function Gridap.Arrays.return_cache(
   k::Broadcasting{typeof(∘)},
   f::Gridap.Fields.VectorBlock,
-  h::Gridap.Fields.VectorBlock) where {A,N}
+  h::Gridap.Fields.VectorBlock)
   Gridap.Helpers.@check length(f)==length(h)
   Gridap.Helpers.@check f.touched==h.touched
   fi = Gridap.Arrays.testitem(f)
@@ -510,7 +520,7 @@ function Gridap.Arrays.return_cache(
   k::typeof(setup_bulk_to_skeleton_l2_projected_fields),
   A::Array,
   B::AbstractArray{<:Gridap.Fields.Field})
-  return_cache(Gridap.Fields.linear_combination,A,B)
+  Gridap.Arrays.return_cache(Gridap.Fields.linear_combination,A,B)
 end
 
 function Gridap.Arrays.evaluate!(
@@ -527,7 +537,7 @@ function Gridap.Arrays.return_cache(
   B::Transpose{T,<:AbstractArray{<:Gridap.Fields.Field}}) where T
   c=return_cache(k,A,B.parent)
   v=evaluate!(c,k,A,B.parent)
-  return_cache(transpose,v), c
+  Gridap.Arrays.return_cache(transpose,v), c
 end
 
 function Gridap.Arrays.evaluate!(
@@ -616,7 +626,7 @@ function Gridap.Arrays.return_cache(
   A::Gridap.Fields.MatrixBlock,
   B::Gridap.Fields.MatrixBlock)
 
-  Gridap.Helpers.@check size(A.array) == size(B.array)
+  Gridap.Helpers.@check size(A.array)==size(B.array)
 
   nA=findall(A.touched)
   nB=findall(B.touched)
@@ -698,7 +708,7 @@ function Gridap.Arrays.return_cache(
   B::Gridap.Fields.VectorBlock{<:Matrix})
 
   Gridap.Helpers.@check size(A.array)[1] == size(A.array)[2]
-  Gridap.Helpers.@check size(A.array)[1] == size(A.array)[2]
+  Gridap.Helpers.@check size(A.array)[1] == size(B.array)[1]
 
   nA=findall(A.touched)
   nB=findall(B.touched)
@@ -725,7 +735,53 @@ function Gridap.Arrays.evaluate!(
   B::Gridap.Fields.VectorBlock{<:Matrix})
   r,c=cache
   Gridap.Helpers.@check size(A.array)[1] == size(A.array)[2]
+  Gridap.Helpers.@check size(A.array)[1] == size(B.array)[1]
+  Gridap.Helpers.@check length(findall(A.touched)) == 1
+  Gridap.Helpers.@check length(findall(B.touched)) == 1
+  Gridap.Helpers.@check r.touched[1]
+  ai=testitem(A)
+  bi=testitem(B)
+  r.array[1]=evaluate!(c,k,ai,bi)
+  r
+end
+
+# A [f,f]      , e.g., [2,2] nonzero block (matrix to be inverted)
+# B [f,1]      , e.g., [2,1] nonzero block (several RHS)
+# Return [1]
+function Gridap.Arrays.return_cache(
+  k::typeof(compute_bulk_to_skeleton_l2_projection_dofs),
+  A::Gridap.Fields.MatrixBlock{<:Matrix},
+  B::Gridap.Fields.MatrixBlock{<:Matrix})
+
   Gridap.Helpers.@check size(A.array)[1] == size(A.array)[2]
+  Gridap.Helpers.@check size(A.array)[1] == size(B.array)[1]
+
+  nA=findall(A.touched)
+  nB=findall(B.touched)
+
+  Gridap.Helpers.@check length(nA)==length(nB)
+  Gridap.Helpers.@check length(nA)==1
+  Gridap.Helpers.@check nA[1][1]==nB[1][1]
+  Gridap.Helpers.@check nA[1][2]==nB[1][1]
+
+  ai=testitem(A)
+  bi=testitem(B)
+  T=Gridap.Arrays.return_type(k,ai,bi)
+  touched  = Vector{Bool}(undef,1)
+  touched .= true
+  r = Vector{T}(undef,1)
+  c = Gridap.Arrays.return_cache(k,ai,bi)
+  Gridap.Fields.ArrayBlock(r,touched), c
+end
+
+function Gridap.Arrays.evaluate!(
+  cache,
+  k::typeof(compute_bulk_to_skeleton_l2_projection_dofs),
+  A::Gridap.Fields.MatrixBlock{<:Matrix},
+  B::Gridap.Fields.MatrixBlock{<:Matrix})
+  r,c=cache
+  Gridap.Helpers.@check size(A.array)[1] == size(A.array)[2]
+  Gridap.Helpers.@check size(A.array)[1] == size(B.array)[1]
   Gridap.Helpers.@check length(findall(A.touched)) == 1
   Gridap.Helpers.@check length(findall(B.touched)) == 1
   Gridap.Helpers.@check r.touched[1]
@@ -825,4 +881,54 @@ end
 # facets of the underlying background model.
 function Gridap.FESpaces._compute_cell_ids(uh,ttrian::SkeletonTriangulation)
   collect(1:num_cells(ttrian))
+end
+
+# Required by LocalFEProjector
+function Gridap.Arrays.return_cache(::typeof(\),a::AbstractArray{<:Number},b::AbstractArray{<:Number})
+  c = a\b
+  Gridap.Arrays.CachedArray(c)
+end
+
+# Required by LocalFEProjector
+function Gridap.Arrays.evaluate!(cache,::typeof(\),a::AbstractMatrix{<:Number},b::AbstractVector{<:Number})
+  m = size(a,1)
+  Gridap.Arrays.setsize!(cache,(m,))
+  c = cache.array
+  c .= a\b
+  c
+end
+
+# Required by LocalFEProjector
+function Gridap.Arrays.evaluate!(cache,::typeof(\),a::AbstractMatrix{<:Number},b::AbstractMatrix{<:Number})
+  m = size(a,1)
+  n = size(b,2)
+  Gridap.Arrays.setsize!(cache,(m,n))
+  c = cache.array
+  c .= a\b
+  c
+end
+
+function Gridap.Arrays.evaluate!(cache,
+                   k::Gridap.Fields.DensifyInnerMostBlockLevelMap,
+                   a::Array{T}) where {T<:Number}
+   a
+end
+
+function Gridap.Fields.linear_combination(a::AbstractArray{<:Number},b::Transpose)
+  c=Gridap.Fields.linear_combination(a,b.parent)
+  Transpose(c)
+end
+
+function Gridap.Arrays.return_cache(k::Gridap.Fields.LinearCombinationMap,
+                                    v::AbstractMatrix,
+                                    fx::Gridap.Fields.TransposeFieldIndices)
+  return_cache(k,v,fx.matrix)
+end
+
+function Gridap.Arrays.evaluate!(cache,
+  k::Gridap.Fields.LinearCombinationMap,
+  v::AbstractMatrix,
+  fx::Gridap.Fields.TransposeFieldIndices)
+  gx=evaluate!(cache,k,v,fx.matrix)
+  Gridap.Fields.TransposeFieldIndices(gx)
 end
