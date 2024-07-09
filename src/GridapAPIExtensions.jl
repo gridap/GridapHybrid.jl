@@ -262,7 +262,7 @@ end
 function Gridap.Arrays.return_cache(
   k::Broadcasting{typeof(∘)},
   f::Gridap.Fields.VectorBlock,
-  h::Gridap.Fields.VectorBlock) where {A,N}
+  h::Gridap.Fields.VectorBlock)
   Gridap.Helpers.@check length(f)==length(h)
   Gridap.Helpers.@check f.touched==h.touched
   fi = Gridap.Arrays.testitem(f)
