@@ -6,11 +6,11 @@ function Pₘ(uh, uhΓ, μ, d∂K)
   B = ∫(μ⋅uh)d∂K
   # [c][f][bμ,buhΓ==bμ][f,f]
   A_array = _remove_sum_facets(_remove_densify(Gridap.CellData.get_array(A)))
-  # [c][f][bμ,buh][f] (if uh Trial Basis)
-  # [c][f][bμ]    [f] (if uh FE Function)
+  # [c][f][bμ,buh][f,1] (if uh Trial Basis)
+  # [c][f][bμ]    [f]   (if uh FE Function)
   B_array = _remove_sum_facets(_remove_densify(Gridap.CellData.get_array(B)))
-  # [c][f][1,buh][1] (if uh Trial Basis)
-  # [c][f]           (if uh FE Function)
+  # [c][f][1,buh][1]   (if uh Trial Basis)
+  # [c][f]             (if uh FE Function)
   pm_uh_dofs = lazy_map(GridapHybrid.compute_bulk_to_skeleton_l2_projection_dofs, A_array, B_array)
   # [c][f][1,buhΓ][1,f]
   uhΓ_d∂K = Gridap.CellData.change_domain(uhΓ, d∂K.quad.trian, ReferenceDomain())

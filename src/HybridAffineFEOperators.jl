@@ -70,8 +70,14 @@ function Gridap.FESpaces.solve(op::HybridAffineFEOperator)
 end
 
 function Gridap.FESpaces.solve!(uh, solver::LinearFESolver, op::HybridAffineFEOperator, cache)
-  # Solve linear system defined on the skeleton
+   # Solve linear system defined on the skeleton.
+   # Some solvers do not support 0x0 matrices. Avoid
+   # calling solve in such an scenario.
+   if (size(op.skeleton_op.op.matrix) != (0,0))
     lh = solve(op.skeleton_op)
+   else
+    lh = FEFunction(op.skeleton_op.trial,zeros(num_free_dofs(op.skeleton_op.trial)))
+   end
 
   # Invoke weak form of the hybridizable system
     u = get_trial_fe_basis(op.trial)
@@ -161,12 +167,13 @@ function _get_cells_around_facets(model::DiscreteModel)
     Gridap.Geometry.get_faces(gtopo, D - 1, D)
 end
 
-struct ExtractFacetDofsFromCellDofsMap{T <: AbstractVector{<:AbstractVector}} <: Gridap.Fields.Map
+struct ExtractFacetDofsFromCellDofsMap{T <: AbstractVector{<:AbstractArray}} <: Gridap.Fields.Map
     cell_dofs::T
 end
 
-function Gridap.Arrays.return_cache(k::ExtractFacetDofsFromCellDofsMap,
-                                   cellgid_facetlpos_ndofs::NTuple{3})
+function Gridap.Arrays.return_cache(
+       k::ExtractFacetDofsFromCellDofsMap{<:AbstractVector{<:AbstractVector}},
+       cellgid_facetlpos_ndofs::NTuple{3})
     cell_dofs_cache  = Gridap.Arrays.array_cache(k.cell_dofs)
     T = eltype(eltype(k.cell_dofs))
     facet_dofs_cache = Gridap.Arrays.CachedArray(zeros(T, cellgid_facetlpos_ndofs[3]))
@@ -174,8 +181,8 @@ function Gridap.Arrays.return_cache(k::ExtractFacetDofsFromCellDofsMap,
 end
 
 function Gridap.Arrays.evaluate!(cache,
-                                k::ExtractFacetDofsFromCellDofsMap,
-                                cellgid_facetlpos_ndofs::NTuple{3})
+       k::ExtractFacetDofsFromCellDofsMap{<:AbstractVector{<:AbstractVector}},
+       cellgid_facetlpos_ndofs::NTuple{3})
     cell_dofs_cache, facet_dofs_cache = cache
     cellgid, facetlpos, ndofs = cellgid_facetlpos_ndofs
     Gridap.Arrays.setsize!(facet_dofs_cache, (ndofs,))
@@ -184,10 +191,32 @@ function Gridap.Arrays.evaluate!(cache,
     facet_dofs .= cell_dofs[facetlpos:facetlpos + ndofs - 1]
 end
 
+function Gridap.Arrays.return_cache(
+       k::ExtractFacetDofsFromCellDofsMap{<:AbstractVector{<:AbstractMatrix}},
+       cellgid_facetlpos_ndofs::NTuple{3})
+    cell_dofs_cache  = Gridap.Arrays.array_cache(k.cell_dofs)
+    cell_dofs        = getindex!(cell_dofs_cache,k.cell_dofs,1)
+    T = eltype(eltype(k.cell_dofs))
+    facet_dofs_cache = Gridap.Arrays.CachedArray(zeros(T,
+                                                 cellgid_facetlpos_ndofs[3], size(cell_dofs,2)))
+    cell_dofs_cache, facet_dofs_cache
+end
+
+function Gridap.Arrays.evaluate!(cache,
+       k::ExtractFacetDofsFromCellDofsMap{<:AbstractVector{<:AbstractMatrix}},
+       cellgid_facetlpos_ndofs::NTuple{3})
+    cell_dofs_cache, facet_dofs_cache = cache
+    cellgid, facetlpos, ndofs = cellgid_facetlpos_ndofs
+    cell_dofs   = Gridap.Arrays.getindex!(cell_dofs_cache, k.cell_dofs, cellgid)
+    Gridap.Arrays.setsize!(facet_dofs_cache, (ndofs,size(cell_dofs,2)))
+    facet_dofs  = facet_dofs_cache.array
+    facet_dofs .= cell_dofs[facetlpos:facetlpos + ndofs - 1,:]
+end
+
 function convert_cell_wise_dofs_array_to_facet_dofs_array(
       cells_around_facets,
       cell_wise_facets,
-      cell_dofs::AbstractVector{<:AbstractVector{<:Real}},
+      cell_dofs::AbstractVector{<:AbstractArray{<:Real}},
       facet_dofs_ids::AbstractVector{<:AbstractVector{<:Integer}})
     glue = _generate_glue_among_facet_and_cell_wise_dofs_arrays(
    cells_around_facets, cell_wise_facets, facet_dofs_ids)

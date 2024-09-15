@@ -71,7 +71,7 @@ function Gridap.Arrays.return_cache(
                         size(f.array) == size(g.array)
   fi = testvalue(A)
   gi = testvalue(B)
-  ci = return_cache(k,fi,gi)
+  ci = Gridap.Arrays.return_cache(k,fi,gi)
   hi = evaluate!(ci,k,fi,gi)
   s = (max(size(f.array,1),size(g.array,1)),)
   a = Array{typeof(hi),1}(undef,s)
@@ -86,21 +86,21 @@ function Gridap.Arrays.return_cache(
      findex=min(i,size(f.array)[1])
      gindex=min(i,size(g.array)[1])
      if f.touched[findex] && g.touched[gindex]
-       b[i] = return_cache(k,f.array[findex],g.array[gindex])
+       b[i] = Gridap.Arrays.return_cache(k,f.array[findex],g.array[gindex])
        t[i] = true
      else
         if (size(f.array)==size(g.array))
            if f.touched[findex]
             _fi = f.array[findex]
-            zg[i] = return_cache(m,gi,_fi)
+            zg[i] = Gridap.Arrays.return_cache(m,gi,_fi)
             _gi = evaluate!(zg[i],m,gi,_fi)
-            b[i] = return_cache(k,_fi,_gi)
+            b[i] = Gridap.Arrays.return_cache(k,_fi,_gi)
             t[i] = true
            elseif g.touched[gindex]
             _gi = g.array[gindex]
-            zf[i] = return_cache(m,fi,_gi)
+            zf[i] = Gridap.Arrays.return_cache(m,fi,_gi)
             _fi = evaluate!(zf[i],m,fi,_gi)
-            b[i] = return_cache(k,_fi,_gi)
+            b[i] = Gridap.Arrays.return_cache(k,_fi,_gi)
             t[i] = true
            end
         end
@@ -151,12 +151,12 @@ function Gridap.Arrays.return_cache(
   g::Gridap.Fields.ArrayBlock{B,2}) where {A,B}
   # Degenerated case in which we have a single-block f
   if (size(f)==(1,))
-    return return_cache(k,f.array[1],g)
+    return Gridap.Arrays.return_cache(k,f.array[1],g)
   end
   fi = testvalue(A)
   gi = testvalue(B)
-  ci = return_cache(k,fi,gi)
-  hi = evaluate!(ci,k,fi,gi)
+  ci = Gridap.Arrays.return_cache(k,fi,gi)
+  hi = Gridap.Arrays.evaluate!(ci,k,fi,gi)
   Gridap.Helpers.@check size(g.array,1) == 1 || size(g.array,2) == 0
   s = (size(f.array,1),size(g.array,2))
   a = Array{typeof(hi),2}(undef,s)
@@ -166,7 +166,7 @@ function Gridap.Arrays.return_cache(
     for i in 1:s[1]
       if f.touched[i] && g.touched[1,j]
         t[i,j] = true
-        b[i,j] = return_cache(k,f.array[i],g.array[1,j])
+        b[i,j] = Gridap.Arrays.return_cache(k,f.array[i],g.array[1,j])
       end
     end
   end
@@ -179,14 +179,14 @@ function Gridap.Arrays.evaluate!(
   g::Gridap.Fields.ArrayBlock{B,2}) where {A,B}
   # Degenerated case in which we have a single-block f
   if (size(f)==(1,))
-    return evaluate!(cache,k,f.array[1],g)
+    return Gridap.Arrays.evaluate!(cache,k,f.array[1],g)
   end
   a,b = cache
   s = size(a.array)
   for j in 1:s[2]
     for i in 1:s[1]
       if f.touched[i] && g.touched[1,j]
-        a.array[i,j] = evaluate!(b[i,j],k,f.array[i],g.array[1,j])
+        a.array[i,j] = Gridap.Arrays.evaluate!(b[i,j],k,f.array[i],g.array[1,j])
       end
     end
   end
