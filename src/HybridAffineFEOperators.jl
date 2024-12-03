@@ -132,10 +132,11 @@ function _compute_hybridizable_from_skeleton_free_dof_values(skeleton_fe_functio
     L = Gridap.FESpaces.get_fe_space(skeleton_fe_function)
     lhₑ = lazy_map(m,
                  convert_cell_wise_dofs_array_to_facet_dofs_array(
-                 cells_around_facets,
-                 cell_wise_facets,
-                 lhₖ,
-                 get_cell_dof_ids(L))...)
+                    cells_around_facets,
+                    cell_wise_facets,
+                    lhₖ,
+                    get_cell_dof_ids(L))...
+                )
 
     assem = SparseMatrixAssembler(trial_hybridizable, test_hybridizable)
     lhₑ_dofs = get_cell_dof_ids(trial_hybridizable, get_triangulation(L))
