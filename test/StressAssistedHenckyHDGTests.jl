@@ -330,3 +330,5 @@ function solve_stress_assisted_diffusion_hencky_hdg(cells,order;write_results=fa
 #dc3=∫(τuΓ*(vh⋅Pm_uh))d∂K - ∫(τuΓ*(vh⋅uhΓ))d∂K
 #dc4=∫(τuΓ*(vh⋅Pm_uh))d∂K
 #dc5=∫(τuΓ*(vh⋅uhΓ))d∂K
+
+end

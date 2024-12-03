@@ -6,7 +6,6 @@ module PoissonHHODistributedTests
   using PartitionedArrays
   using Plots
 
-
   function setup_reconstruction_operator(model, order, dΩ, d∂K)
     nK        = get_cell_normal_vector(d∂K.quad.trian)
     refferecᵤ = ReferenceFE(orthogonal_basis, Float64, order+1)
@@ -28,7 +27,6 @@ module PoissonHHODistributedTests
     ReconstructionFEOperator((m,n), U, V)
   end
 
-
   function setup_projection_operator(UK_U∂K,VK_V∂K,R,dΩ,d∂K)
     m( (uK,u∂K), (vK,v∂K) ) = ∫(vK*uK)dΩ + ∫(v∂K*u∂K)d∂K
     function n(uK_u∂K, (vK,v∂K))
@@ -49,8 +47,6 @@ module PoissonHHODistributedTests
     GridapHybrid.ProjectionFEOperator((m,n),UK_U∂K,VK_V∂K,R)
   end
 
-
-
   # Compute length of diagonals in the reference domain
   function foo(m)
   p0 = evaluate(m,Point(0.0,0.0))
@@ -61,7 +57,6 @@ module PoissonHHODistributedTests
   #   p3 = evaluate(m,Point(0.0,1.0))
   #   maximum( norm(p1-p0), norm(p2-p3) )
   end
-
 
   function setup_reconstruction_operator(model::GridapDistributed.GenericDistributedDiscreteModel, 
     order, dΩ::GridapDistributed.DistributedMeasure, d∂K::GridapDistributed.DistributedMeasure)
@@ -146,10 +141,6 @@ module PoissonHHODistributedTests
     end
   end
 
-  # ranks = with_debug() do distribute
-  #   distribute(LinearIndices((prod(np),)))
-  # end
-
   function solve_hho(domain, mesh_partition, np, ranks, order, u)  
     model = CartesianDiscreteModel(ranks, np, domain, mesh_partition)
 
@@ -229,7 +220,8 @@ module PoissonHHODistributedTests
   domain = (0,1,0,1)
 
   np = (2,2)
-  ns = [np[1]*2^i for i in 2:5]
+  #ns = [np[1]*2^i for i in 2:5]
+  ns = [2^i for i in 2:3]
   # mesh_partition = (2,2)
 
   order = 1
@@ -242,53 +234,4 @@ module PoissonHHODistributedTests
     shape=:auto,
     xlabel="h",ylabel="L2 error",legend=:bottomright))
   
-end
-
-# xh = get_trial_fe_basis(U);
-# yh = get_fe_basis(V);
-
-# xh1 = local_views(xh).items[1]
-# yh1 = local_views(yh).items[1]
-
-# Ω1 = get_triangulation(xh1)
-
-# cmaps = collect1d(get_cell_map(Ω1))
-# h_arr = lazy_map(foo,cmaps)
-# # h_T = CellField(h_array,Ω,PhysicalDomain())
-# H_T = CellField(h_arr,Ω1)
-# H_T_1 = 1.0/H_T
-
-# Ω1_loc = local_views(Ω_loc).items[1]
-# dΩ1_loc = local_views(dΩ_loc).items[1]
-
-# h_T=CellField(get_array(∫(1)dΩ1_loc),Ω1_loc)
-# h_T_1=1.0/h_T
-
-
-# P1 = local_views(P).items[1]
-
-# uK_u∂K_ΠK,uK_u∂K_Π∂K=P1(xh1)
-# vK_v∂K_ΠK,vK_v∂K_Π∂K=P1(yh1)
-
-# uK_ΠK  , u∂K_ΠK  = uK_u∂K_ΠK
-# uK_Π∂K , u∂K_Π∂K = uK_u∂K_Π∂K
-
-# vK_ΠK  , v∂K_ΠK  = vK_v∂K_ΠK
-# vK_Π∂K , v∂K_Π∂K = vK_v∂K_Π∂K
-
-# vK_Π∂K_vK_ΠK=vK_Π∂K-vK_ΠK
-# v∂K_Π∂K_v∂K_ΠK=v∂K_Π∂K-v∂K_ΠK
-# uK_Π∂K_uK_ΠK=uK_Π∂K-uK_ΠK
-# u∂K_Π∂K_u∂K_ΠK=u∂K_Π∂K-u∂K_ΠK
-
-# d∂K_loc1 = local_views(d∂K_loc).items[1]
-
-# (h_T_1*(vK_Π∂K_vK_ΠK)*(uK_Π∂K_uK_ΠK))
-
-# ∫(h_T_1*(vK_Π∂K_vK_ΠK)*(uK_Π∂K_uK_ΠK))d∂K_loc1 + 
-#     ∫(h_T_1*(v∂K_Π∂K_v∂K_ΠK)*(u∂K_Π∂K_u∂K_ΠK))d∂K_loc1 +
-#      ∫(h_T_1*(vK_Π∂K_vK_ΠK)*(u∂K_Π∂K_u∂K_ΠK))d∂K_loc1 + 
-#       ∫(h_T_1*(v∂K_Π∂K_v∂K_ΠK)*(uK_Π∂K_uK_ΠK))d∂K_loc1
-
-
-    
+end 
