@@ -469,11 +469,20 @@ function restrict_facet_dof_ids_to_cell_boundary(cell_wise_facets, facet_dof_ids
 end
 
 function Gridap.FESpaces.get_cell_fe_data(
-  fun::typeof(Gridap.FESpaces.get_cell_is_dirichlet),sface_to_data,sglue::FaceToFaceGlue,tglue::SkeletonGlue)
+  fun::typeof(Gridap.FESpaces.get_cell_is_dirichlet),
+  sface_to_data,
+  sglue::FaceToFaceGlue{Dc},
+  tglue::SkeletonGlue
+  ) where Dc
     model = tglue.trian.model
-    cell_wise_facets = _get_cell_wise_facets(model)
-    fdofscb = restrict_facet_dof_ids_to_cell_boundary(cell_wise_facets, sface_to_data)
-    _generate_cell_is_dirichlet(fdofscb)
+    if Dc == num_cell_dims(model)
+        sface_to_data
+    else
+        model = tglue.trian.model
+        cell_wise_facets = _get_cell_wise_facets(model)
+        fdofscb = restrict_facet_dof_ids_to_cell_boundary(cell_wise_facets, sface_to_data)
+        _generate_cell_is_dirichlet(fdofscb)
+    end
 end
 
 function _generate_cell_is_dirichlet(cell_dofs)

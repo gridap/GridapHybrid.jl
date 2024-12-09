@@ -155,4 +155,4 @@ n = 4
   #   shape=:auto,
   #   xlabel="h",ylabel="L2 error",legend=:bottomright))
 
-# end # modulez
+end # module
